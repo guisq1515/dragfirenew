@@ -27,75 +27,85 @@ export interface GooglePlaceResult {
   };
 }
 
+declare global {
+  interface Window {
+    google: any;
+  }
+}
+
 /**
- * Searches for gas stations near a specific location using the NEW Places API (v1)
+ * Helper to wait for Google Maps SDK to be available on the window
+ */
+const waitForGoogleMaps = (timeout = 5000): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (window.google && window.google.maps && window.google.maps.places) {
+      resolve();
+      return;
+    }
+
+    const start = Date.now();
+    const interval = setInterval(() => {
+      if (window.google && window.google.maps && window.google.maps.places) {
+        clearInterval(interval);
+        resolve();
+      } else if (Date.now() - start > timeout) {
+        clearInterval(interval);
+        reject(new Error('Google Maps SDK timeout'));
+      }
+    }, 100);
+  });
+};
+
+/**
+ * Searches for gas stations near a specific location using the OFFICIAL JS SDK
  */
 export const fetchNearbyStations = async (lat: number, lng: number, radius = 5000): Promise<GooglePlaceResult[]> => {
-  if (!GOOGLE_MAPS_API_KEY) {
-    console.warn('Google Maps API Key missing');
-    return [];
-  }
-
   try {
-    const url = `https://places.googleapis.com/v1/places:searchNearby`;
-    
-    // The new API requires a POST request with a FieldMask header
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': GOOGLE_MAPS_API_KEY,
-        'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.photos,places.currentOpeningHours'
-      },
-      body: JSON.stringify({
-        includedTypes: ['gas_station'],
-        maxResultCount: 20,
-        locationRestriction: {
-          circle: {
-            center: {
-              latitude: lat,
-              longitude: lng
-            },
-            radius: radius
-          }
-        }
-      })
-    });
+    // Wait for SDK to be ready
+    await waitForGoogleMaps();
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Google Places API Error:', errorData);
-      throw new Error('Network response was not ok');
-    }
-    
-    const data = await response.json();
-    
-    if (!data.places) {
-      return [];
-    }
-    
-    // Map the new API format to our existing interface for compatibility
-    return data.places.map((place: any) => ({
-      place_id: place.id,
-      name: place.displayName?.text || 'Posto sem nome',
-      vicinity: place.formattedAddress,
-      geometry: {
-        location: {
-          lat: place.location.latitude,
-          lng: place.location.longitude
+    return new Promise((resolve) => {
+      // We need a dummy div element for the PlacesService to work in some environments
+      const dummyElement = document.createElement('div');
+      const service = new window.google.maps.places.PlacesService(dummyElement);
+
+      const request = {
+        location: new window.google.maps.LatLng(lat, lng),
+        radius: radius,
+        type: ['gas_station']
+      };
+
+      service.nearbySearch(request, (results: any[], status: any) => {
+        if (status === window.google.maps.places.PlacesServiceStatus.OK && results) {
+          // Map SDK results to our GooglePlaceResult interface
+          const mappedResults: GooglePlaceResult[] = results.map(res => ({
+            place_id: res.place_id,
+            name: res.name,
+            vicinity: res.vicinity || res.formatted_address || '',
+            geometry: {
+              location: {
+                lat: res.geometry.location.lat(),
+                lng: res.geometry.location.lng()
+              }
+            },
+            rating: res.rating,
+            user_ratings_total: res.user_ratings_total,
+            photos: res.photos?.map((p: any) => ({
+              photo_reference: p.getUrl ? p.getUrl() : '' 
+            })),
+            opening_hours: {
+              open_now: res.opening_hours?.isOpen ? res.opening_hours.isOpen() : false
+            }
+          }));
+          resolve(mappedResults);
+        } else {
+          console.warn('Google Places SDK returned status:', status);
+          resolve([]);
         }
-      },
-      rating: place.rating,
-      user_ratings_total: place.userRatingCount,
-      photos: place.photos?.map((p: any) => ({
-        photo_reference: p.name // In v1, photo name is used for photoreference
-      })),
-      opening_hours: {
-        open_now: place.currentOpeningHours?.openNow ?? false
-      }
-    }));
+      });
+    });
   } catch (error) {
-    console.error('Error fetching stations from Google (v1):', error);
+    console.error('Error in fetchNearbyStations (SDK):', error);
     return [];
   }
 };
@@ -131,50 +141,57 @@ export const fetchPlaceDetails = async (placeId: string) => {
 };
 
 /**
- * Geocodes a string address to lat/lng coordinates
+ * Geocodes a string address to lat/lng coordinates (SDK)
  */
 export const geocodeAddress = async (address: string): Promise<{ lat: number, lng: number } | null> => {
-  if (!GOOGLE_MAPS_API_KEY || !address) return null;
-
   try {
-    const url = `${API_BASE}/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${GOOGLE_MAPS_API_KEY}`;
-    const response = await fetch(url);
-    const data = await response.json();
+    await waitForGoogleMaps();
     
-    if (data.status === 'OK' && data.results && data.results[0]) {
-      return data.results[0].geometry.location;
-    }
-    
-    console.warn(`Geocoding failed for ${address}: ${data.status}`);
-    return null;
+    return new Promise((resolve) => {
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ address }, (results: any, status: any) => {
+        if (status === 'OK' && results[0]) {
+          resolve({
+            lat: results[0].geometry.location.lat(),
+            lng: results[0].geometry.location.lng()
+          });
+        } else {
+          console.warn('Geocoding failed:', status);
+          resolve(null);
+        }
+      });
+    });
   } catch (error) {
-    console.error('Error geocoding address:', error);
+    console.error('Error in geocodeAddress (SDK):', error);
     return null;
   }
 };
 
 /**
- * Reverse geocodes coordinates to find the city/municipality
+ * Reverse geocodes coordinates to find the city/municipality (SDK)
  */
 export const getCityFromCoordinates = async (lat: number, lng: number): Promise<string | null> => {
-  if (!GOOGLE_MAPS_API_KEY) return null;
-
   try {
-    const url = `${API_BASE}/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_API_KEY}`;
-    const response = await fetch(url);
-    const data = await response.json();
-    
-    if (data.status === 'OK' && data.results && data.results.length > 0) {
-      // Find the locality (city) or administrative_area_level_2
-      const cityComponent = data.results[0].address_components.find((c: any) => 
-        c.types.includes('locality') || c.types.includes('administrative_area_level_2')
-      );
-      return cityComponent ? cityComponent.long_name : null;
-    }
-    
-    return null;
+    await waitForGoogleMaps();
+
+    return new Promise((resolve) => {
+      const geocoder = new window.google.maps.Geocoder();
+      const latlng = { lat, lng };
+      
+      geocoder.geocode({ location: latlng }, (results: any, status: any) => {
+        if (status === 'OK' && results[0]) {
+          const cityComponent = results[0].address_components.find((c: any) => 
+            c.types.includes('locality') || c.types.includes('administrative_area_level_2')
+          );
+          resolve(cityComponent ? cityComponent.long_name : null);
+        } else {
+          console.warn('Reverse geocoding failed:', status);
+          resolve(null);
+        }
+      });
+    });
   } catch (error) {
-    console.error('Error in reverse geocoding:', error);
+    console.error('Error in getCityFromCoordinates (SDK):', error);
     return null;
   }
 };
