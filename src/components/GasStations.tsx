@@ -83,8 +83,8 @@ export function GasStations({ onBack }: { onBack: () => void }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBy, setFilterBy] = useState<'price' | 'distance' | 'rating'>('distance');
   const [selectedFuel, setSelectedFuel] = useState<'gasoline' | 'ethanol'>('gasoline');
-  const [stations, setStations] = useState<GasStation[]>(MOCK_STATIONS);
-  const [userLocation, setUserLocation] = useState<[number, number]>([-23.5505, -46.6333]); // Default to SP
+  const [stations, setStations] = useState<GasStation[]>([]);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedStation, setSelectedStation] = useState<GasStation | null>(null);
   const [showDetailMode, setShowDetailMode] = useState(false);
@@ -102,14 +102,19 @@ export function GasStations({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     const getLocation = async () => {
       try {
+        setLoading(true);
         const position = await Geolocation.getCurrentPosition({
           enableHighAccuracy: true,
-          timeout: 10000
+          timeout: 15000,
+          maximumAge: 30000
         });
         setUserLocation([position.coords.latitude, position.coords.longitude]);
       } catch (err: any) {
-        console.warn('Geolocation error, using fallback:', err.message);
-        setUserLocation([-23.5505, -46.6333]);
+        console.warn('Geolocation error:', err.message);
+        // We no longer fallback to SP silently. We keep userLocation as null
+        // which will trigger the "Enable GPS" UI.
+      } finally {
+        setLoading(false);
       }
     };
     getLocation();
@@ -128,29 +133,28 @@ export function GasStations({ onBack }: { onBack: () => void }) {
       }, 6000);
 
       try {
-        console.log('Detecting city for location:', userLocation);
-        let city: string | null = null;
         try {
-          city = await getCityFromCoordinates(userLocation[0], userLocation[1]);
-          console.log('Google detected city:', city);
+          if (userLocation) {
+            city = await getCityFromCoordinates(userLocation[0], userLocation[1]);
+            console.log('Google detected city:', city);
+          }
         } catch (cityErr) {
-          console.error('City detection failed (CORS?):', cityErr);
+          console.error('City detection failed:', cityErr);
         }
         
-        // Fallback robusto
-        if (!city || city === 'Unknown') {
-          city = 'SAO PAULO';
-          console.log('Using default city fallback: SAO PAULO');
+        // No more hardcoded "SAO PAULO"
+        if (city && city !== 'Unknown') {
+          setCurrentCity(city);
         }
-        
-        setCurrentCity(city);
 
-        // Step B: Fetch from Google (Isolado para não quebrar o resto se der CORS)
+        // Step B: Fetch from Google
         let googleResults: GooglePlaceResult[] = [];
         try {
-          console.log('Fetching from Google Places...');
-          googleResults = await fetchNearbyStations(userLocation[0], userLocation[1], selectedRadius);
-          console.log('Google results:', googleResults.length);
+          if (userLocation) {
+            console.log('Fetching from Google Places...');
+            googleResults = await fetchNearbyStations(userLocation[0], userLocation[1], selectedRadius);
+            console.log('Google results:', googleResults.length);
+          }
         } catch (gErr) {
           console.error('Google Places API failed (likely CORS on localhost):', gErr);
           // Prosseguimos sem resultados do Google, usando apenas nosso banco ANP
@@ -550,7 +554,7 @@ export function GasStations({ onBack }: { onBack: () => void }) {
             >
               <MapContainer 
                 center={userLocation || [-23.5505, -46.6333]} 
-                zoom={14} 
+                zoom={15} 
                 style={{ height: '100%', width: '100%' }}
                 zoomControl={false}
               >
