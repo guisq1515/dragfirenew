@@ -36,7 +36,7 @@ declare global {
 /**
  * Helper to wait for Google Maps SDK to be available on the window
  */
-const waitForGoogleMaps = (timeout = 5000): Promise<void> => {
+const waitForGoogleMaps = (timeout = 10000): Promise<void> => {
   return new Promise((resolve, reject) => {
     if (window.google && window.google.maps && window.google.maps.places) {
       resolve();

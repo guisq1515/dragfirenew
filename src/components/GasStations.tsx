@@ -97,26 +97,29 @@ export function GasStations({ onBack }: { onBack: () => void }) {
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
   const [selectedRadius, setSelectedRadius] = useState(50000); // Default to 50km as requested
   const [currentCity, setCurrentCity] = useState<string | null>(null);
+  const [manualCityInput, setManualCityInput] = useState('');
+  const [isLocationError, setIsLocationError] = useState(false);
 
   // 1. Get User Location
+  const getLocation = async () => {
+    try {
+      setIsLocationError(false);
+      setLoading(true);
+      const position = await Geolocation.getCurrentPosition({
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 30000
+      });
+      setUserLocation([position.coords.latitude, position.coords.longitude]);
+    } catch (err: any) {
+      console.warn('Geolocation error:', err.message);
+      setIsLocationError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const getLocation = async () => {
-      try {
-        setLoading(true);
-        const position = await Geolocation.getCurrentPosition({
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 30000
-        });
-        setUserLocation([position.coords.latitude, position.coords.longitude]);
-      } catch (err: any) {
-        console.warn('Geolocation error:', err.message);
-        // We no longer fallback to SP silently. We keep userLocation as null
-        // which will trigger the "Enable GPS" UI.
-      } finally {
-        setLoading(false);
-      }
-    };
     getLocation();
   }, []);
 
@@ -133,16 +136,17 @@ export function GasStations({ onBack }: { onBack: () => void }) {
       }, 6000);
 
       try {
-        try {
-          if (userLocation) {
+        let city = currentCity;
+        
+        if (!city && userLocation) {
+          try {
             city = await getCityFromCoordinates(userLocation[0], userLocation[1]);
             console.log('Google detected city:', city);
+          } catch (cityErr) {
+            console.error('City detection failed:', cityErr);
           }
-        } catch (cityErr) {
-          console.error('City detection failed:', cityErr);
         }
         
-        // No more hardcoded "SAO PAULO"
         if (city && city !== 'Unknown') {
           setCurrentCity(city);
         }
@@ -235,7 +239,14 @@ export function GasStations({ onBack }: { onBack: () => void }) {
     };
 
     loadRealStations();
-  }, [userLocation, selectedRadius]);
+  }, [userLocation, selectedRadius, currentCity === null]); // Retry if city is null
+
+  const handleManualSearch = () => {
+    if (manualCityInput.trim()) {
+      setCurrentCity(manualCityInput.trim());
+      setLoading(true);
+    }
+  };
 
   // 3. Keep distances and sorting updated
   useEffect(() => {
@@ -477,8 +488,76 @@ export function GasStations({ onBack }: { onBack: () => void }) {
           </div>
         ) : (
           <>
-            <AnimatePresence mode="wait">
-          {viewMode === 'list' ? (
+            {/* Loading / Error States */}
+        {loading && !stations.length && (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-6">
+            <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin"></div>
+            <div className="text-center">
+              <p className="text-white font-bold">Buscando postos reais...</p>
+              <p className="text-zinc-500 text-xs mt-1">Isso pode levar alguns segundos.</p>
+            </div>
+            
+            <div className="w-full max-w-xs space-y-4 pt-8 border-t border-white/5">
+              <p className="text-[10px] text-zinc-500 font-bold uppercase text-center">GPS lento? Digite sua cidade:</p>
+              <div className="flex gap-2">
+                <input 
+                  type="text"
+                  placeholder="Ex: São Paulo"
+                  value={manualCityInput}
+                  onChange={(e) => setManualCityInput(e.target.value)}
+                  className="flex-1 bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-brand-primary/50"
+                />
+                <button 
+                  onClick={handleManualSearch}
+                  className="bg-brand-primary text-zinc-950 px-4 rounded-xl font-bold text-sm active:scale-95 transition-all"
+                >
+                  Ir
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isLocationError && !stations.length && !loading && (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-6">
+            <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center">
+              <MapPin className="w-8 h-8 text-red-500" />
+            </div>
+            <div className="text-center">
+              <p className="text-white font-bold">GPS não encontrado</p>
+              <p className="text-zinc-500 text-xs mt-1">Não conseguimos detectar sua localização.</p>
+            </div>
+            
+            <button 
+              onClick={getLocation}
+              className="bg-white text-black px-6 py-3 rounded-full font-bold text-sm active:scale-95 transition-all"
+            >
+              Tentar Reposicionar GPS
+            </button>
+
+            <div className="w-full max-w-xs space-y-4 pt-8 border-t border-white/5">
+              <p className="text-[10px] text-zinc-500 font-bold uppercase text-center">Ou busque manualmente:</p>
+              <div className="flex gap-2">
+                <input 
+                  type="text"
+                  placeholder="Cidade, UF"
+                  value={manualCityInput}
+                  onChange={(e) => setManualCityInput(e.target.value)}
+                  className="flex-1 bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-brand-primary/50"
+                />
+                <button 
+                  onClick={handleManualSearch}
+                  className="bg-brand-primary text-zinc-950 px-4 rounded-xl font-bold text-sm"
+                >
+                  Buscar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <AnimatePresence mode="wait">
+          {!loading && stations.length > 0 ? (
             <motion.div 
               key="list"
               initial={{ opacity: 0, x: -20 }}
