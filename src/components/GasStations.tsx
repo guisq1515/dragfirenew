@@ -239,7 +239,7 @@ export function GasStations({ onBack }: { onBack: () => void }) {
     };
 
     loadRealStations();
-  }, [userLocation, selectedRadius, currentCity === null]); // Retry if city is null
+  }, [userLocation, selectedRadius]); // Depend only on physical location and radius
 
   const handleManualSearch = () => {
     if (manualCityInput.trim()) {
