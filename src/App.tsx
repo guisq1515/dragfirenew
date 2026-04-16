@@ -4,7 +4,7 @@
  */
 
 import * as React from 'react';
-import { useState, useMemo, useEffect, Component } from 'react';
+import { useState, useMemo, useEffect, Component, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MapContainer, TileLayer, Polyline, Marker, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -19,7 +19,9 @@ import {
   signInWithCredential
 } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 import { SocialLogin } from '@capgo/capacitor-social-login';
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { 
   doc, 
   setDoc, 
@@ -35,7 +37,10 @@ import {
   Timestamp,
   deleteDoc,
   getDocs,
-  writeBatch
+  writeBatch,
+  updateDoc,
+  disableNetwork,
+  enableNetwork
 } from 'firebase/firestore';
 import { 
   ref, 
@@ -45,59 +50,70 @@ import {
 } from 'firebase/storage';
 import { auth, db, storage, googleProvider } from './firebase';
 import { 
-  Instagram,
-  CheckCircle2,
-  Share2,
-  Trash2,
-  Home,
-  Search,
-  Fuel,
-  Gauge, 
-  Timer, 
-  Flag, 
-  History, 
+  Plus, 
+  Minus, 
+  Map as MapIcon, 
+  Trophy, 
   Settings, 
-  Play, 
+  ChevronRight, 
+  User, 
+  History, 
+  Share2, 
+  Clock, 
+  Zap, 
+  Timer, 
+  Activity, 
+  AlertTriangle, 
+  CheckCircle2, 
+  X, 
   RotateCcw, 
-  Activity,
-  AlertCircle,
-  ArrowLeft,
-  MapPin,
-  ChevronLeft,
-  Zap,
-  Trophy,
-  Signal,
-  Info,
-  Map as MapIcon,
-  Swords,
-  Clock,
-  User,
+  Fuel, 
+  Navigation, 
+  LayoutGrid, 
+  ArrowRight, 
+  Locate, 
+  Smartphone, 
+  Info, 
+  Signal, 
+  ChevronLeft, 
+  Search, 
+  Star, 
+  Camera, 
+  Trash2, 
+  Car, 
+  Sparkles, 
+  MessageSquare, 
+  Bell, 
+  Eye, 
   LogOut,
-  Lock,
-  Navigation,
-  Camera,
-  ChevronRight,
-  Car,
-  Smartphone,
+  Swords,
+  Users,
+  Instagram,
+  MapPin,
   Cloud,
   BatteryCharging,
   Shield,
   ShieldCheck,
-  Plus,
-  AlertTriangle,
   RefreshCcw,
   Bluetooth,
   Cpu,
-  Users,
   UserPlus,
   UserMinus,
   Heart,
   Image as ImageIcon,
-  Sparkles,
   Wand2,
   Download,
   CloudUpload,
-  Filter
+  Filter,
+  AlertCircle,
+  Play,
+  Lock,
+  ArrowLeft as ArrowLeftIcon,
+  Share2 as Share2Icon,
+  Flag,
+  Home,
+  Gauge,
+  LayoutDashboard
 } from 'lucide-react';
 import { PerformanceChart } from './components/PerformanceChart';
 import { TripAnalysis } from './components/TripAnalysis';
@@ -106,6 +122,8 @@ import { editCarImage } from './services/geminiService';
 import { AIPhotoEditor } from './components/AIPhotoEditor';
 import { GasStations } from './components/GasStations';
 import { AntigravityImporter } from './components/AntigravityImporter';
+import { AdminDashboard } from './components/AdminDashboard';
+import { APP_VERSION } from './versions';
 
 // --- Error Boundary ---
 class ErrorBoundary extends React.Component<any, any> {
@@ -166,7 +184,7 @@ import {
   Legend
 } from 'recharts';
 import { usePerformanceTimer } from './hooks/usePerformanceTimer';
-import { RunMode, RunConfig, RunResult, Challenge, Vehicle, RankingEntry, GPSPoint, UserProfile } from './types';
+import { RunMode, RunConfig, RunResult, Challenge, Vehicle, RankingEntry, GPSPoint, UserProfile, TelemetryConfig } from './types';
 import { calculateDistance } from './lib/utils';
 import { VEHICLE_DATA, YEARS } from './constants/vehicles';
 
@@ -270,7 +288,7 @@ function GPSGuide({ onBack }: { onBack: () => void }) {
   ];
 
   return (
-    <div className="flex-1 flex flex-col p-6 space-y-6 overflow-y-auto bg-zinc-950">
+    <div className="flex-1 flex flex-col p-6 space-y-6 overflow-y-auto bg-zinc-950 pb-24">
       <div className="flex items-center gap-4 bg-brand-primary/10 p-4 rounded-2xl border border-brand-primary/20">
         <button onClick={onBack} className="p-2 bg-zinc-900 rounded-lg text-zinc-400">
           <ChevronLeft className="w-5 h-5" />
@@ -411,10 +429,11 @@ const calculateDistanceIntervals = (path: GPSPoint[], targets: number[]) => {
 interface HistoryItemProps {
   key?: React.Key;
   run: RunResult;
+  isPremium?: boolean;
   onDelete: (id: string) => void | Promise<void>;
 }
 
-function HistoryItem({ run, onDelete }: HistoryItemProps) {
+function HistoryItem({ run, isPremium, onDelete }: HistoryItemProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   
   const formatDate = (timestamp: number) => {
@@ -532,7 +551,7 @@ function HistoryItem({ run, onDelete }: HistoryItemProps) {
                   </div>
               </div>
               
-              <PerformanceChart result={run} />
+              <PerformanceChart result={run} isPremium={isPremium} />
             </div>
           </motion.div>
         )}
@@ -554,14 +573,17 @@ function HistoryView({
 }) {
   const [runs, setRuns] = useState<RunResult[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isGuest) {
       try {
         const localRuns = JSON.parse(localStorage.getItem('dragfire_guest_runs') || '[]');
         setRuns(localRuns);
+        setError(null);
       } catch (e) {
         console.error("Error loading guest history:", e);
+        setError("Erro ao carregar histórico local.");
       }
       setLoading(false);
       return;
@@ -575,12 +597,22 @@ function HistoryView({
       limit(50)
     );
     
+    setError(null);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RunResult));
       setRuns(data);
       setLoading(false);
-    }, (error) => {
-      console.error("Error fetching history:", error);
+      setError(null);
+    }, (err) => {
+      console.error("Error fetching history:", err);
+      // More descriptive message for common firestore errors
+      if (err.message.includes('index')) {
+        setError("O banco de dados ainda está sendo configurado. Tente novamente em alguns minutos.");
+      } else if (err.message.includes('permission')) {
+        setError("Sem permissão para carregar o histórico. Tente relogar.");
+      } else {
+        setError("Erro ao carregar histórico. Verifique sua conexão.");
+      }
       setLoading(false);
     });
     return () => unsubscribe();
@@ -604,7 +636,7 @@ function HistoryView({
   };
 
   return (
-    <div className="flex-1 flex flex-col p-6 space-y-6 overflow-y-auto bg-zinc-950">
+    <div className="flex-1 flex flex-col p-6 pb-32 space-y-6 overflow-y-auto bg-zinc-950">
       <div className="flex items-center gap-4 bg-zinc-900/50 p-4 rounded-2xl border border-white/5">
         <button onClick={onBack} className="p-2 bg-zinc-800 rounded-lg text-zinc-400">
           <ChevronLeft className="w-5 h-5" />
@@ -634,6 +666,13 @@ function HistoryView({
           <div className="flex justify-center py-12">
             <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
           </div>
+        ) : error ? (
+          <div className="text-center py-12 px-6 space-y-4">
+            <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mx-auto">
+              <History className="w-6 h-6 text-red-500" />
+            </div>
+            <p className="text-red-400 text-xs font-bold uppercase tracking-widest">{error}</p>
+          </div>
         ) : runs.length === 0 ? (
           <div className="text-center py-12 space-y-3">
             <div className="w-12 h-12 bg-zinc-900 rounded-full flex items-center justify-center mx-auto">
@@ -643,7 +682,7 @@ function HistoryView({
           </div>
         ) : (
           runs.map((run) => (
-            <HistoryItem key={run.id} run={run} onDelete={deleteRun} />
+            <HistoryItem key={run.id} run={run} isPremium={isPremium} onDelete={deleteRun} />
           ))
         )}
       </div>
@@ -655,19 +694,20 @@ function BottomNav({
   activeScreen, 
   onNavigate, 
   userPhoto,
-  isGuest
+  isGuest,
+  isAdmin
 }: { 
   activeScreen: Screen, 
   onNavigate: (s: Screen) => void,
   userPhoto?: string,
-  isGuest?: boolean
+  isGuest?: boolean,
+  isAdmin?: boolean
 }) {
   const navItems = [
     { id: 'home', icon: Home, label: 'Home', locked: false },
-    { id: 'feed', icon: Play, label: 'Feed', locked: isGuest },
     { id: 'search', icon: Search, label: 'Busca', locked: false },
     { id: 'regional-ranking', icon: Trophy, label: 'Ranking', locked: false },
-    { id: 'fuel-stations', icon: Fuel, label: 'Postos', locked: false },
+    ...(isAdmin ? [{ id: 'admin-dashboard', icon: LayoutDashboard, label: 'Dash', locked: false }] : []),
     { id: 'public-profile', icon: User, label: 'Perfil', locked: isGuest },
   ];
 
@@ -746,7 +786,7 @@ function SearchUsers({
   }, [searchTerm, currentUserId]);
 
   return (
-    <div className="flex-1 flex flex-col bg-zinc-950 p-6 space-y-6 overflow-y-auto pb-24">
+    <div className="flex-1 flex flex-col bg-zinc-950 p-6 space-y-6 overflow-y-auto pb-32">
       <div className="space-y-2">
         <h2 className="text-2xl font-display font-black italic text-white uppercase tracking-tighter">BUSCAR PILOTOS</h2>
         <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em]">Encontre seus amigos</p>
@@ -811,7 +851,7 @@ function SearchUsers({
 
 function Feed() {
   return (
-    <div className="flex-1 flex flex-col bg-zinc-950 p-6 space-y-6 items-center justify-center pb-24">
+    <div className="flex-1 flex flex-col bg-zinc-950 p-6 space-y-6 items-center justify-center pb-32">
       <div className="w-20 h-20 bg-brand-primary/10 rounded-3xl flex items-center justify-center border border-brand-primary/20 mb-4">
         <Play className="w-10 h-10 text-brand-primary fill-current" />
       </div>
@@ -833,11 +873,13 @@ function Feed() {
 function PublicProfile({ 
   uid, 
   currentUserId,
-  onBack 
+  onBack,
+  onEditVehicles
 }: { 
   uid: string, 
   currentUserId: string | undefined,
-  onBack: () => void 
+  onBack: () => void,
+  onEditVehicles?: () => void
 }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -949,7 +991,7 @@ function PublicProfile({
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-zinc-950 overflow-y-auto pb-24">
+    <div className="flex-1 flex flex-col bg-zinc-950 overflow-y-auto pb-32">
       {/* Header */}
       <div className="relative h-48 bg-zinc-900 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 to-transparent z-10" />
@@ -1013,27 +1055,28 @@ function PublicProfile({
         </div>
 
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-2xl font-display font-black italic text-white leading-none">
               {profile.displayName || 'Piloto Anônimo'}
             </h2>
             {profile.isVerified && (
               <CheckCircle2 className="w-5 h-5 text-blue-400 fill-blue-400/10" />
             )}
+            {profile.instagram && (
+              <a 
+                href={`https://instagram.com/${profile.instagram.replace('@', '')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-tr from-purple-600 to-pink-500 rounded-xl text-white shadow-lg shadow-pink-600/20 active:scale-95 transition-all ml-1"
+              >
+                <Instagram className="w-4 h-4" />
+                <span className="text-xs font-black tracking-tight">{profile.instagram.startsWith('@') ? profile.instagram : `@${profile.instagram}`}</span>
+              </a>
+            )}
           </div>
           {profile.bio && <p className="text-zinc-400 text-sm mt-2">{profile.bio}</p>}
           
-          {profile.instagram && (
-            <a 
-              href={`https://instagram.com/${profile.instagram.replace('@', '')}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 mt-3 px-3 py-1.5 bg-zinc-900 border border-white/5 rounded-lg text-zinc-400 hover:text-white transition-colors"
-            >
-              <Instagram className="w-3.5 h-3.5" />
-              <span className="text-[10px] font-bold">{profile.instagram.startsWith('@') ? profile.instagram : `@${profile.instagram}`}</span>
-            </a>
-          )}
+
 
           <div className="flex gap-4 mt-4">
             <div className="flex flex-col">
@@ -1067,7 +1110,16 @@ function PublicProfile({
                   <Car className="w-4 h-4 text-brand-primary" />
                   Garagem
                 </h3>
-                <span className="text-[10px] text-zinc-500 font-bold">{vehicles.length} Veículos</span>
+                {uid === currentUserId && onEditVehicles && (
+                  <button 
+                    onClick={onEditVehicles}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-primary/10 border border-brand-primary/20 rounded-lg text-brand-primary hover:bg-brand-primary hover:text-white transition-all active:scale-95"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Adicionar</span>
+                  </button>
+                )}
+                <span className="text-[10px] text-zinc-500 font-bold">{vehicles.length} {vehicles.length === 1 ? 'Veículo' : 'Veículos'}</span>
               </div>
               
               <div className="grid grid-cols-1 gap-3">
@@ -1190,7 +1242,7 @@ function RegionalRanking({
   }, [rankings, filter, typeFilter, userLocation]);
 
   return (
-    <div className="flex-1 flex flex-col p-6 space-y-6 overflow-y-auto bg-zinc-950">
+    <div className="flex-1 flex flex-col p-6 pb-32 space-y-6 overflow-y-auto bg-zinc-950">
       <div className="flex items-center gap-4 bg-brand-primary/10 p-4 rounded-2xl border border-brand-primary/20">
         <button onClick={onBack} className="p-2 bg-zinc-900 rounded-lg text-zinc-400">
           <ChevronLeft className="w-5 h-5" />
@@ -1400,7 +1452,7 @@ function ProfileSettings({
   };
 
   return (
-    <div className="flex-1 flex flex-col p-6 space-y-6 overflow-y-auto bg-zinc-950">
+    <div className="flex-1 flex flex-col p-6 pb-32 space-y-6 overflow-y-auto bg-zinc-950">
       <div className="flex items-center gap-4 bg-brand-primary/10 p-4 rounded-2xl border border-brand-primary/20">
         <button onClick={onBack} className="p-2 bg-zinc-900 rounded-lg text-zinc-400">
           <ChevronLeft className="w-5 h-5" />
@@ -1609,7 +1661,7 @@ function SettingsMenu({
   isAdmin?: boolean
 }) {
   return (
-    <div className="flex-1 flex flex-col p-6 space-y-6 overflow-y-auto bg-zinc-950">
+    <div className="flex-1 flex flex-col p-6 pb-32 space-y-6 overflow-y-auto bg-zinc-950">
       <div className="flex items-center gap-4 bg-zinc-900/50 p-4 rounded-2xl border border-white/5">
         <button onClick={onBack} className="p-2 bg-zinc-900 rounded-lg text-zinc-400">
           <ChevronLeft className="w-5 h-5" />
@@ -1784,7 +1836,7 @@ function SettingsMenu({
         <div className="bg-zinc-900/50 border border-white/5 rounded-2xl divide-y divide-white/5">
           <div className="p-4 flex items-center justify-between">
             <span className="text-sm font-bold text-zinc-300">Versão</span>
-            <span className="text-xs font-mono text-zinc-500">1.0.0</span>
+            <span className="text-xs font-mono text-zinc-500">v{APP_VERSION}</span>
           </div>
           <div className="p-4 flex items-center justify-between">
             <span className="text-sm font-bold text-zinc-300">Termos de Uso</span>
@@ -1845,118 +1897,6 @@ function SettingsMenu({
   );
 }
 
-
-function AdminDashboard({ onBack }: { onBack: () => void }) {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [users, setUsers] = useState<UserProfile[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const handleSearch = async () => {
-    if (!searchTerm.trim()) return;
-    setLoading(true);
-    try {
-      const q = query(
-        collection(db, 'users'),
-        where('displayName', '>=', searchTerm),
-        where('displayName', '<=', searchTerm + '\uf8ff'),
-        limit(10)
-      );
-      const snapshot = await getDocs(q);
-      const userList = snapshot.docs.map(doc => ({ 
-        ...doc.data(), 
-        uid: doc.id,
-        id: doc.id
-      } as UserProfile));
-      setUsers(userList);
-    } catch (error) {
-      console.error("Error searching users:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const togglePremium = async (targetUser: UserProfile) => {
-    try {
-      const userRef = doc(db, 'users', targetUser.uid);
-      await setDoc(userRef, { isPremium: !targetUser.isPremium }, { merge: true });
-      setUsers(prev => prev.map(u => u.uid === targetUser.uid ? { ...u, isPremium: !u.isPremium } : u));
-    } catch (error) {
-      console.error("Error toggling premium:", error);
-    }
-  };
-
-  return (
-    <div className="flex-1 flex flex-col p-6 space-y-6 overflow-y-auto bg-zinc-950">
-      <div className="flex items-center gap-4 bg-brand-primary/10 p-4 rounded-2xl border border-brand-primary/20">
-        <button onClick={onBack} className="p-2 bg-zinc-900 rounded-lg text-zinc-400">
-          <ChevronLeft className="w-5 h-5" />
-        </button>
-        <div>
-          <h2 className="text-xl font-display font-black italic text-white leading-none tracking-tighter uppercase">PAINEL ADMIN</h2>
-          <p className="text-xs text-brand-primary font-bold uppercase tracking-widest mt-1">Gerenciar Usuários</p>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <div className="flex gap-2">
-          <input 
-            type="text" 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            placeholder="Buscar por nome..."
-            className="flex-1 bg-zinc-900 border border-white/5 rounded-xl px-4 py-3 text-white focus:border-brand-primary outline-none"
-          />
-          <button 
-            onClick={handleSearch}
-            className="p-3 bg-brand-primary text-white rounded-xl active:scale-95 transition-all shadow-lg shadow-red-600/20"
-          >
-            <Search className="w-5 h-5" />
-          </button>
-        </div>
-
-        <div className="space-y-2">
-          {loading ? (
-             <div className="flex justify-center py-12">
-               <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
-             </div>
-          ) : users.length > 0 ? (
-            users.map(u => (
-              <div key={u.uid} className="bg-zinc-900/50 border border-white/5 p-4 rounded-2xl flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full overflow-hidden bg-zinc-800 border border-white/10">
-                    {u.photoURL ? (
-                      <img src={u.photoURL} alt={u.displayName || ''} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <User className="w-6 h-6 text-zinc-700" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-white leading-none truncate">{u.displayName || 'Piloto'}</p>
-                    <p className="text-[9px] text-zinc-500 uppercase font-black tracking-tighter mt-1">{u.uid.slice(0, 8)}</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => togglePremium(u)}
-                  className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${u.isPremium ? 'bg-yellow-500 text-zinc-950 shadow-lg shadow-yellow-500/20' : 'bg-zinc-800 text-zinc-400 border border-white/5'}`}
-                >
-                  {u.isPremium ? 'Premium OK' : 'Ativar Premium'}
-                </button>
-              </div>
-            ))
-          ) : (
-            <div className="text-center py-12 space-y-3 opacity-40">
-               <ShieldCheck className="w-12 h-12 text-zinc-700 mx-auto" />
-               <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">Busque um piloto por nome</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function TermsOfUse({ onAccept, onDecline }: { onAccept: () => void, onDecline: () => void }) {
   return (
@@ -2087,19 +2027,20 @@ function TermsOfUse({ onAccept, onDecline }: { onAccept: () => void, onDecline: 
 function VehicleSettings({ 
   vehicles,
   userProfile,
+  isPremium,
   onSave, 
   onDelete,
   onBack 
 }: { 
   vehicles: Vehicle[], 
   userProfile: UserProfile | null,
+  isPremium: boolean,
   onSave: (v: Vehicle) => void, 
   onDelete: (v: Vehicle) => void,
   onBack: () => void 
 }) {
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const isPremium = userProfile?.isPremium;
   const canAddMore = isPremium || vehicles.length < 1;
   const [formData, setFormData] = useState<Vehicle>({
     type: 'car',
@@ -2109,51 +2050,72 @@ function VehicleSettings({
     nickname: ''
   });
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !auth.currentUser) return;
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement> | null) => {
+    let blob: Blob | null = null;
+    let downloadURL = '';
 
     setIsUploading(true);
+    
+    // Safety timeout (30s)
+    const timeout = setTimeout(() => {
+      if (isUploading) {
+        setIsUploading(false);
+        alert('O carregamento demorou demais. Verifique sua conexão e tente novamente.');
+      }
+    }, 30000);
+
     try {
-      // 1. Create a canvas to resize and compress the image
-      const img = new Image();
-      img.src = URL.createObjectURL(file);
-      await new Promise((resolve) => (img.onload = resolve));
+      if (Capacitor.isNativePlatform() && !e) {
+        const photo = await Camera.getPhoto({
+          quality: 60,
+          allowEditing: false,
+          resultType: CameraResultType.Uri,
+          source: CameraSource.Photos,
+          width: 800,
+          height: 800
+        });
 
-      const canvas = document.createElement('canvas');
-      const MAX_WIDTH = 800;
-      const MAX_HEIGHT = 800;
-      let width = img.width;
-      let height = img.height;
+        if (!photo.webPath) throw new Error('Falha ao obter caminho da imagem');
+        const response = await fetch(photo.webPath);
+        blob = await response.blob();
+      } else if (e) {
+        const file = e.target.files?.[0];
+        if (!file) {
+          setIsUploading(false);
+          clearTimeout(timeout);
+          return;
+        }
 
-      if (width > height) {
-        if (width > MAX_WIDTH) {
-          height *= MAX_WIDTH / width;
-          width = MAX_WIDTH;
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        await new Promise((resolve) => (img.onload = resolve));
+
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 800;
+        const MAX_HEIGHT = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+        } else {
+          if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
         }
-      } else {
-        if (height > MAX_HEIGHT) {
-          width *= MAX_HEIGHT / height;
-          height = MAX_HEIGHT;
-        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        blob = await new Promise<Blob | null>((resolve) => 
+          canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.6)
+        );
       }
 
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx?.drawImage(img, 0, 0, width, height);
+      if (!blob || !auth.currentUser) throw new Error('Falha ao processar arquivo');
 
-      // 2. Convert to blob with reduced quality (0.6)
-      const blob = await new Promise<Blob | null>((resolve) => 
-        canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.6)
-      );
-
-      if (!blob) throw new Error('Falha ao processar imagem');
-
-      // 3. Upload to Firebase Storage
       const storageRef = ref(storage, `vehicles/${auth.currentUser.uid}/${Date.now()}.jpg`);
       
-      // Delete old photo if exists
       if (formData.photoURL) {
         try {
           const oldRef = ref(storage, formData.photoURL);
@@ -2164,60 +2126,76 @@ function VehicleSettings({
       }
 
       const snapshot = await uploadBytes(storageRef, blob);
-      const downloadURL = await getDownloadURL(snapshot.ref);
+      downloadURL = await getDownloadURL(snapshot.ref);
       
       setFormData({ ...formData, photoURL: downloadURL });
     } catch (error) {
       console.error('Photo upload error:', error);
       alert('Erro ao carregar foto. Tente novamente.');
     } finally {
+      clearTimeout(timeout);
       setIsUploading(false);
     }
   };
 
-  const handleAdditionalPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !auth.currentUser || !isPremium) return;
-
-    if ((formData.photoURLs?.length || 0) >= 3) {
-      alert('Limite de 3 fotos adicionais atingido.');
-      return;
-    }
-
+  const handleAdditionalPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement> | null) => {
+    if (!auth.currentUser || !isPremium) return;
+    
+    let blob: Blob | null = null;
     setIsUploading(true);
+
+    const timeout = setTimeout(() => {
+      if (isUploading) setIsUploading(false);
+    }, 30000);
+
     try {
-      const img = new Image();
-      img.src = URL.createObjectURL(file);
-      await new Promise((resolve) => (img.onload = resolve));
-
-      const canvas = document.createElement('canvas');
-      const MAX_WIDTH = 800;
-      const MAX_HEIGHT = 800;
-      let width = img.width;
-      let height = img.height;
-
-      if (width > height) {
-        if (width > MAX_WIDTH) {
-          height *= MAX_WIDTH / width;
-          width = MAX_WIDTH;
+       if (Capacitor.isNativePlatform() && !e) {
+        const photo = await Camera.getPhoto({
+          quality: 60,
+          allowEditing: false,
+          resultType: CameraResultType.Uri,
+          source: CameraSource.Photos,
+          width: 800,
+          height: 800
+        });
+        if (!photo.webPath) throw new Error('Caminho não encontrado');
+        const response = await fetch(photo.webPath);
+        blob = await response.blob();
+      } else if (e) {
+        const file = e.target.files?.[0];
+        if (!file) {
+          setIsUploading(false);
+          clearTimeout(timeout);
+          return;
         }
-      } else {
-        if (height > MAX_HEIGHT) {
-          width *= MAX_HEIGHT / height;
-          height = MAX_HEIGHT;
+
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        await new Promise((resolve) => (img.onload = resolve));
+
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 800;
+        const MAX_HEIGHT = 800;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+        } else {
+          if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
         }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        blob = await new Promise<Blob | null>((resolve) => 
+          canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.6)
+        );
       }
 
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx?.drawImage(img, 0, 0, width, height);
-
-      const blob = await new Promise<Blob | null>((resolve) => 
-        canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.6)
-      );
-
-      if (!blob) throw new Error('Falha ao processar imagem');
+      if (!blob) throw new Error('Blob nulo');
 
       const storageRef = ref(storage, `vehicles/${auth.currentUser.uid}/${Date.now()}_extra.jpg`);
       const snapshot = await uploadBytes(storageRef, blob);
@@ -2231,6 +2209,7 @@ function VehicleSettings({
       console.error('Extra photo upload error:', error);
       alert('Erro ao carregar foto extra.');
     } finally {
+      clearTimeout(timeout);
       setIsUploading(false);
     }
   };
@@ -2400,28 +2379,40 @@ function VehicleSettings({
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex flex-col items-center gap-4 py-2">
           <div className="relative group">
-            <div className="w-32 h-32 rounded-3xl bg-zinc-900 border-2 border-dashed border-white/10 flex items-center justify-center overflow-hidden group-hover:border-brand-primary/50 transition-colors">
+            <div 
+              onClick={() => {
+                if (!isPremium) {
+                  alert("A função de adicionar fotos reais do veículo está disponível apenas para usuários Premium. Assine agora para personalizar sua garagem!");
+                } else {
+                  if (Capacitor.isNativePlatform()) {
+                    handlePhotoUpload(null);
+                  } else {
+                    const input = document.getElementById('vehicle-photo-input') as HTMLInputElement;
+                    input?.click();
+                  }
+                }
+              }}
+              className="w-32 h-32 rounded-3xl bg-zinc-900 border-2 border-dashed border-white/10 flex items-center justify-center overflow-hidden hover:border-brand-primary/50 transition-colors cursor-pointer"
+            >
               {formData.photoURL ? (
                 <img src={formData.photoURL} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               ) : (
-                <Camera className="w-8 h-8 text-zinc-700 group-hover:text-brand-primary/50 transition-colors" />
+                <Camera className="w-8 h-8 text-zinc-700 hover:text-brand-primary/50 transition-colors" />
               )}
               {isUploading && (
                 <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                   <div className="w-6 h-6 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
                 </div>
               )}
-            </div>
-            <label className={`absolute -bottom-2 -right-2 w-10 h-10 rounded-xl flex items-center justify-center transition-colors active:scale-90 shadow-lg ${isPremium ? 'bg-brand-primary cursor-pointer hover:bg-red-500' : 'bg-zinc-800 cursor-not-allowed'}`}>
-              <Plus className="w-5 h-5 text-white" />
               <input 
+                id="vehicle-photo-input"
                 type="file" 
                 className="hidden" 
                 accept="image/*" 
                 onChange={handlePhotoUpload} 
                 disabled={isUploading || !isPremium} 
               />
-            </label>
+            </div>
           </div>
           {!isPremium && (
             <div className="flex items-center gap-1.5 text-yellow-500/50">
@@ -2674,69 +2665,11 @@ function DuelComparison({ challenge }: { challenge: Challenge }) {
       </div>
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between px-1">
-          <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">Gráfico Comparativo</h3>
-          <div className="flex gap-3">
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-zinc-600" />
-              <span className="text-[8px] font-bold text-zinc-600 uppercase">{challenge.creatorName}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 rounded-full bg-brand-accent" />
-              <span className="text-[8px] font-bold text-zinc-600 uppercase">VOCÊ</span>
-            </div>
-          </div>
-        </div>
-        <div className="h-[220px] w-full bg-zinc-900/30 rounded-3xl p-6 border border-white/5 relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-b from-brand-accent/5 to-transparent pointer-events-none" />
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="colorCreator" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#71717a" stopOpacity={0.2}/>
-                  <stop offset="95%" stopColor="#71717a" stopOpacity={0}/>
-                </linearGradient>
-                <linearGradient id="colorYou" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#00f2ff" stopOpacity={0.2}/>
-                  <stop offset="95%" stopColor="#00f2ff" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
-              <XAxis hide />
-              <YAxis 
-                stroke="#3f3f46" 
-                fontSize={9} 
-                tickFormatter={(val) => `${val}`}
-                axisLine={false}
-                tickLine={false}
-                domain={[0, 'auto']}
-              />
-              <RechartsTooltip 
-                contentStyle={{ backgroundColor: '#09090b', border: '1px solid #27272a', borderRadius: '12px', fontSize: '10px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }}
-                itemStyle={{ fontWeight: 'bold', padding: '2px 0' }}
-                cursor={{ stroke: '#ffffff10', strokeWidth: 1 }}
-              />
-              <Area 
-                type="monotone" 
-                dataKey={challenge.creatorName} 
-                stroke="#71717a" 
-                fillOpacity={1} 
-                fill="url(#colorCreator)" 
-                strokeWidth={2}
-                strokeDasharray="5 5"
-              />
-              <Area 
-                type="monotone" 
-                dataKey="Você" 
-                stroke="#00f2ff" 
-                fillOpacity={1} 
-                fill="url(#colorYou)" 
-                strokeWidth={3}
-                animationDuration={1500}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        <PerformanceChart 
+          result={challenge.result} 
+          opponentResult={challenge.opponentResult} 
+          isPremium={true} 
+        />
       </div>
 
       <div className="space-y-4">
@@ -3020,9 +2953,6 @@ function GPSIndicator({ accuracy, onRequest }: { accuracy: number | null, onRequ
           />
         ))}
       </div>
-      <span className={`text-[9px] font-black uppercase tracking-widest ${colors[level]}`}>
-        {level === 4 ? 'Excelente' : level === 3 ? 'Bom' : level === 2 ? 'Regular' : level === 1 ? 'Fraco' : 'Sem Sinal'}
-      </span>
     </button>
   );
 }
@@ -3037,7 +2967,7 @@ function CustomSetup({ onBack, onStart, config, setConfig }: {
     <div className="flex-1 flex flex-col p-6 overflow-y-auto">
       <div className="flex items-center gap-4 mb-8">
         <button onClick={onBack} className="p-2 hover:bg-white/5 rounded-full transition-colors">
-          <ArrowLeft className="w-6 h-6 text-zinc-400" />
+          <ArrowLeftIcon className="w-6 h-6 text-zinc-400" />
         </button>
         <h2 className="text-xl font-display font-black italic text-white leading-none tracking-tight">MODO PERSONALIZADO</h2>
       </div>
@@ -3119,6 +3049,32 @@ function CustomSetup({ onBack, onStart, config, setConfig }: {
 }
 
 export default function App() {
+  const [telemetryConfig, setTelemetryConfig] = useState<TelemetryConfig>({
+    motionSensitivity: 1.4,
+    noiseFloor: 0.05,
+    maxAccelG: 2.5,
+    fusionGpsWeight: 0.95,
+    fusionAccelGain: 1.0
+  });
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'system_config', 'settings'), (snapshot) => {
+      if (snapshot.exists()) {
+        const settings = snapshot.data() as SystemSettings;
+        if (settings.activeProfileId && settings.profiles?.[settings.activeProfileId]) {
+          setTelemetryConfig(settings.profiles[settings.activeProfileId]);
+        } else {
+          // Backward compatibility or direct settings
+          setTelemetryConfig(snapshot.data() as TelemetryConfig);
+        }
+      }
+    }, (error) => {
+      console.error("Error fetching telemetry config:", error);
+    });
+    return () => unsub();
+  }, []);
+
+
   const {
     currentSpeed,
     distance,
@@ -3142,10 +3098,31 @@ export default function App() {
     progress,
     gpsSource,
     setGpsSource
-  } = usePerformanceTimer();
+  } = usePerformanceTimer(telemetryConfig);
 
   const [screen, setScreen] = useState<Screen>('home');
   const [showPerformanceMenu, setShowPerformanceMenu] = useState(false);
+
+  useEffect(() => {
+    let listener: any;
+    const setupBackButton = async () => {
+      if (!Capacitor.isNativePlatform()) return;
+      listener = await CapacitorApp.addListener('backButton', () => {
+        setScreen(currentScreen => {
+          if (currentScreen === 'home' || currentScreen === 'login') {
+            CapacitorApp.exitApp();
+            return currentScreen;
+          }
+          // Volta para a tela inicial em vez de fechar o app
+          return 'home';
+        });
+      });
+    };
+    setupBackButton();
+    return () => {
+      if (listener) listener.remove();
+    };
+  }, []);
   const [selectedProfileUid, setSelectedProfileUid] = useState<string | null>(null);
   const [activeConfig, setActiveConfig] = useState<typeof PRESETS[0] | null>(null);
   const [customConfig, setCustomConfig] = useState<{
@@ -3157,12 +3134,50 @@ export default function App() {
   const [activeChallenge, setActiveChallenge] = useState<Challenge | null>(null);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  
+  const isAdmin = useMemo(() => {
+    return user?.email ? ADMIN_EMAILS.includes(user.email) : false;
+  }, [user]);
+
+  const isUserPremium = useMemo(() => {
+    return isAdmin || userProfile?.isPremium;
+  }, [isAdmin, userProfile]);
+
   const [isGuest, setIsGuest] = useState(false);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const lastSavedRunIdRef = useRef<string | null>(null);
   const [vehicle, setVehicle] = useState<Vehicle | null>(null);
   const [guestTermsAccepted, setGuestTermsAccepted] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [incomingChallenge, setIncomingChallenge] = useState<Challenge | null>(null);
+  const [showChallengeSearch, setShowChallengeSearch] = useState(false);
+  const [searchTarget, setSearchTarget] = useState('');
+  const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Challenge Listener
+  useEffect(() => {
+    if (!user) return;
+    
+    const q = query(
+      collection(db, 'challenges'), 
+      where('opponentId', '==', user.uid),
+      where('status', '==', 'pending'),
+      limit(1)
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      if (!snapshot.empty) {
+        const challenge = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Challenge;
+        setIncomingChallenge(challenge);
+      } else {
+        setIncomingChallenge(null);
+      }
+    });
+    
+    return () => unsubscribe();
+  }, [user]);
 
   // Test Connection
   useEffect(() => {
@@ -3189,40 +3204,74 @@ export default function App() {
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log('Auth state changed:', firebaseUser ? 'User logged in' : 'No user');
+      // Log auth state
+      console.log('Passo 1: Firebase percebeu ' + (firebaseUser ? 'Usuário Logado' : 'Deslogado'));
+      
       setUser(firebaseUser);
       setIsAuthReady(true);
-      setIsLoggingIn(false); // Reset loading state when auth state is resolved
       
       if (firebaseUser) {
         setIsGuest(false); // Reset guest mode if logged in
-        // Sync user profile
+
+        // Sync user profile with Retries
         const userRef = doc(db, 'users', firebaseUser.uid);
         try {
-          const userSnap = await getDoc(userRef);
-          let userData = userSnap.data() as UserProfile | undefined;
-          
-          if (!userSnap.exists()) {
-            userData = {
-              uid: firebaseUser.uid,
-              displayName: firebaseUser.displayName,
-              photoURL: firebaseUser.photoURL,
-              termsAccepted: false,
-              termsVersion: TERMS_VERSION,
-              isPremium: false,
-              createdAt: new Date().toISOString()
-            };
-            await setDoc(userRef, userData);
-            // Store email privately
-            await setDoc(doc(db, 'users', firebaseUser.uid, 'private', 'data'), {
-              email: firebaseUser.email
-            });
-            setScreen('terms');
-          } else if (!userData?.termsAccepted || userData?.termsVersion !== TERMS_VERSION) {
-            setScreen('terms');
-          } else {
-            setScreen('home');
+          let retryCount = 0;
+          const maxRetries = 3;
+          let userData: UserProfile | undefined;
+          let success = false;
+
+          while (retryCount < maxRetries && !success) {
+            try {
+              // Try to get data with a smaller timeout or just normally
+              const userSnap = await getDoc(userRef);
+              userData = userSnap.data() as UserProfile | undefined;
+              
+              if (!userSnap.exists()) {
+                userData = {
+                  uid: firebaseUser.uid,
+                  displayName: firebaseUser.displayName,
+                  photoURL: firebaseUser.photoURL,
+                  termsAccepted: false,
+                  termsVersion: TERMS_VERSION,
+                  isPremium: false,
+                  createdAt: new Date().toISOString()
+                };
+                await setDoc(userRef, userData);
+                // Store email privately
+                await setDoc(doc(db, 'users', firebaseUser.uid, 'private', 'data'), {
+                  email: firebaseUser.email
+                });
+                setScreen('terms');
+              } else if (!userData?.termsAccepted || userData?.termsVersion !== TERMS_VERSION) {
+                setScreen('terms');
+              } else {
+                setScreen('home');
+              }
+              success = true;
+            } catch (syncError: any) {
+              retryCount++;
+              console.error(`Sync attempt ${retryCount} failed:`, syncError);
+              
+              // If we are on first retry and it's a network thing, we can try to enableNetwork once
+              if (retryCount === 1) {
+                try { await enableNetwork(db); } catch(e) {}
+              }
+
+              if (retryCount < maxRetries) {
+                await new Promise(r => setTimeout(r, 1000 * retryCount));
+              } else {
+                // Fallback: If we can't sync but show existing user, at least go to home
+                if (screen === 'login' || screen === 'terms') {
+                  setScreen('home');
+                }
+                success = true; // Stop loop even if failed, we handle it via fallback
+              }
+            }
           }
+
           setUserProfile(userData || null);
+          setIsLoggingIn(false); 
 
           // Real-time vehicles sync
           const vehiclesRef = collection(db, 'vehicles');
@@ -3230,20 +3279,20 @@ export default function App() {
           
           unsubscribeVehicles = onSnapshot(q, (snapshot) => {
             const vehicleList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Vehicle));
-            console.log('Vehicles updated:', vehicleList);
             setVehicles(vehicleList);
-            
-            // Set active vehicle (the one with active: true or the first one)
             const active = vehicleList.find(v => v.active) || vehicleList[0] || null;
             setVehicle(active);
           }, (error) => {
-            handleFirestoreError(error, OperationType.LIST, 'vehicles');
-          });
-
-        } catch (error) {
+            console.warn('Vehicle sync error:', error);
+          } );
+        } catch (error: any) {
           console.error('Error syncing user data:', error);
+          setIsLoggingIn(false);
+          setScreen('home'); // Always transition to home as fallback
         }
       } else {
+        console.log('User signed out or null');
+        setIsLoggingIn(false); // Reset if user is null
         if (unsubscribeVehicles) {
           unsubscribeVehicles();
           unsubscribeVehicles = null;
@@ -3260,7 +3309,7 @@ export default function App() {
       unsubscribeAuth();
       if (unsubscribeVehicles) unsubscribeVehicles();
     };
-  }, [isGuest]);
+  }, []); // Only run once on mount
 
   const handleAcceptTerms = async () => {
     if (isGuest) {
@@ -3271,17 +3320,35 @@ export default function App() {
 
     if (!user) return;
     try {
-      await setDoc(doc(db, 'users', user.uid), { 
+      await updateDoc(doc(db, 'users', user.uid), {
         termsAccepted: true,
-        termsVersion: TERMS_VERSION 
-      }, { merge: true });
+        termsVersion: TERMS_VERSION,
+        acceptedAt: new Date().toISOString()
+      });
+      setUserProfile(prev => prev ? { ...prev, termsAccepted: true, termsVersion: TERMS_VERSION } : null);
       setScreen('home');
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
     }
   };
 
-  const handleUpdateProfile = async (data: { displayName?: string, photoURL?: string, isPremium?: boolean, bio?: string }) => {
+  const [showPrecisionHint, setShowPrecisionHint] = useState(false);
+  useEffect(() => {
+    if (screen === 'timer' && !isRunning && !lastResult) {
+      setShowPrecisionHint(true);
+      const timer = setTimeout(() => setShowPrecisionHint(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [screen, isRunning, lastResult]);
+
+  const handleUpdateProfile = async (data: { 
+    displayName?: string, 
+    photoURL?: string, 
+    isPremium?: boolean, 
+    bio?: string,
+    instagram?: string,
+    isPrivate?: boolean
+  }) => {
     if (!user) return;
     try {
       await setDoc(doc(db, 'users', user.uid), data, { merge: true });
@@ -3321,22 +3388,17 @@ export default function App() {
     initSocial();
   }, []);
 
-  // Test Connection
-  useEffect(() => {
-    async function testConnection() {
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        if(error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration.");
-        }
-      }
-    }
-    testConnection();
-  }, []);
 
   const handleLogin = async () => {
     setIsLoggingIn(true);
+    // console.log('Iniciando Autenticação Google...');
+    
+    // Failsafe timeout
+    const failsafe = setTimeout(() => {
+      setIsLoggingIn(false);
+      // console.warn('Atenção: O processo não respondeu em 10 segundos.');
+    }, 10000);
+
     try {
       if (Capacitor.isNativePlatform()) {
         const result = await SocialLogin.login({
@@ -3344,8 +3406,9 @@ export default function App() {
           options: {},
         });
 
-        if (result.result.idToken) {
-          const credential = GoogleAuthProvider.credential(result.result.idToken);
+        const res = result.result as any;
+        if (res.idToken) {
+          const credential = GoogleAuthProvider.credential(res.idToken);
           await signInWithCredential(auth, credential);
         } else {
           throw new Error('Falha ao obter Token do Google');
@@ -3353,7 +3416,7 @@ export default function App() {
       } else {
         await signInWithPopup(auth, googleProvider);
       }
-      // The onAuthStateChanged listener will handle the screen transition
+      clearTimeout(failsafe);
     } catch (error: any) {
       console.error('Login error:', error);
       setIsLoggingIn(false);
@@ -3390,6 +3453,11 @@ export default function App() {
   };
 
   const saveVehicle = async (v: Vehicle) => {
+    if (isGuest) {
+      alert("Como Visitante, seus dados não são salvos na nuvem. Crie uma conta ou faça login com Google para salvar seus veículos e tempos permanentemente!");
+      return;
+    }
+
     if (!user) {
       console.warn('Cannot save vehicle: No user logged in');
       return;
@@ -3486,35 +3554,49 @@ export default function App() {
       }
     } else if (lastResult && !activeChallenge) {
       // Save solo run result to Firestore
+      if (lastSavedRunIdRef.current === lastResult.id) return;
+
       if (user) {
         const saveRun = async () => {
-          if (!userProfile?.isPremium) {
-            // Check current runs
-            const runsRef = collection(db, 'runs');
-            const q = query(runsRef, where('uid', '==', user.uid), orderBy('timestamp', 'desc'));
-            const snapshot = await getDocs(q);
-            
-            if (snapshot.size >= 2) {
-              // Delete oldest runs to keep only 1 (so adding the new one makes it 2)
-              const docsToDelete = snapshot.docs.slice(1); 
-              for (const d of docsToDelete) {
-                await deleteDoc(doc(db, 'runs', d.id));
+          try {
+            if (!userProfile?.isPremium) {
+              const runsRef = collection(db, 'runs');
+              const q = query(runsRef, where('uid', '==', user.uid), orderBy('timestamp', 'desc'));
+              const snapshot = await getDocs(q);
+              
+              if (snapshot.size >= 2) {
+                const docsToDelete = snapshot.docs.slice(1); 
+                for (const d of docsToDelete) {
+                  await deleteDoc(doc(db, 'runs', d.id));
+                }
               }
             }
+            
+            const runData = { 
+              ...lastResult, 
+              uid: user.uid,
+              vehicleId: vehicle?.id || null,
+              vehicleName: vehicle ? `${vehicle.nickname} (${vehicle.model})` : 'Piloto'
+            };
+            await addDoc(collection(db, 'runs'), runData);
+            lastSavedRunIdRef.current = lastResult.id;
+            console.log("Run saved to Firestore successfully");
+          } catch (err) {
+            handleFirestoreError(err, OperationType.WRITE, 'runs');
           }
-          
-          const runData = { ...lastResult, uid: user.uid };
-          await addDoc(collection(db, 'runs'), runData);
         };
         
-        saveRun().catch(err => handleFirestoreError(err, OperationType.WRITE, 'runs'));
+        saveRun();
 
         // Save to rankings if it's a valid 0-100 run
         if (
           lastResult.config.mode === 'speed' && 
           lastResult.config.target === 100 && 
           lastResult.isValidSlope && 
-          lastResult.location
+          lastResult.location &&
+          (lastResult.avgAccuracy ?? 100) < 15 &&
+          (lastResult.maxG ?? 0) < 3.8 &&
+          lastResult.time > 1.2
         ) {
           const rankingData: Omit<RankingEntry, 'id'> = {
             uid: user.uid,
@@ -3536,8 +3618,11 @@ export default function App() {
         // Save to localStorage for guest users
         try {
           const localRuns = JSON.parse(localStorage.getItem('dragfire_guest_runs') || '[]');
-          localRuns.unshift(lastResult);
-          localStorage.setItem('dragfire_guest_runs', JSON.stringify(localRuns.slice(0, 50)));
+          if (!localRuns.find((r: any) => r.id === lastResult.id)) {
+            localRuns.unshift(lastResult);
+            localStorage.setItem('dragfire_guest_runs', JSON.stringify(localRuns.slice(0, 50)));
+            lastSavedRunIdRef.current = lastResult.id;
+          }
         } catch (e) {
           console.error("Error saving to localStorage:", e);
         }
@@ -3547,7 +3632,7 @@ export default function App() {
         setScreen('trip-view');
       }
     }
-  }, [lastResult]);
+  }, [lastResult, user, isGuest, userProfile?.isPremium]);
 
   const handleSelectPreset = (preset: typeof PRESETS[0]) => {
     setActiveConfig(preset);
@@ -3613,106 +3698,90 @@ export default function App() {
     setActiveConfig(null);
   };
 
-  const handleSimulateMock = () => {
-    const creatorResult: RunResult = {
-      id: 'creator-123',
-      timestamp: Date.now(),
-      config: { mode: 'speed', target: 100 },
-      time: 4.85,
-      maxSpeed: 101.2,
-      avgSpeed: 52.4,
-      distance: 72,
-      path: Array.from({ length: 10 }, (_, i) => ({
-        latitude: -22.9068 + (i * 0.0001),
-        longitude: -43.1729 + (i * 0.0001),
-        altitude: null,
-        speed: i * 11,
-        accuracy: 3.5,
-        timestamp: Date.now() + (i * 500)
-      }))
-    };
-
-    const opponentResult: RunResult = {
-      id: 'opponent-123',
-      timestamp: Date.now(),
-      config: { mode: 'speed', target: 100 },
-      time: 4.52,
-      maxSpeed: 104.8,
-      avgSpeed: 55.1,
-      distance: 68,
-      path: Array.from({ length: 10 }, (_, i) => ({
-        latitude: -22.9068 + (i * 0.0001),
-        longitude: -43.1729 + (i * 0.0001),
-        altitude: null,
-        speed: i * 12,
-        accuracy: 4.2,
-        timestamp: Date.now() + (i * 450)
-      }))
-    };
-
-    const mockChallenge: Challenge = {
-      id: 'challenge-123',
-      creatorId: 'user-2',
-      creatorName: 'Alemão do Opala',
-      result: creatorResult,
-      opponentResult: opponentResult,
-      expiresAt: Date.now() + 86400000,
-      status: 'completed'
-    };
-
-    setActiveChallenge(mockChallenge);
-    setScreen('duel-result');
-  };
-
   const handleDuel = () => {
     if (!lastResult) return;
+    setShowChallengeSearch(true);
+  };
+
+  const handleSearchUsersForChallenge = async () => {
+    if (!searchTarget.trim()) return;
+    setIsSearching(true);
+    try {
+      const q = query(
+        collection(db, 'users'),
+        where('displayName', '>=', searchTarget),
+        where('displayName', '<=', searchTarget + '\uf8ff'),
+        limit(5)
+      );
+      const snapshot = await getDocs(q);
+      const usersList = snapshot.docs.map(doc => doc.data() as UserProfile);
+      setSearchResults(usersList.filter(u => u.uid !== user?.uid));
+    } catch (e) {
+      console.error("Error searching users:", e);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const sendChallenge = async (targetUser: UserProfile) => {
+    if (!lastResult || !user) return;
     
     const challenge: Challenge = {
       id: crypto.randomUUID(),
-      creatorId: 'user-1',
-      creatorName: 'Piloto X',
+      creatorId: user.uid,
+      creatorName: user.displayName || 'Piloto',
+      opponentId: targetUser.uid,
+      isPrivate: true,
       result: lastResult,
       expiresAt: Date.now() + (48 * 60 * 60 * 1000),
       status: 'pending'
     };
     
-    setActiveChallenge(challenge);
-    
-    // Simulate sharing
-    const shareText = `Desafio você para um duelo de ${challenge.result.config.target}${challenge.result.config.mode === 'speed' ? 'km/h' : 'm'}! Meu tempo foi ${challenge.result.time.toFixed(2)}s. Aceita?`;
-    if (navigator.share) {
-      navigator.share({
-        title: 'Duelo DragFire',
-        text: shareText,
-        url: window.location.href,
-      }).catch(() => {
-        alert('Link de duelo copiado para a área de transferência!');
-      });
-    } else {
-      navigator.clipboard.writeText(`${shareText} ${window.location.href}`);
-      alert('Link de duelo copiado para a área de transferência!');
+    try {
+      await setDoc(doc(db, 'challenges', challenge.id), challenge);
+      alert(`Desafio enviado para ${targetUser.displayName}!`);
+      setShowChallengeSearch(false);
+      setSearchTarget('');
+      setSearchResults([]);
+    } catch (e) {
+      console.error("Error sending challenge:", e);
+      alert("Erro ao enviar desafio.");
     }
-    
-    setScreen('challenge');
   };
 
-  const handleAcceptChallenge = () => {
-    if (!activeChallenge) return;
-    
-    const preset = PRESETS.find(p => 
-      p.mode === activeChallenge.result.config.mode && 
-      p.target === activeChallenge.result.config.target
-    ) || PRESETS[0];
+  const handleAcceptChallenge = async (challenge: Challenge) => {
+    const updated: Challenge = { ...challenge, status: 'accepted', acceptedAt: Date.now() };
+    try {
+      await setDoc(doc(db, 'challenges', challenge.id), updated, { merge: true });
+      setActiveChallenge(updated);
+      setIncomingChallenge(null);
+      
+      const preset = PRESETS.find(p => 
+        p.mode === updated.result.config.mode && 
+        p.target === updated.result.config.target
+      ) || PRESETS[0];
 
-    setActiveConfig(preset);
-    setScreen('timer');
-    
-    const config: RunConfig = {
-      mode: activeChallenge.result.config.mode,
-      target: activeChallenge.result.config.target,
-      startSpeed: activeChallenge.result.config.startSpeed
-    };
-    startRun(config);
+      setActiveConfig(preset);
+      setScreen('timer');
+      
+      const config: RunConfig = {
+        mode: updated.result.config.mode,
+        target: updated.result.config.target,
+        startSpeed: updated.result.config.startSpeed
+      };
+      startRun(config);
+    } catch (e) {
+      console.error("Error accepting challenge:", e);
+    }
+  };
+
+  const handleDeclineChallenge = async (challenge: Challenge) => {
+    try {
+      await setDoc(doc(db, 'challenges', challenge.id), { status: 'expired' }, { merge: true });
+      setIncomingChallenge(null);
+    } catch (e) {
+      console.error("Error declining challenge:", e);
+    }
   };
 
   const isStopped = currentSpeed < 3;
@@ -3823,6 +3892,7 @@ export default function App() {
             <VehicleSettings 
               vehicles={vehicles} 
               userProfile={userProfile}
+              isPremium={isUserPremium}
               onSave={saveVehicle} 
               onDelete={deleteVehicle}
               onBack={() => setScreen('settings')} 
@@ -3898,6 +3968,7 @@ export default function App() {
               uid={selectedProfileUid || ''} 
               currentUserId={user?.uid}
               onBack={() => setScreen('regional-ranking')} 
+              onEditVehicles={() => setScreen('vehicle-settings')}
             />
           </motion.div>
         ) : screen === 'history' ? (
@@ -3911,7 +3982,7 @@ export default function App() {
             <HistoryView 
               user={user} 
               isGuest={isGuest}
-              isPremium={userProfile?.isPremium}
+              isPremium={isUserPremium}
               onBack={() => setScreen('home')} 
             />
           </motion.div>
@@ -3950,31 +4021,33 @@ export default function App() {
           >
             {/* Home Header */}
             <header className="p-6 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl overflow-hidden border border-brand-primary/30 shadow-lg shadow-brand-primary/10">
-                  {user?.photoURL ? (
-                    <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  ) : (
-                    <div className="w-full h-full bg-brand-primary flex items-center justify-center neon-glow">
-                      <Gauge className="w-6 h-6 text-white" />
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h1 className="font-display font-extrabold text-2xl tracking-tighter italic leading-none">
-                      DRAG<span className="text-brand-primary">FIRE</span>
-                    </h1>
-                    {userProfile?.isPremium && (
-                      <span className="bg-yellow-500 text-zinc-950 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter shadow-lg shadow-yellow-500/20">Premium</span>
+              <div className="flex items-center gap-2 flex-1 min-w-0 mr-2">
+                <div className="flex flex-col items-center gap-1.5 shrink-0">
+                  <div className="w-10 h-10 rounded-xl overflow-hidden border border-brand-primary/30 shadow-lg shadow-brand-primary/10 shrink-0">
+                    {user?.photoURL ? (
+                      <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="w-full h-full bg-brand-primary flex items-center justify-center neon-glow">
+                        <Gauge className="w-6 h-6 text-white" />
+                      </div>
                     )}
                   </div>
-                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">
+                  {isUserPremium && (
+                    <span className="bg-yellow-500 text-zinc-950 text-[7px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter shadow-lg shadow-yellow-500/20 leading-none">Premium</span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h1 className="font-display font-extrabold text-2xl tracking-tighter italic leading-none whitespace-nowrap">
+                      DRAG<span className="text-brand-primary">FIRE</span>
+                    </h1>
+                  </div>
+                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1 whitespace-nowrap overflow-visible">
                     {isGuest ? 'Modo Visitante' : (vehicle ? `${vehicle.nickname} • ${vehicle.model}` : user?.displayName || 'Piloto')}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <GPSIndicator accuracy={accuracy} onRequest={requestPermission} />
                 <button 
                   onClick={handleLogout}
@@ -4037,7 +4110,7 @@ export default function App() {
                   <div className="absolute top-3 right-3"><Timer className="w-7 h-7 text-brand-primary animate-pulse" /></div>
                   <div className="absolute bottom-4 left-4 right-4">
                     <span className="px-1.5 py-0.5 bg-brand-primary/20 backdrop-blur-md rounded border border-brand-primary/30 text-[7px] font-black text-brand-primary uppercase tracking-widest mb-1.5 inline-block">Telemetria</span>
-                    <h4 className="text-sm font-display font-black italic text-white leading-tight uppercase tracking-tighter">Teste <span className="text-brand-primary font-bold">Turbo</span></h4>
+                    <h4 className="text-sm font-display font-black italic text-white leading-tight uppercase tracking-tighter">Teste <span className="text-brand-primary font-bold">Performance</span></h4>
                   </div>
                 </motion.div>
 
@@ -4057,28 +4130,7 @@ export default function App() {
                 </motion.div>
               </section>
 
-              {/* 3. Modalidades (Utilities row moved down) */}
-              <section className="space-y-4">
-                <h2 className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.2em] px-1">Prática e Lazer</h2>
-                <div className="grid grid-cols-2 gap-3">
-                  {PRESETS.filter(p => p.id === 'free' || p.id === 'trip').map((preset) => (
-                    <motion.button
-                      key={preset.id}
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => handleSelectPreset(preset as any)}
-                      className="group relative flex flex-col items-start p-5 bg-zinc-900/50 border border-white/5 rounded-2xl overflow-hidden text-left transition-all hover:bg-zinc-900 hover:border-white/10"
-                    >
-                      <div className={`w-10 h-10 rounded-xl bg-zinc-950 border border-white/5 flex items-center justify-center mb-4`}>
-                        <preset.icon className={`w-5 h-5 ${preset.id === 'free' ? 'text-zinc-500' : 'text-blue-500'}`} />
-                      </div>
-                      
-                      <h4 className="text-[10px] font-black text-white leading-tight mb-1 uppercase italic tracking-widest">{preset.label}</h4>
-                      <p className="text-[8px] text-zinc-600 font-bold uppercase leading-tight">{preset.description}</p>
-                    </motion.button>
-                  ))}
-                </div>
-              </section>
+
 
               {/* Performance Selection Drawer (Modal Bottom Sheet) */}
               <AnimatePresence>
@@ -4110,7 +4162,7 @@ export default function App() {
                       </div>
 
                       <div className="grid grid-cols-1 gap-3">
-                        {PRESETS.filter(p => !['free', 'trip'].includes(p.id)).map((preset) => (
+                        {PRESETS.map((preset) => (
                           <motion.button
                             key={preset.id}
                             whileHover={{ scale: 1.01 }}
@@ -4245,7 +4297,7 @@ export default function App() {
             </header>
             <ChallengeView 
               challenge={activeChallenge} 
-              onAccept={handleAcceptChallenge}
+              onAccept={() => handleAcceptChallenge(activeChallenge)}
               onDecline={() => setScreen('home')}
               currentLocation={lastPosition}
             />
@@ -4392,13 +4444,39 @@ export default function App() {
           >
             {/* Timer Header */}
             <header className="p-3 flex items-center justify-between border-b border-white/5 bg-zinc-900/50 backdrop-blur-md z-10">
-              <button 
-                onClick={handleBack}
-                className="p-1.5 hover:bg-white/5 rounded-full transition-colors flex items-center gap-1.5 text-zinc-400 hover:text-white"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span className="text-[10px] font-black uppercase tracking-widest hidden sm:inline">Voltar</span>
-              </button>
+              <div className="flex items-center gap-1.5 flex-1 overflow-hidden">
+                <button 
+                  onClick={handleBack}
+                  className="p-1.5 hover:bg-white/5 rounded-full transition-colors flex items-center gap-1.5 text-zinc-400 hover:text-white shrink-0"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                
+                {/* Mini Vehicle Selector */}
+                {!isGuest && vehicles.length > 0 && (
+                  <div className="flex items-center gap-2 px-2 py-1 bg-white/5 rounded-lg border border-white/5 truncate max-w-[120px]">
+                    <div className="w-5 h-5 rounded-md bg-zinc-800 flex items-center justify-center shrink-0 overflow-hidden">
+                      {vehicle?.photoURL ? (
+                        <img src={vehicle.photoURL} className="w-full h-full object-cover" />
+                      ) : (
+                        <Car className="w-3 h-3 text-zinc-500" />
+                      )}
+                    </div>
+                    <select 
+                      value={vehicle?.id || ''} 
+                      onChange={(e) => {
+                        const v = vehicles.find(veh => veh.id === e.target.value);
+                        if (v) selectVehicle(v);
+                      }}
+                      className="bg-transparent text-[10px] font-black text-zinc-400 uppercase tracking-tight focus:outline-none cursor-pointer truncate appearance-none"
+                    >
+                      {vehicles.map(v => (
+                        <option key={v.id} value={v.id} className="bg-zinc-900 text-white">{v.nickname}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
               
               <div className="flex flex-col items-center">
                 <span className="text-[9px] font-black text-brand-primary uppercase tracking-widest leading-none mb-0.5">{activeConfig?.label}</span>
@@ -4724,7 +4802,11 @@ export default function App() {
                         </div>
                       </div>
 
-                      <PerformanceChart result={lastResult} />
+                      <PerformanceChart 
+                        result={lastResult} 
+                        opponentResult={activeChallenge?.result} 
+                        isPremium={userProfile?.isPremium} 
+                      />
 
                       <RunMap result={lastResult} />
 
@@ -4790,6 +4872,7 @@ export default function App() {
                         </div>
                       )}
 
+
                       <button 
                         onClick={handleStart}
                         className="w-full py-4 bg-brand-primary hover:bg-red-500 rounded-xl font-display font-black text-lg italic tracking-tight flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 transition-all active:scale-95"
@@ -4806,10 +4889,11 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {(user || isGuest) && screen !== 'login' && screen !== 'terms' && screen !== 'timer' && screen !== 'custom-setup' && !isRunning && (
+    {(user || isGuest) && screen !== 'login' && screen !== 'terms' && screen !== 'timer' && screen !== 'custom-setup' && !isRunning && (
         <BottomNav 
           activeScreen={screen} 
           isGuest={isGuest}
+          isAdmin={isAdmin}
           onNavigate={(s) => {
             if (s === 'public-profile' && user) {
               setSelectedProfileUid(user.uid);
@@ -4819,6 +4903,144 @@ export default function App() {
           userPhoto={user?.photoURL || undefined}
         />
       )}
+
+      {/* Search/Challenge Modal */}
+      <AnimatePresence>
+        {showChallengeSearch && (
+          <motion.div 
+            initial={{ opacity: 0, y: 100 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 100 }}
+            className="fixed inset-0 z-[100] bg-zinc-950 flex flex-col p-6"
+          >
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-xl font-display font-black italic text-white uppercase tracking-tight">Desafiar Amigo</h2>
+              <button 
+                onClick={() => setShowChallengeSearch(false)}
+                className="p-2 bg-zinc-900 rounded-full text-zinc-400"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="relative mb-6">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+              <input 
+                type="text" 
+                placeholder="Nome do piloto..."
+                value={searchTarget}
+                onChange={(e) => setSearchTarget(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearchUsersForChallenge()}
+                className="w-full bg-zinc-900/50 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-zinc-600 focus:border-brand-primary transition-colors outline-none"
+              />
+              <button 
+                onClick={handleSearchUsersForChallenge}
+                className="absolute right-3 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-brand-primary text-white text-[10px] font-black uppercase rounded-lg"
+              >
+                Buscar
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3">
+              {isSearching ? (
+                <div className="flex justify-center p-12">
+                  <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : searchResults.length > 0 ? (
+                searchResults.map(u => (
+                  <div key={u.uid} className="bg-zinc-900/40 border border-white/5 p-4 rounded-2xl flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-brand-primary rounded-xl flex items-center justify-center font-black">
+                        {u.photoURL ? <img src={u.photoURL} alt="" className="w-full h-full object-cover rounded-xl" /> : u.displayName?.[0]}
+                      </div>
+                      <div>
+                        <p className="font-bold text-white text-sm">{u.displayName}</p>
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Disponível</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => sendChallenge(u)}
+                      className="px-4 py-2 bg-brand-primary text-white text-xs font-black uppercase rounded-xl active:scale-95 transition-all"
+                    >
+                      Desafiar
+                    </button>
+                  </div>
+                ))
+              ) : searchTarget && !isSearching && (
+                <p className="text-center text-zinc-600 text-sm py-12">Nenhum piloto encontrado.</p>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Incoming Challenge Alert */}
+      <AnimatePresence>
+        {incomingChallenge && (
+          <motion.div 
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="fixed top-24 left-4 right-4 z-[110] bg-brand-primary p-5 rounded-[28px] shadow-2xl shadow-red-600/30 flex items-center justify-between gap-4"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center">
+                <Swords className="w-7 h-7 text-white animate-pulse" />
+              </div>
+              <div>
+                <h4 className="text-white font-display font-black italic tracking-tighter uppercase text-lg leading-none">NOVO DUELO!</h4>
+                <p className="text-white/80 text-[10px] font-bold uppercase tracking-widest mt-1">
+                  {incomingChallenge.creatorName} te desafiou
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => handleDeclineChallenge(incomingChallenge)}
+                className="w-10 h-10 bg-black/10 rounded-full flex items-center justify-center text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <button 
+                onClick={() => handleAcceptChallenge(incomingChallenge)}
+                className="px-4 py-2 bg-white text-brand-primary rounded-xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all"
+              >
+                ACEITAR
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Precision Hint Overlay */}
+      <AnimatePresence>
+        {showPrecisionHint && (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[200] w-[80%] max-w-sm"
+          >
+            <div className="bg-zinc-900/90 backdrop-blur-xl border border-brand-primary/30 p-6 rounded-3xl shadow-2xl text-center space-y-4">
+              <div className="w-12 h-12 bg-brand-primary/20 rounded-2xl flex items-center justify-center mx-auto">
+                <Info className="w-6 h-6 text-brand-primary" />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-white font-black italic uppercase tracking-widest text-sm">Dica de Precisão</h4>
+                <p className="text-zinc-400 text-xs font-medium leading-relaxed">
+                  Para melhores resultados, <span className="text-white font-bold">fixe o celular no suporte do veículo</span>. Evite segurar o aparelho na mão.
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowPrecisionHint(false)}
+                className="text-[10px] text-zinc-500 font-black uppercase tracking-[0.2em] pt-2 active:scale-95 transition-all"
+              >
+                Entendi
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   </ErrorBoundary>
 );

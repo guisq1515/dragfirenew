@@ -47,6 +47,8 @@ export interface Challenge {
   id: string;
   creatorId: string;
   creatorName: string;
+  opponentId?: string; // Target of the private challenge
+  isPrivate?: boolean;
   result: RunResult;
   expiresAt: number;
   status: 'pending' | 'accepted' | 'completed' | 'expired';
@@ -61,6 +63,8 @@ export interface GPSPoint {
   speed: number; // m/s
   accuracy: number | null;
   timestamp: number;
+  gLong?: number; // Longitudinal G-Force
+  gLat?: number;  // Lateral G-Force
 }
 
 export interface UserProfile {
@@ -137,3 +141,26 @@ export interface GasStation {
     timestamp: number;
   }[];
 }
+
+export interface TelemetryConfig {
+  motionSensitivity: number; // Launch threshold in G
+  noiseFloor: number;        // Linear acceleration noise floor
+  maxAccelG: number;         // Cap for speed fusion contribution
+  dtInterval?: number;      // Update rate (ms)
+  fusionGpsWeight?: number;  // 0.0 - 1.0 (How much we trust GPS)
+  fusionAccelGain?: number;  // 0.0 - 2.0 (Multiplier for accel data)
+  rotationThreshold?: number; // Threshold to ignore accel (deg/s)
+  mountingAxis?: 'auto' | 'all' | 'x' | 'y' | 'z'; // Pref axis
+}
+
+export interface TelemetryProfile extends TelemetryConfig {
+  id: string;
+  name: string;
+  isDefault?: boolean;
+}
+
+export interface SystemSettings {
+  activeProfileId: string;
+  profiles: Record<string, TelemetryProfile>;
+}
+

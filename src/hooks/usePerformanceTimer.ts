@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { RunConfig, RunResult, GPSPoint } from '../types';
+import { RunConfig, RunResult, GPSPoint, TelemetryConfig } from '../types';
 import { calculateDistance } from '../lib/utils';
 import { Geolocation } from '@capacitor/geolocation';
 import { Motion } from '@capacitor/motion';
 
-export function usePerformanceTimer() {
+export function usePerformanceTimer(telemetryConfig?: TelemetryConfig) {
   const [currentSpeed, setCurrentSpeed] = useState(0); // km/h
   const [distance, setDistance] = useState(0); // meters
   const [isRunning, setIsRunning] = useState(false);
@@ -29,6 +29,12 @@ export function usePerformanceTimer() {
   const maxGRef = useRef(0);
   const rolloutStartedRef = useRef(false);
   const accelerometerRef = useRef<{ x: number, y: number, z: number } | null>(null);
+  const linearAccelRef = useRef<number>(0);
+  const gLongRef = useRef<number>(0);
+  const gLatRef = useRef<number>(0);
+  const lastPositionRef = useRef<{ latitude: number, longitude: number } | null>(null);
+  const currentRotationRef = useRef<{ alpha: number, beta: number, gamma: number }>({ alpha: 0, beta: 0, gamma: 0 });
+  const activeAxisRef = useRef<'x' | 'y' | 'z' | null>(null);
   const daRef = useRef<number | undefined>(undefined);
 
   const [isReady, setIsReady] = useState(false);
@@ -37,6 +43,8 @@ export function usePerformanceTimer() {
   const isRunningRef = useRef(false);
 
   const distanceRef = useRef(0);
+  const lastGpsSpeedRef = useRef(0);
+  const fusionBufferRef = useRef(0);
 
   const stopRun = useCallback((finalTime: number) => {
     if (!configRef.current) return;
@@ -170,6 +178,9 @@ export function usePerformanceTimer() {
       enableHighAccuracy: true,
       maximumAge: 0,
       timeout: 15000,
+      // Android-specific: Request highest frequency possible
+      interval: 500,
+      minimumUpdateInterval: 0
     };
 
     let watchId: string | null = null;
@@ -186,17 +197,75 @@ export function usePerformanceTimer() {
 
         // Motion usually doesn't need explicit runtime permission request on Android 
         // with the plugin, but we handle it via the listener.
-        
         motionListener = await Motion.addListener('accel', (event) => {
           const { x, y, z } = event.accelerationIncludingGravity;
+          const { x: lx, y: ly, z: lz } = event.acceleration || { x: 0, y: 0, z: 0 };
+          const rotation = event.rotationRate || { alpha: 0, beta: 0, gamma: 0 };
+          
+          currentRotationRef.current = { 
+            alpha: Math.abs(rotation.alpha || 0), 
+            beta: Math.abs(rotation.beta || 0), 
+            gamma: Math.abs(rotation.gamma || 0) 
+          };
+
           accelerometerRef.current = { x: x || 0, y: y || 0, z: z || 0 };
+          
+          // EIXO INTELIGENTE: Se já estiver correndo e o eixo estiver travado, usamos apenas ele.
+          // Se não, usamos a magnitude total (comportamento legado ou universal).
+          let currentAccelMag = 0;
+          const mode = telemetryConfig?.mountingAxis || 'auto';
+          
+          if (isRunningRef.current && activeAxisRef.current && mode === 'auto') {
+            const axisValue = activeAxisRef.current === 'x' ? lx : activeAxisRef.current === 'y' ? ly : lz;
+            currentAccelMag = Math.abs(axisValue || 0);
+          } else if (mode !== 'auto' && mode !== 'all') {
+            const axisValue = mode === 'x' ? lx : mode === 'y' ? ly : lz;
+            currentAccelMag = Math.abs(axisValue || 0);
+          } else {
+            currentAccelMag = Math.sqrt((lx || 0)**2 + (ly || 0)**2 + (lz || 0)**2);
+          }
+
+          // APLICAR GANHO CONFIGURÁVEL
+          const accelGain = telemetryConfig?.fusionAccelGain ?? 1.0;
+          currentAccelMag *= accelGain;
+          
+          // ROTATION LOCK: Se o celular estiver girando muito rápido, ignoramos o acelerômetro
+          const rotThreshold = telemetryConfig?.rotationThreshold || 60; // graus por segundo
+          const isRotating = currentRotationRef.current.alpha > rotThreshold || 
+                             currentRotationRef.current.beta > rotThreshold || 
+                             currentRotationRef.current.gamma > rotThreshold;
+
+          if (isRotating || isWaitingRef.current || isReadyRef.current) {
+            linearAccelRef.current = 0;
+          } else {
+            // Noise filter
+            const noiseFloor = telemetryConfig?.noiseFloor || 0.05;
+            linearAccelRef.current = currentAccelMag > noiseFloor ? currentAccelMag : 0;
+          }
+          
+          // Map acceleration to G components
+          gLongRef.current = (ly || 0) / 9.81;
+          gLatRef.current = (lx || 0) / 9.81;
           
           if (isReadyRef.current && !isRunningRef.current && configRef.current) {
             const totalG = Math.sqrt((x || 0)**2 + (y || 0)**2 + (z || 0)**2) / 9.81;
             const isStandingStart = configRef.current.startSpeed === 0 || configRef.current.startSpeed === undefined;
             
-            if (isStandingStart && totalG > 1.15) {
+            const threshold = telemetryConfig?.motionSensitivity || 1.6;
+            if (isStandingStart && totalG > threshold) {
               console.log("ACCELEROMETER LAUNCH DETECTED! G:", totalG);
+              
+              // SMART AXIS DETECTION: Identifica o eixo de maior impacto na arrancada
+              if ((telemetryConfig?.mountingAxis || 'auto') === 'auto') {
+                const absX = Math.abs(lx || 0);
+                const absY = Math.abs(ly || 0);
+                const absZ = Math.abs(lz || 0);
+                if (absX > absY && absX > absZ) activeAxisRef.current = 'x';
+                else if (absY > absX && absY > absZ) activeAxisRef.current = 'y';
+                else activeAxisRef.current = 'z';
+                console.log("SMART AXIS LOCKED TO:", activeAxisRef.current);
+              }
+
               setIsWaiting(false);
               isWaitingRef.current = false;
               setIsRunning(true);
@@ -211,11 +280,38 @@ export function usePerformanceTimer() {
               }
               
               if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+              
+              let lastTick = Date.now();
               timerIntervalRef.current = window.setInterval(() => {
+                const now = Date.now();
+                const dt = (now - lastTick) / 1000;
+                lastTick = now;
+
                 if (startTimeRef.current) {
-                  setElapsedTime((Date.now() - startTimeRef.current) / 1000);
+                  setElapsedTime((now - startTimeRef.current) / 1000);
                 }
-              }, 50);
+
+                // SENSOR FUSION v1.5.3: Balanced "Light" Interpolation
+                // Accelerometer provides 20% of the movement for fluid visuals
+                // GPS (Waze-style) remains the primary truth (95% weight)
+                if (isRunningRef.current && linearAccelRef.current > 0.1 && (now - (startTimeRef.current || now)) > 300) {
+                  setCurrentSpeed(prev => {
+                    const dt = 0.02; // Roughly 50Hz
+                    const deltaV = (linearAccelRef.current * dt) * 3.6;
+                    
+                    // Apply 20% Damping Factor for smoothness without jitter
+                    const dampenedDeltaV = deltaV * 0.2;
+                    
+                    const newSpeed = prev + dampenedDeltaV;
+                    
+                    // DRIFT GUARD: Prevent deviating more than 5km/h from GPS ground truth
+                    const maxAllowed = lastGpsSpeedRef.current + 5;
+                    const minAllowed = Math.max(0, lastGpsSpeedRef.current - 5);
+                    
+                    return Math.min(maxAllowed, Math.max(minAllowed, newSpeed));
+                  });
+                }
+              }, 20); // 50Hz update rate for smooth visuals
             }
           }
         });
@@ -248,6 +344,8 @@ export function usePerformanceTimer() {
               speed: calculatedSpeed || 0,
               accuracy: accuracy,
               timestamp: position.timestamp,
+              gLong: gLongRef.current,
+              gLat: gLatRef.current
             };
 
             setAccuracy(accuracy);
@@ -256,12 +354,19 @@ export function usePerformanceTimer() {
             // Speed optimization: Use raw Doppler speed if available (+10% smoothing for noise)
             // If speed is null, fallback to distance/time calculation.
             const speedKmh = (calculatedSpeed || 0) * 3.6;
-            
-            // Prioritize reactive speed update for the UI
+            lastGpsSpeedRef.current = speedKmh;
+
             setCurrentSpeed(prev => {
               if (calculatedSpeed === null) return speedKmh;
-              // Smooth slightly to avoid jitter, but keep it high-response
-              return prev * 0.1 + speedKmh * 0.9;
+              // Blend GPS and current estimated speed (95% GPS Weight)
+              const gpsWeight = telemetryConfig?.fusionGpsWeight ?? 0.95;
+              if (isWaitingRef.current || isReadyRef.current) return 0;
+              
+              // If GPS speed is near 0, force absolute 0
+              if (speedKmh < 0.5) return 0;
+
+              if (Math.abs(prev - speedKmh) > 20) return speedKmh; // If too far off, trust GPS fully
+              return (prev * (1 - gpsWeight)) + (speedKmh * gpsWeight);
             });
 
             const config = configRef.current;
@@ -324,11 +429,22 @@ export function usePerformanceTimer() {
                   distanceRef.current = 0;
                   setDistance(0);
                   if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+                  
+                  let lastTick = Date.now();
                   timerIntervalRef.current = window.setInterval(() => {
+                    const now = Date.now();
+                    const dt = (now - lastTick) / 1000;
+                    lastTick = now;
+
                     if (startTimeRef.current) {
-                      setElapsedTime((Date.now() - startTimeRef.current) / 1000);
+                      setElapsedTime((now - startTimeRef.current) / 1000);
                     }
-                  }, 50);
+
+                    // SENSOR PRECISION: Accelerometer is used only for timing
+                    if (startTimeRef.current && isRunningRef.current) {
+                      // Only update elapsed time
+                    }
+                  }, 20);
                 }
               } else if (speedKmh >= config.startSpeed) {
                 setIsWaiting(false);
@@ -340,11 +456,25 @@ export function usePerformanceTimer() {
                 distanceRef.current = 0;
                 setDistance(0);
                 if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+                
+                let lastTick = Date.now();
                 timerIntervalRef.current = window.setInterval(() => {
+                  const now = Date.now();
+                  const dt = (now - lastTick) / 1000;
+                  lastTick = now;
+
                   if (startTimeRef.current) {
-                    setElapsedTime((Date.now() - startTimeRef.current) / 1000);
+                    setElapsedTime((now - startTimeRef.current) / 1000);
                   }
-                }, 50);
+
+                  // SPEED FUSION: Interpolate speed
+                  if (isRunningRef.current && linearAccelRef.current > 0.1) {
+                    setCurrentSpeed(prev => {
+                      const deltaV = (linearAccelRef.current * dt) * 3.6;
+                      return prev + Math.min(deltaV, 10);
+                    });
+                  }
+                }, 20);
               }
             }
 
@@ -412,6 +542,7 @@ export function usePerformanceTimer() {
     maxGRef.current = 0;
     rolloutStartedRef.current = false;
     configRef.current = null;
+    activeAxisRef.current = null;
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
   };
 

@@ -14,16 +14,18 @@ import {
   ArrowUpDown,
   Car,
   Image as ImageIcon,
-  MapPin
+  MapPin,
+  Database
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { db, auth } from '../firebase';
 import { collection, query, where, orderBy, onSnapshot, limit, addDoc, updateDoc, doc, Timestamp, getDocs } from 'firebase/firestore';
-import { fetchNearbyStations, getPhotoUrl, GooglePlaceResult, getCityFromCoordinates } from '../services/googleMapsService';
-import { GasStation } from '../types';
+import { fetchNearbyStationsHTTP, fetchNearbyStationsNew, fetchNearbyStationsTextSearch, getPhotoUrl, GooglePlaceResult, getCityFromCoordinates } from '../services/googleMapsService';
+import { GasStation, UserProfile } from '../types';
 import { Geolocation } from '@capacitor/geolocation';
 import { normalizeText } from '../lib/utils';
+import { APP_VERSION } from '../versions';
 
 // Multi-marker support
 const customMarkerIcon = new L.Icon({
@@ -95,25 +97,51 @@ export function GasStations({ onBack }: { onBack: () => void }) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [activeTab, setActiveTab] = useState<'prices' | 'reviews'>('prices');
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
-  const [selectedRadius, setSelectedRadius] = useState(50000); // Default to 50km as requested
+  const [selectedRadius, setSelectedRadius] = useState(10000); // Set default to 10km as requested
   const [currentCity, setCurrentCity] = useState<string | null>(null);
   const [manualCityInput, setManualCityInput] = useState('');
   const [isLocationError, setIsLocationError] = useState(false);
+  const [apiStatus, setApiStatus] = useState<string | null>(null);
+  const [apiErrorMessage, setApiErrorMessage] = useState<string | null>(null);
 
   // 1. Get User Location
   const getLocation = async () => {
     try {
       setIsLocationError(false);
       setLoading(true);
-      const position = await Geolocation.getCurrentPosition({
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 30000
-      });
+      console.log('Checking GPS permissions...');
+      
+      // Native Permission Check (Capacitor)
+      const permResult = await Geolocation.checkPermissions();
+      console.log('Permissions status:', permResult.location);
+      
+      if (permResult.location !== 'granted') {
+        const reqResult = await Geolocation.requestPermissions();
+        if (reqResult.location !== 'granted') {
+          console.warn('Location permission denied');
+          setIsLocationError(true);
+          setLoading(false);
+          // alert('Permissão de GPS negada. Ative nas configurações do celular.');
+          return;
+        }
+      }
+      
+      console.log('Requesting accurate position...');
+      const position = await Promise.race([
+        Geolocation.getCurrentPosition({
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 3000
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('GPS Timeout (12s)')), 12000))
+      ]) as any;
+
+      console.log('Position acquired:', position.coords.latitude, position.coords.longitude);
       setUserLocation([position.coords.latitude, position.coords.longitude]);
     } catch (err: any) {
-      console.warn('Geolocation error:', err.message);
+      console.error('CRITICAL GPS ERROR:', err.message);
       setIsLocationError(true);
+      // alert('Erro GPS: ' + (err.message || 'Desconhecido'));
     } finally {
       setLoading(false);
     }
@@ -123,96 +151,139 @@ export function GasStations({ onBack }: { onBack: () => void }) {
     getLocation();
   }, []);
 
+  // 1.1 Dedicated effect for city detection (UX Improvement)
+  useEffect(() => {
+    const detectCity = async () => {
+      if (!userLocation || currentCity) return; 
+      
+      try {
+        console.log('[CITY] Inciando detecção de cidade via GPS...');
+        const city = await getCityFromCoordinates(userLocation[0], userLocation[1]);
+        if (city && city !== 'Unknown') {
+          console.log('[CITY] Cidade identificada:', city);
+          setCurrentCity(city);
+        }
+      } catch (err) {
+        console.error('[CITY] Erro ao detectar cidade:', err);
+      }
+    };
+    
+    detectCity();
+  }, [userLocation]);
+
   // 2. Fetch Real Stations from Google and Firestore
   useEffect(() => {
     const loadRealStations = async () => {
+      if (!userLocation && !manualCityInput) return;
+      
       setLoading(true);
+      const currentUser = auth.currentUser;
+      const uid = currentUser?.uid;
+      const isGuest = !currentUser;
+
+      console.log('[SEARCH] Iniciando busca de postos...');
       
       const timeoutId = setTimeout(() => {
-        if (loading) {
-          console.warn('Real search timed out, showing initial stations.');
-          setLoading(false);
-        }
-      }, 6000);
+        if (loading) console.warn('[SEARCH] A busca está demorando mais que o esperado...');
+      }, 10000);
 
       try {
-        let city = currentCity;
-        
-        if (!city && userLocation) {
-          try {
-            city = await getCityFromCoordinates(userLocation[0], userLocation[1]);
-            console.log('Google detected city:', city);
-          } catch (cityErr) {
-            console.error('City detection failed:', cityErr);
-          }
-        }
-        
-        if (city && city !== 'Unknown') {
-          setCurrentCity(city);
-        }
-
-        // Step B: Fetch from Google
         let googleResults: GooglePlaceResult[] = [];
-        try {
-          if (userLocation) {
-            console.log('Fetching from Google Places...');
-            googleResults = await fetchNearbyStations(userLocation[0], userLocation[1], selectedRadius);
-            console.log('Google results:', googleResults.length);
+        setApiStatus(null);
+        setApiErrorMessage(null);
+
+        // A. PRIORIDADE 1: Busca por Coordenadas GPS (MAIS PRECISO)
+        if (userLocation) {
+          try {
+            console.log('[SEARCH] Tentando busca por proximidade GPS (v1)...');
+            const response = await fetchNearbyStationsNew(userLocation[0], userLocation[1], selectedRadius, uid, isGuest);
+            
+            setApiStatus(response.status);
+            
+            if (response.status === 'LIMIT_ERROR') {
+              const reason = response.error_message;
+              let friendlyMessage = 'Limite de buscas atingido.';
+              
+              if (reason === 'SPAM_THROTTLE') friendlyMessage = 'Aguarde 30s para buscar novamente (Anti-Spam).';
+              if (reason === 'GLOBAL_LIMIT') friendlyMessage = 'Sistema em manutenção (Cota Mensal atingida).';
+              if (reason === 'GUEST_LIMIT') friendlyMessage = 'Limite de Visitante (5/dia) atingido. Faça login para continuar!';
+              if (reason === 'USER_LIMIT') friendlyMessage = 'Limite diário (20/dia) atingido. Volte amanhã!';
+              
+              setApiErrorMessage(friendlyMessage);
+              setLoading(false);
+              return;
+            }
+
+            if (response.error_message) setApiErrorMessage(response.error_message);
+
+            if (response.results && response.results.length > 0) {
+              console.log('[SEARCH] Sucesso: Postos encontrados por GPS.');
+              googleResults = response.results;
+            } else {
+              console.log('[SEARCH] Nada encontrado por GPS, tentando fallbacks...');
+              
+              // FALLBACK 1: Busca por Texto (SÓ SE JÁ TIVERMOS A CIDADE)
+              if (currentCity) {
+                console.log(`[SEARCH] Tentando busca por texto em: ${currentCity}`);
+                const textSearchResponse = await fetchNearbyStationsTextSearch(`Postos em ${currentCity}`, userLocation[0], userLocation[1], selectedRadius, uid, isGuest);
+                if (textSearchResponse.results && textSearchResponse.results.length > 0) {
+                  googleResults = textSearchResponse.results;
+                }
+              }
+
+              // FALLBACK 2: Legacy HTTP
+              if (googleResults.length === 0) {
+                console.log('[SEARCH] Tentando busca legado (Legacy HTTP)...');
+                const fallbackResponse = await fetchNearbyStationsHTTP(userLocation[0], userLocation[1], selectedRadius, true, uid, isGuest);
+                if (fallbackResponse.results && fallbackResponse.results.length > 0) {
+                  googleResults = fallbackResponse.results;
+                }
+              }
+            }
+          } catch (gErr) {
+            console.error('[SEARCH] Erro na busca Google:', gErr);
           }
-        } catch (gErr) {
-          console.error('Google Places API failed (likely CORS on localhost):', gErr);
-          // Prosseguimos sem resultados do Google, usando apenas nosso banco ANP
         }
         
-        // Step C: Fetch ALL stations from our ANP database for this city
+        // B. Busca na base ANP (Depende da Cidade)
         let anpStationsInCity: GasStation[] = [];
-        const searchCity = city?.toUpperCase();
-
-        if (searchCity) {
-          const normalizedCity = normalizeText(searchCity);
-          console.log('Final normalized city for query:', normalizedCity);
+        if (currentCity) {
+          const normalizedCity = normalizeText(currentCity);
           const anpQuery = query(
             collection(db, 'fuel_stations_anp'),
             where('municipio', '==', normalizedCity),
-            limit(200)
+            limit(100)
           );
           const anpSnapshot = await getDocs(anpQuery);
           anpStationsInCity = anpSnapshot.docs.map(doc => doc.data() as GasStation);
-          console.log(`Found ${anpStationsInCity.length} ANP stations for ${normalizedCity}`);
-          
-          // Debug extremo: se não achou nada por cidade, tenta pegar os primeiros 10 do banco total
-          if (anpStationsInCity.length === 0) {
-            console.log('No stations for city, trying a blind sample fetch...');
-            const sampleQuery = query(collection(db, 'fuel_stations_anp'), limit(10));
-            const sampleSnapshot = await getDocs(sampleQuery);
-            console.log('Sample stations in entire DB:', sampleSnapshot.docs.length);
-            if (sampleSnapshot.docs.length > 0) {
-              console.log('Sample 1 municipio:', sampleSnapshot.docs[0].data()?.municipio);
-            }
-          }
         }
 
-        // Step D: Merge & Populate Real Prices
-        const processedStations: GasStation[] = googleResults.map(res => {
-          const stationId = res.place_id;
-          
-          // Try to match with an ANP station by name or address keyword
+        // C. Merge e Cálculo de Distância (Imediato)
+        const processedFromGoogle = googleResults.map(res => {
           const match = anpStationsInCity.find(s => 
-            res.name.toUpperCase().includes(s.name.toUpperCase().substring(0, 10)) ||
-            res.vicinity.toUpperCase().includes(s.address.split(',')[0].toUpperCase())
+            res.name.toUpperCase().includes(s.name.toUpperCase().substring(0, 8)) ||
+            res.vicinity.toUpperCase().includes(s.address.split(',')[0].toUpperCase().substring(0, 10))
           );
 
+          const lat = res.geometry.location.lat;
+          const lng = res.geometry.location.lng;
+          let distance = 999;
+
+          if (userLocation && lat && lng) {
+            distance = Math.sqrt(
+              Math.pow(lat - userLocation[0], 2) + 
+              Math.pow(lng - userLocation[1], 2)
+            ) * 111;
+          }
+
           return {
-            id: stationId,
+            id: res.place_id,
             name: res.name,
-            brand: match?.brand || (
-              res.name.toLowerCase().includes('shell') ? 'Shell' : 
-              res.name.toLowerCase().includes('br') ? 'Petrobras' : 
-              res.name.toLowerCase().includes('ipiranga') ? 'Ipiranga' : 'Outros'
-            ),
+            brand: match?.brand || 'Outros',
             address: res.vicinity,
-            latitude: res.geometry.location.lat,
-            longitude: res.geometry.location.lng,
+            latitude: lat,
+            longitude: lng,
+            dist: distance,
             prices: {},
             pricesANP: match?.pricesANP || {},
             cnpj: match?.cnpj || match?.id,
@@ -223,15 +294,36 @@ export function GasStations({ onBack }: { onBack: () => void }) {
           };
         });
 
-        // Step E: Add stations from ANP that are NOT in Google but have coordinates (if any)
-        const extraStations = anpStationsInCity.filter(s => 
-          !processedStations.some(ps => ps.cnpj === (s.cnpj || s.id))
-        );
+        const extraFromANP = anpStationsInCity.filter(s => 
+          !processedFromGoogle.some(pg => pg.cnpj === (s.cnpj || s.id))
+        ).map(s => {
+          let distance = 999;
+          if (userLocation && s.latitude && s.longitude) {
+            distance = Math.sqrt(Math.pow(s.latitude - userLocation[0], 2) + Math.pow(s.longitude - userLocation[1], 2)) * 111;
+          } else if (currentCity && s.municipio === normalizeText(currentCity)) {
+            distance = 0.5; // Mesma cidade sem GPS
+          }
 
-        setStations([...processedStations, ...extraStations]);
-        console.log('Total stations set to state:', [...processedStations, ...extraStations].length);
-      } catch (err) {
-        console.error('Failed to load real stations:', err);
+          return { ...s, dist: distance };
+        });
+
+        const allStations = [...processedFromGoogle, ...extraFromANP];
+        allStations.sort((a, b) => (a.dist || 999) - (b.dist || 999));
+        setStations(allStations);
+
+        if (!currentCity && googleResults.length > 0) {
+          const firstStation = googleResults[0];
+          const parts = firstStation.vicinity.split(',');
+          if (parts.length >= 2) {
+             const cityStatePart = parts.find(p => p.includes(' - '));
+             if (cityStatePart) {
+               const cityCandidate = cityStatePart.split('-')[0].trim();
+               if (cityCandidate) setCurrentCity(cityCandidate);
+             }
+          }
+        }
+      } catch (err: any) {
+        console.error('[CRITICAL] Falha geral ao carregar postos:', err);
       } finally {
         clearTimeout(timeoutId);
         setLoading(false);
@@ -239,7 +331,7 @@ export function GasStations({ onBack }: { onBack: () => void }) {
     };
 
     loadRealStations();
-  }, [userLocation, selectedRadius]); // Depend only on physical location and radius
+  }, [userLocation, selectedRadius, currentCity]);
 
   const handleManualSearch = () => {
     if (manualCityInput.trim()) {
@@ -248,36 +340,21 @@ export function GasStations({ onBack }: { onBack: () => void }) {
     }
   };
 
-  // 3. Keep distances and sorting updated
+  // 3. Keep distances and sorting updated reatively
   useEffect(() => {
-    if (userLocation && stations.length > 0) {
-      const updatedStations = [...stations].map(s => {
-        // Se o posto não tem coordenadas (latitude 0), marcamos como distância 0 ou muito alta dependendo da lógica.
-        // Como o usuário quer ver esses postos, vamos dar uma "distância artificial" baixa se for da mesma cidade.
-        let d = 9999;
-        if (s.latitude !== 0 && userLocation) {
-          d = Math.sqrt(
-            Math.pow(s.latitude - userLocation[0], 2) + 
-            Math.pow(s.longitude - userLocation[1], 2)
-          ) * 111; 
-        } else if (currentCity && s.municipio === normalizeText(currentCity)) {
-          d = 0.1; // Se é da cidade do usuário e não tem coordenadas, coloca no topo
+    if (stations.length > 0) {
+      const sorted = [...stations].sort((a, b) => {
+        if (filterBy === 'price') {
+          const priceA = a.prices?.[selectedFuel] || (a.pricesANP as any)?.[selectedFuel] || 999;
+          const priceB = b.prices?.[selectedFuel] || (b.pricesANP as any)?.[selectedFuel] || 999;
+          return priceA - priceB;
         }
-        return { ...s, dist: d };
-      });
-      
-      updatedStations.sort((a, b) => {
-        const priceA = a.prices?.[selectedFuel] || (a.pricesANP as any)?.[selectedFuel] || 999;
-        const priceB = b.prices?.[selectedFuel] || (b.pricesANP as any)?.[selectedFuel] || 999;
-        
-        if (filterBy === 'price') return priceA - priceB;
         if (filterBy === 'rating') return (b.rating || 0) - (a.rating || 0);
-        return (a.dist || 0) - (b.dist || 0);
+        return (a.dist || 999) - (b.dist || 999);
       });
-
-      setStations(updatedStations);
+      setStations(sorted);
     }
-  }, [filterBy, selectedFuel, userLocation, stations.length, currentCity]);
+  }, [filterBy, selectedFuel]);
 
   const handleUpdatePrice = async (fuelType: string) => {
     if (!selectedStation || !newPrice || isUpdating) return;
@@ -383,10 +460,14 @@ export function GasStations({ onBack }: { onBack: () => void }) {
               <ChevronLeft className="w-5 h-5" />
             </button>
             <div>
-              <h2 className="text-xl font-display font-black italic text-white leading-none">POSTOS</h2>
-              <p className="text-[10px] text-brand-primary font-bold uppercase tracking-widest mt-1">
-                {currentCity ? `Em ${currentCity}` : 'Comparando Preços'} 
-                {stations.some(s => s.pricesANP && Object.keys(s.pricesANP).length > 0) && ' • DADOS ANP OK'}
+              <h2 className="text-xl font-display font-black italic text-white leading-none">LOCALIZAR POSTOS</h2>
+              <p className="text-[10px] text-brand-primary font-bold uppercase tracking-wider flex items-center gap-2">
+                <span className="opacity-60">Comparando Preços</span>
+                <span className="w-1 h-1 bg-zinc-800 rounded-full"></span>
+                <span className="flex items-center gap-1">
+                  <MapPin className="w-3 h-3" />
+                  {currentCity ? currentCity : 'Localizando...'}
+                </span>
               </p>
             </div>
           </div>
@@ -482,43 +563,28 @@ export function GasStations({ onBack }: { onBack: () => void }) {
       {/* Main Content */}
       <main className="flex-1 relative overflow-hidden">
         {loading ? (
-          <div className="flex flex-col items-center justify-center h-full space-y-4">
-            <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
-            <p className="text-zinc-500 font-bold uppercase tracking-widest text-[10px]">Buscando postos reais...</p>
-          </div>
-        ) : (
-          <>
-            {/* Loading / Error States */}
-        {loading && !stations.length && (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-6">
-            <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin"></div>
-            <div className="text-center">
-              <p className="text-white font-bold">Buscando postos reais...</p>
-              <p className="text-zinc-500 text-xs mt-1">Isso pode levar alguns segundos.</p>
+          <div className="flex flex-col items-center justify-center h-full space-y-6">
+            <div className="relative">
+              <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
+              <Navigation className="w-4 h-4 text-brand-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
             </div>
-            
-            <div className="w-full max-w-xs space-y-4 pt-8 border-t border-white/5">
-              <p className="text-[10px] text-zinc-500 font-bold uppercase text-center">GPS lento? Digite sua cidade:</p>
-              <div className="flex gap-2">
-                <input 
-                  type="text"
-                  placeholder="Ex: São Paulo"
-                  value={manualCityInput}
-                  onChange={(e) => setManualCityInput(e.target.value)}
-                  className="flex-1 bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-brand-primary/50"
-                />
-                <button 
-                  onClick={handleManualSearch}
-                  className="bg-brand-primary text-zinc-950 px-4 rounded-xl font-bold text-sm active:scale-95 transition-all"
-                >
-                  Ir
-                </button>
-              </div>
+            <div className="text-center px-8">
+              <p className="text-white font-black italic uppercase tracking-widest text-[11px] mb-1">
+                {currentCity ? `Buscando postos em ${currentCity}...` : 'Buscando postos e localização...'}
+              </p>
+              <p className="text-zinc-500 font-bold uppercase tracking-widest text-[8px] animate-pulse">
+                Aguarde um momento
+              </p>
             </div>
+            {/* Botão de segurança caso demore muito */}
+            <button 
+              onClick={() => setLoading(false)}
+              className="mt-4 text-[9px] text-zinc-600 underline font-bold uppercase tracking-widest"
+            >
+              Cancelar e ver dados locais
+            </button>
           </div>
-        )}
-
-        {isLocationError && !stations.length && !loading && (
+        ) : isLocationError && !stations.length ? (
           <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-6">
             <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center">
               <MapPin className="w-8 h-8 text-red-500" />
@@ -547,24 +613,83 @@ export function GasStations({ onBack }: { onBack: () => void }) {
                 />
                 <button 
                   onClick={handleManualSearch}
-                  className="bg-brand-primary text-zinc-950 px-4 rounded-xl font-bold text-sm"
+                  className="bg-brand-primary text-zinc-950 px-4 rounded-xl font-bold text-sm cursor-pointer"
                 >
                   Buscar
                 </button>
               </div>
             </div>
           </div>
-        )}
+        ) : !stations.length ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 space-y-6">
+            <div className="w-12 h-12 bg-zinc-900 rounded-full flex items-center justify-center">
+              <MapIcon className="w-6 h-6 text-zinc-600" />
+            </div>
+            <div className="text-center">
+              <p className="text-white font-bold">Nenhum posto encontrado</p>
+              <p className="text-zinc-500 text-[10px] mt-2 max-w-[240px] leading-relaxed uppercase font-black tracking-widest">
+                Não encontramos postos próximos via Google Places ou base ANP. 
+              </p>
+              <p className="text-red-500 text-[10px] mt-4 max-w-[240px] leading-relaxed uppercase font-black tracking-widest border border-red-500/20 bg-red-500/5 p-3 rounded-xl">
+                VERIFIQUE SUA CHAVE DE API DO GOOGLE OU TENTE AUMENTAR O RAIO DE BUSCA.
+              </p>
+              
+              {apiStatus && apiStatus !== 'OK' && apiStatus !== 'ZERO_RESULTS' && (
+                <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl space-y-2">
+                  <p className="text-[10px] text-red-500 font-bold uppercase tracking-widest leading-tight">
+                    ERRO TÉCNICO NO GOOGLE: <span className="underline italic">{apiStatus}</span>
+                  </p>
+                  {apiErrorMessage && (
+                    <p className="text-[9px] text-red-400 font-medium leading-relaxed normal-case">
+                      {apiErrorMessage === 'BillingNotEnabled' ? 'Faturamento não ativado no Google Cloud. Vincule um cartão para usar a busca.' : apiErrorMessage}
+                    </p>
+                  )}
+                  <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-tighter">
+                    Verifique seu Google Cloud Console e vincule um faturamento (Billing).
+                  </p>
+                </div>
+              )}
 
-        <AnimatePresence mode="wait">
-          {!loading && stations.length > 0 ? (
-            <motion.div 
-              key="list"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="h-full overflow-y-auto p-4 space-y-4 pb-24"
-            >
+              {apiStatus === 'ZERO_RESULTS' && (
+                <p className="text-[9px] text-brand-primary mt-2 uppercase font-bold">
+                  Tentamos buscar por categoria e palavra-chave, mas nada foi encontrado neste raio.
+                </p>
+              )}
+
+              <p className="block text-zinc-600 mt-2 text-[8px] font-bold uppercase tracking-widest">
+                Dica: Tente aumentar o raio de busca para 50km.
+              </p>
+            </div>
+            
+            <div className="w-full max-w-xs space-y-4 pt-8 border-t border-white/5">
+              <p className="text-[10px] text-zinc-500 font-bold uppercase text-center">Tentar outra cidade:</p>
+              <div className="flex gap-2">
+                <input 
+                  type="text"
+                  placeholder="Ex: São Paulo"
+                  value={manualCityInput}
+                  onChange={(e) => setManualCityInput(e.target.value)}
+                  className="flex-1 bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-brand-primary/50"
+                />
+                <button 
+                  onClick={handleManualSearch}
+                  className="bg-brand-primary text-zinc-950 px-4 rounded-xl font-bold text-sm cursor-pointer"
+                >
+                  Ir
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <AnimatePresence mode="wait">
+            {viewMode === 'list' ? (
+              <motion.div 
+                key="list"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="h-full overflow-y-auto p-4 space-y-4 pb-24"
+              >
               {filteredStations.map((station) => (
                 <button
                   key={station.id}
@@ -596,7 +721,7 @@ export function GasStations({ onBack }: { onBack: () => void }) {
                       <div className="flex items-center gap-1 text-brand-primary">
                         <Navigation className="w-3 h-3" />
                         <span className="text-[10px] font-black uppercase tracking-tighter">
-                          {station.dist?.toFixed(1)} km
+                          {station.dist && station.dist < 900 ? `${station.dist.toFixed(1)} km` : 'Localização...'}
                         </span>
                       </div>
                       <div className="flex items-center gap-1 text-yellow-500">
@@ -612,7 +737,7 @@ export function GasStations({ onBack }: { onBack: () => void }) {
                     <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest block mb-1">Preço</span>
                     <div className="flex flex-col">
                       <span className="text-xl font-display font-black italic text-white leading-none">
-                        R$ {station.prices?.[selectedFuel]?.toFixed(2) || '0.00'}
+                        R$ {(station.prices?.[selectedFuel] || (station.pricesANP as any)?.[selectedFuel])?.toFixed(2) || '---'}
                       </span>
                       <span className="text-[8px] text-zinc-500 font-bold uppercase mt-1 flex items-center justify-end gap-1">
                         <Clock className="w-2 h-2" />
@@ -660,19 +785,8 @@ export function GasStations({ onBack }: { onBack: () => void }) {
             </motion.div>
           )}
         </AnimatePresence>
+      )}
 
-        {/* Floating Add Price Button */}
-        <button 
-          onClick={() => {
-            if (filteredStations.length > 0) {
-              setSelectedStation(filteredStations[0]);
-              setShowDetailMode(true);
-            }
-          }}
-          className="absolute bottom-28 right-6 w-14 h-14 bg-brand-primary rounded-2xl flex items-center justify-center text-zinc-950 shadow-2xl shadow-brand-primary/40 active:scale-90 transition-all z-10"
-        >
-          <Plus className="w-6 h-6" />
-        </button>
 
         {/* Full Screen Detail Profile */}
         <AnimatePresence>
@@ -979,8 +1093,6 @@ export function GasStations({ onBack }: { onBack: () => void }) {
             </motion.div>
           )}
         </AnimatePresence>
-          </>
-        )}
       </main>
     </div>
   );
