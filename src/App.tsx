@@ -597,13 +597,19 @@ function HistoryView({
     const q = query(
       collection(db, 'runs'), 
       where('uid', '==', user.uid),
-      orderBy('timestamp', 'desc'),
-      limit(50)
+      limit(100) // Fetch a slightly larger batch to ensure we have enough after manual sort
     );
     
     setError(null);
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RunResult));
+      const data = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as RunResult))
+        .sort((a, b) => {
+          const tA = (a.timestamp as any)?.seconds || 0;
+          const tB = (b.timestamp as any)?.seconds || 0;
+          return tB - tA;
+        })
+        .slice(0, 50); // Keep the limit of 50
       setRuns(data);
       setLoading(false);
       setError(null);
@@ -905,9 +911,17 @@ function PublicProfile({
         const vehiclesSnap = await getDocs(vehiclesQuery);
         setVehicles(vehiclesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Vehicle)));
 
-        const runsQuery = query(collection(db, 'runs'), where('uid', '==', uid), orderBy('timestamp', 'desc'), limit(10));
+        const runsQuery = query(collection(db, 'runs'), where('uid', '==', uid), limit(20));
         const runsSnap = await getDocs(runsQuery);
-        setRuns(runsSnap.docs.map(d => ({ id: d.id, ...d.data() } as RunResult)));
+        const fetchedRuns = runsSnap.docs
+          .map(d => ({ id: d.id, ...d.data() } as RunResult))
+          .sort((a, b) => {
+            const tA = (a.timestamp as any)?.seconds || 0;
+            const tB = (b.timestamp as any)?.seconds || 0;
+            return tB - tA;
+          })
+          .slice(0, 10);
+        setRuns(fetchedRuns);
 
         if (currentUserId) {
           const followDoc = await getDoc(doc(db, 'follows', `${currentUserId}_${uid}`));
@@ -3603,11 +3617,16 @@ export default function App() {
           try {
             if (!userProfile?.isPremium) {
               const runsRef = collection(db, 'runs');
-              const q = query(runsRef, where('uid', '==', user.uid), orderBy('timestamp', 'desc'));
+              const q = query(runsRef, where('uid', '==', user.uid));
               const snapshot = await getDocs(q);
               
               if (snapshot.size >= 2) {
-                const docsToDelete = snapshot.docs.slice(1); 
+                const sortedDocs = snapshot.docs.sort((a, b) => {
+                  const tA = (a.data().timestamp as any)?.seconds || 0;
+                  const tB = (b.data().timestamp as any)?.seconds || 0;
+                  return tB - tA; // Newest first
+                });
+                const docsToDelete = sortedDocs.slice(1); 
                 for (const d of docsToDelete) {
                   await deleteDoc(doc(db, 'runs', d.id));
                 }
