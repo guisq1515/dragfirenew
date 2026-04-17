@@ -383,3 +383,86 @@ export const fetchPlaceDetails = async (placeId: string) => {
     return null;
   }
 };
+
+/**
+ * Decodes a Google encoded polyline string into an array of [lat, lng] points
+ */
+export const decodePolyline = (encoded: string): { lat: number, lng: number }[] => {
+  const points: { lat: number, lng: number }[] = [];
+  let index = 0, len = encoded.length;
+  let lat = 0, lng = 0;
+
+  while (index < len) {
+    let b, shift = 0, result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lat += dlat;
+
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
+    lng += dlng;
+
+    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+  return points;
+};
+
+/**
+ * Fetches a route between two points and returns the points of the route
+ */
+export const fetchRoutePoints = async (
+  origin: { lat: number, lng: number },
+  destination: string,
+  userId?: string,
+  isGuest = false
+): Promise<{ points: { lat: number, lng: number }[], status: string, routeName?: string | null }> => {
+  if (!GOOGLE_MAPS_API_KEY) return { points: [], status: 'MISSING_KEY' };
+
+  // SAFETY CHECK
+  const guard = await checkAPILimits(userId, isGuest);
+  if (!guard.allowed) return { points: [], status: 'LIMIT_ERROR' };
+
+  try {
+    const url = `${API_BASE}/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${encodeURIComponent(destination)}&key=${GOOGLE_MAPS_API_KEY}`;
+    const response = await CapacitorHttp.get({ url });
+    const data = response.data;
+
+    if (data.status === 'OK' && data.routes && data.routes.length > 0) {
+      logGoogleAPIUsage('directions_search');
+      
+      const route = data.routes[0];
+      const routeName = route.summary ? `via ${route.summary}` : null;
+      let allPoints: { lat: number, lng: number }[] = [];
+      
+      // Combine polylines from all steps for maximum precision
+      route.legs.forEach((leg: any) => {
+        leg.steps.forEach((step: any) => {
+          const stepPoints = decodePolyline(step.polyline.points);
+          allPoints = [...allPoints, ...stepPoints];
+        });
+      });
+
+      // Simple deduplication of consecutive identical points
+      const points = allPoints.filter((p, i, arr) => 
+        i === 0 || p.lat !== arr[i-1].lat || p.lng !== arr[i-1].lng
+      );
+
+      return { points, status: 'OK', routeName };
+    }
+    
+    return { points: [], status: data.status };
+  } catch (error: any) {
+    console.error('Error fetching directions:', error);
+    return { points: [], status: 'FETCH_ERROR' };
+  }
+};

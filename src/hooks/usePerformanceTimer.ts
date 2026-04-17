@@ -235,7 +235,7 @@ export function usePerformanceTimer(telemetryConfig?: TelemetryConfig) {
                              currentRotationRef.current.beta > rotThreshold || 
                              currentRotationRef.current.gamma > rotThreshold;
 
-          if (isRotating || isWaitingRef.current || isReadyRef.current) {
+          if (isRotating) {
             linearAccelRef.current = 0;
           } else {
             // Noise filter
@@ -360,7 +360,6 @@ export function usePerformanceTimer(telemetryConfig?: TelemetryConfig) {
               if (calculatedSpeed === null) return speedKmh;
               // Blend GPS and current estimated speed (95% GPS Weight)
               const gpsWeight = telemetryConfig?.fusionGpsWeight ?? 0.95;
-              if (isWaitingRef.current || isReadyRef.current) return 0;
               
               // If GPS speed is near 0, force absolute 0
               if (speedKmh < 0.5) return 0;
@@ -523,7 +522,7 @@ export function usePerformanceTimer(telemetryConfig?: TelemetryConfig) {
       if (watchId) Geolocation.clearWatch({ id: watchId });
       if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
-  }, [stopRun, gpsSource, gpsRefreshKey]); // Stable dependencies
+  }, [stopRun, gpsSource, gpsRefreshKey, telemetryConfig]); // Stable dependencies
 
   const reset = () => {
     setIsRunning(false);

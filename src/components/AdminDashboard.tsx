@@ -15,7 +15,10 @@ import {
   Activity,
   Save,
   RotateCw,
-  Anchor
+  Anchor,
+  Plus,
+  Trash2,
+  Navigation
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, TelemetryConfig, SystemSettings, TelemetryProfile } from '../types';
@@ -333,11 +336,11 @@ export function AdminDashboard({ onBack }: { onBack: () => void }) {
             <div className="grid grid-cols-2 gap-3 mt-1">
               <div className="bg-zinc-950/50 p-4 rounded-2xl border border-white/5">
                 <span className="text-[8px] uppercase font-black text-zinc-600 block mb-1 tracking-widest">Buscas (Places)</span>
-                <span className="text-lg font-bold text-white">{usageData?.places.toLocaleString()}</span>
+                <span className="text-lg font-bold text-white">{(usageData?.places || 0).toLocaleString()}</span>
               </div>
               <div className="bg-zinc-950/50 p-4 rounded-2xl border border-white/5">
                 <span className="text-[8px] uppercase font-black text-zinc-600 block mb-1 tracking-widest">Cidades (Geocode)</span>
-                <span className="text-lg font-bold text-white">{usageData?.geocode.toLocaleString()}</span>
+                <span className="text-lg font-bold text-white">{(usageData?.geocode || 0).toLocaleString()}</span>
               </div>
             </div>
 
@@ -384,7 +387,7 @@ export function AdminDashboard({ onBack }: { onBack: () => void }) {
             </div>
 
             <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              {Object.values(profiles).map((profile) => (
+              {(Object.values(profiles) as TelemetryProfile[]).map((profile) => (
                 <button
                   key={profile.id}
                   onClick={() => selectProfile(profile.id)}
@@ -591,6 +594,71 @@ export function AdminDashboard({ onBack }: { onBack: () => void }) {
                 ))}
               </div>
               <p className="text-[8px] text-zinc-600 font-medium">"Inteligente" trava o eixo de maior impacto na hora da arrancada.</p>
+            </div>
+
+            
+            <div className="pt-6 mt-6 border-t border-white/5 space-y-6">
+              <h4 className="text-[10px] font-black text-brand-primary uppercase tracking-[0.2em] flex items-center gap-2">
+                <Navigation className="w-3 h-3 -rotate-90" />
+                Auxiliar de Curva (AI Guide)
+              </h4>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                  Distância Base (m)
+                </label>
+                <div className="flex items-center gap-4">
+                  <input 
+                    type="range" 
+                    min="100" 
+                    max="1000" 
+                    step="50"
+                    value={telemetrySettings.lookAheadBaseDistance || 500}
+                    onChange={(e) => setTelemetrySettings({...telemetrySettings, lookAheadBaseDistance: Number(e.target.value)})}
+                    className="flex-1 accent-white"
+                  />
+                  <span className="text-xl font-display font-black italic text-white w-16">{telemetrySettings.lookAheadBaseDistance || 500}m</span>
+                </div>
+                <p className="text-[8px] text-zinc-600 font-medium">Distância mínima que o app "enxerga" para frente.</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                  Fator de Velocidade
+                </label>
+                <div className="flex items-center gap-4">
+                  <input 
+                    type="range" 
+                    min="1" 
+                    max="20" 
+                    step="1"
+                    value={telemetrySettings.lookAheadSpeedFactor || 5}
+                    onChange={(e) => setTelemetrySettings({...telemetrySettings, lookAheadSpeedFactor: Number(e.target.value)})}
+                    className="flex-1 accent-white"
+                  />
+                  <span className="text-xl font-display font-black italic text-white w-16">{telemetrySettings.lookAheadSpeedFactor || 5}x</span>
+                </div>
+                <p className="text-[8px] text-zinc-600 font-medium">Multiplicador de alcance baseado na KM/H atual.</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                  Teto de Distância (m)
+                </label>
+                <div className="flex items-center gap-4">
+                  <input 
+                    type="range" 
+                    min="1000" 
+                    max="3000" 
+                    step="100"
+                    value={telemetrySettings.lookAheadMaxDistance || 1500}
+                    onChange={(e) => setTelemetrySettings({...telemetrySettings, lookAheadMaxDistance: Number(e.target.value)})}
+                    className="flex-1 accent-white"
+                  />
+                  <span className="text-xl font-display font-black italic text-white w-16">{telemetrySettings.lookAheadMaxDistance || 1500}m</span>
+                </div>
+                <p className="text-[8px] text-zinc-600 font-medium">Limite máximo de antecipação (mesmo em alta velocidade).</p>
+              </div>
             </div>
 
             <div className="bg-zinc-950/80 p-6 rounded-3xl border border-zinc-500/20 flex flex-col gap-3">

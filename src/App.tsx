@@ -78,7 +78,7 @@ import {
   ChevronLeft, 
   Search, 
   Star, 
-  Camera, 
+  Camera as CameraIcon, 
   Trash2, 
   Car, 
   Sparkles, 
@@ -184,7 +184,7 @@ import {
   Legend
 } from 'recharts';
 import { usePerformanceTimer } from './hooks/usePerformanceTimer';
-import { RunMode, RunConfig, RunResult, Challenge, Vehicle, RankingEntry, GPSPoint, UserProfile, TelemetryConfig } from './types';
+import { RunMode, RunConfig, RunResult, Challenge, Vehicle, RankingEntry, GPSPoint, UserProfile, TelemetryConfig, SystemSettings } from './types';
 import { calculateDistance } from './lib/utils';
 import { VEHICLE_DATA, YEARS } from './constants/vehicles';
 
@@ -1503,7 +1503,7 @@ function ProfileSettings({
             )}
           </div>
           <label className="absolute bottom-0 right-0 p-2 bg-brand-primary rounded-full text-white shadow-lg cursor-pointer hover:bg-red-500 transition-colors active:scale-90">
-            <Camera className="w-4 h-4" />
+            <CameraIcon className="w-4 h-4" />
             <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} disabled={uploading} />
           </label>
         </div>
@@ -2397,7 +2397,7 @@ function VehicleSettings({
               {formData.photoURL ? (
                 <img src={formData.photoURL} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               ) : (
-                <Camera className="w-8 h-8 text-zinc-700 hover:text-brand-primary/50 transition-colors" />
+                <CameraIcon className="w-8 h-8 text-zinc-700 hover:text-brand-primary/50 transition-colors" />
               )}
               {isUploading && (
                 <div className="absolute inset-0 bg-black/60 flex items-center justify-center">

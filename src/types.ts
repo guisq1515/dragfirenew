@@ -151,6 +151,9 @@ export interface TelemetryConfig {
   fusionAccelGain?: number;  // 0.0 - 2.0 (Multiplier for accel data)
   rotationThreshold?: number; // Threshold to ignore accel (deg/s)
   mountingAxis?: 'auto' | 'all' | 'x' | 'y' | 'z'; // Pref axis
+  lookAheadBaseDistance?: number;   // Base distance in meters (default 500)
+  lookAheadSpeedFactor?: number;    // Multiplier for speed-based distance (default 5)
+  lookAheadMaxDistance?: number;    // Max look-ahead limit (default 1500)
 }
 
 export interface TelemetryProfile extends TelemetryConfig {

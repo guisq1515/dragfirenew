@@ -1,5 +1,16 @@
 # DragFire Version Log
 
+## [1.6.0] - 2026-04-17
+### Adições
+- **Assistente de Curvas (Alta Precisão)**: Implementação de análise cumulativa de curvas com janela de varredura de 60m.
+- **Detecção de Via**: Agora o HUD exibe o nome da rua ou rodovia atual (via Overpass e Google Maps).
+- **Rota Detalhada**: Integração com polilinhas detalhadas do Google Maps para maior precisão em traçados sinuosos.
+
+### Fixes
+- **Recursos**: Otimizado o consumo de RAM do Gradle para evitar desligamentos do sistema durante o build.
+- **Direção**: Corrigida a inversão da lógica de curvas (Direita/Esquerda).
+- **Estabilidade**: Sincronização de versões em todo o projeto.
+
 ## [1.3.4] - 2026-04-15
 ### Fixes
 - **Conectividade**: Implementado "Reset Agressivo" de rede (disable/enableNetwork) para forçar o Firestore a sair do estado "offline" no Android.
