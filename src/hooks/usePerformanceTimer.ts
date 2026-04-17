@@ -19,6 +19,7 @@ export function usePerformanceTimer(telemetryConfig?: TelemetryConfig) {
   const [lastPosition, setLastPosition] = useState<{ latitude: number, longitude: number } | null>(null);
   const [gpsSource, setGpsSource] = useState<'internal' | 'external'>('internal');
   const [gpsRefreshKey, setGpsRefreshKey] = useState(0);
+  const [currentHeading, setCurrentHeading] = useState<number | null>(null);
 
   const startTimeRef = useRef<number | null>(null);
   const lastPointRef = useRef<GPSPoint | null>(null);
@@ -328,7 +329,8 @@ export function usePerformanceTimer(telemetryConfig?: TelemetryConfig) {
             if (!position) return;
             
             setGpsStatus('active');
-            const { latitude, longitude, speed, accuracy, altitude } = position.coords;
+            const { latitude, longitude, speed, accuracy, altitude, heading } = position.coords;
+            setCurrentHeading(heading ?? null);
             
             let calculatedSpeed = speed;
             if (calculatedSpeed === null && lastPointRef.current) {
@@ -589,6 +591,9 @@ export function usePerformanceTimer(telemetryConfig?: TelemetryConfig) {
     accuracy,
     gpsStatus,
     lastPosition,
+    currentLat: lastPosition?.latitude ?? null,
+    currentLng: lastPosition?.longitude ?? null,
+    currentHeading,
     startRun,
     manualStart,
     manualStop,

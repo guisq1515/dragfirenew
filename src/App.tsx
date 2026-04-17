@@ -124,6 +124,10 @@ import { GasStations } from './components/GasStations';
 import { AntigravityImporter } from './components/AntigravityImporter';
 import { AdminDashboard } from './components/AdminDashboard';
 import { APP_VERSION } from './versions';
+import { useCorneringAssistant } from './hooks/useCorneringAssistant';
+import { CorneringAssistantHUD } from './components/CorneringAssistantHUD';
+import { MiniCorneringWidget } from './components/MiniCorneringWidget';
+import { KeepAwake } from '@capgo/capacitor-keep-awake';
 
 // --- Error Boundary ---
 class ErrorBoundary extends React.Component<any, any> {
@@ -251,7 +255,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 const TERMS_VERSION = '1.0.0';
 const ADMIN_EMAILS = ['guisq1515@gmail.com'];
 
-type Screen = 'home' | 'timer' | 'challenge' | 'duel-result' | 'settings' | 'login' | 'terms' | 'vehicle-settings' | 'profile-settings' | 'regional-ranking' | 'history' | 'gps-guide' | 'custom-setup' | 'trip-view' | 'fuel-calculator' | 'public-profile' | 'feed' | 'search' | 'ai-editor' | 'fuel-stations' | 'anp-import' | 'admin-dashboard';
+type Screen = 'home' | 'timer' | 'challenge' | 'duel-result' | 'settings' | 'login' | 'terms' | 'vehicle-settings' | 'profile-settings' | 'regional-ranking' | 'history' | 'gps-guide' | 'custom-setup' | 'trip-view' | 'fuel-calculator' | 'public-profile' | 'feed' | 'search' | 'ai-editor' | 'fuel-stations' | 'anp-import' | 'admin-dashboard' | 'cornering-assistant';
 
 function GPSGuide({ onBack }: { onBack: () => void }) {
   const tips = [
@@ -3097,8 +3101,46 @@ export default function App() {
     isReady,
     progress,
     gpsSource,
-    setGpsSource
+    setGpsSource,
+    currentLat,
+    currentLng,
+    currentHeading
   } = usePerformanceTimer(telemetryConfig);
+
+  // --- Cornering Assistant Integration ---
+  const [destination, setDestination] = useState<string | null>(null);
+  const { 
+    nextCurve, 
+    upcomingNodes, 
+    isRouteMode, 
+    currentRoadName 
+  } = useCorneringAssistant(
+    currentLat, 
+    currentLng, 
+    currentHeading, 
+    currentSpeed, 
+    telemetryConfig.lookAheadBaseDistance || 500,
+    destination
+  );
+
+  // --- Keep Awake Logic ---
+  useEffect(() => {
+    const shouldKeepAwake = isRunning || isWaiting || screen === 'cornering-assistant';
+    
+    const updateKeepAwake = async () => {
+      try {
+        if (shouldKeepAwake) {
+          await KeepAwake.keepAwake();
+        } else {
+          await KeepAwake.allowSleep();
+        }
+      } catch (e) {
+        console.error("Error updating KeepAwake:", e);
+      }
+    };
+
+    updateKeepAwake();
+  }, [isRunning, isWaiting, screen]);
 
   const [screen, setScreen] = useState<Screen>('home');
   const [showPerformanceMenu, setShowPerformanceMenu] = useState(false);
@@ -4084,18 +4126,18 @@ export default function App() {
                   </div>
                 </motion.div>
 
-                {/* 1.2 Ranking VIP */}
+                {/* 1.2 Ranking Regional */}
                 <motion.div 
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setScreen('regional-ranking')}
-                  className="relative group h-40 bg-zinc-900 rounded-[24px] border border-white/5 cursor-pointer overflow-hidden transition-all hover:border-yellow-500/40 shadow-xl"
+                  className="relative group h-40 bg-zinc-900 rounded-[24px] border border-white/5 cursor-pointer overflow-hidden transition-all hover:border-brand-primary/40 shadow-xl"
                 >
                   <img src="/assets/ranking_banner.png" alt="Ranking" className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover:scale-110 transition-transform duration-700" />
                   <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent" />
-                  <div className="absolute top-3 right-3"><Trophy className="w-7 h-7 text-yellow-500 animate-pulse" /></div>
+                  <div className="absolute top-3 right-3"><Trophy className="w-7 h-7 text-brand-primary animate-pulse" /></div>
                   <div className="absolute bottom-4 left-4 right-4">
-                    <span className="px-1.5 py-0.5 bg-yellow-500/20 backdrop-blur-md rounded border border-yellow-500/30 text-[7px] font-black text-yellow-500 uppercase tracking-widest mb-1.5 inline-block">Top tempos</span>
-                    <h4 className="text-sm font-display font-black italic text-white leading-tight uppercase tracking-tighter">Ranking <span className="text-yellow-500 font-bold">VIP</span></h4>
+                    <span className="px-1.5 py-0.5 bg-brand-primary/20 backdrop-blur-md rounded border border-brand-primary/30 text-[7px] font-black text-brand-primary uppercase tracking-widest mb-1.5 inline-block">Top tempos</span>
+                    <h4 className="text-sm font-display font-black italic text-white leading-tight uppercase tracking-tighter">Ranking <span className="text-brand-primary font-bold">Regional</span></h4>
                   </div>
                 </motion.div>
 
@@ -4129,6 +4171,40 @@ export default function App() {
                   </div>
                 </motion.div>
               </section>
+
+              {/* 2. NEW Cornering Assistant Featured Banner */}
+              <motion.section 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                onClick={() => setScreen('cornering-assistant')}
+                className="relative h-48 rounded-[32px] overflow-hidden group cursor-pointer border border-brand-primary/20 shadow-2xl shadow-brand-primary/10"
+              >
+                <img src="/assets/cornering_banner.png" alt="Curves" className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
+                <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 via-zinc-950/60 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent opacity-80" />
+                
+                <div className="absolute inset-0 p-8 flex flex-col justify-end">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="px-2 py-0.5 bg-brand-primary text-zinc-950 text-[8px] font-black uppercase tracking-widest rounded italic">NOVO</span>
+                    <div className="flex items-center gap-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-brand-primary animate-pulse" />
+                      <span className="text-[9px] font-black text-brand-primary uppercase tracking-[0.2em]">Assistente Pro</span>
+                    </div>
+                  </div>
+                  <h3 className="text-3xl font-display font-black italic text-white uppercase tracking-tighter leading-none mb-2">
+                    ASSISTENTE <span className="text-brand-primary">DE CURVAS</span>
+                  </h3>
+                  <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest leading-relaxed max-w-[200px]">
+                    Análise em tempo real de geometria e antecipação de traçado.
+                  </p>
+                </div>
+                
+                <div className="absolute top-6 right-6">
+                  <div className="w-12 h-12 bg-brand-primary/20 backdrop-blur-xl rounded-2xl border border-brand-primary/30 flex items-center justify-center">
+                    <Navigation className="w-6 h-6 text-brand-primary -rotate-90" />
+                  </div>
+                </div>
+              </motion.section>
 
 
 
@@ -4300,6 +4376,29 @@ export default function App() {
               onAccept={() => handleAcceptChallenge(activeChallenge)}
               onDecline={() => setScreen('home')}
               currentLocation={lastPosition}
+            />
+          </motion.div>
+        ) : screen === 'cornering-assistant' ? (
+          <motion.div
+            key="cornering-assistant"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex-1 flex flex-col"
+          >
+            <CorneringAssistantHUD 
+              nextCurve={nextCurve}
+              upcomingNodes={upcomingNodes}
+              currentLat={currentLat}
+              currentLng={currentLng}
+              currentHeading={currentHeading}
+              speedKmh={currentSpeed}
+              lookAheadDistance={telemetryConfig.lookAheadBaseDistance || 500}
+              destination={destination}
+              setDestination={setDestination}
+              isRouteMode={isRouteMode}
+              onBack={() => setScreen('home')}
+              currentRoadName={currentRoadName}
             />
           </motion.div>
         ) : screen === 'duel-result' && activeChallenge ? (
