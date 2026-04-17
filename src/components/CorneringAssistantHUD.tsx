@@ -129,21 +129,21 @@ export function CorneringAssistantHUD({
       </div>
 
       {/* NEW: Road Name Display */}
-      <div className="px-10 mb-2">
+      <div className="px-14 mb-2">
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex flex-col"
         >
           <span className="text-[10px] font-black text-brand-primary uppercase tracking-[0.5em] mb-1">Via Atual</span>
-          <div className="text-2xl font-black text-white italic truncate uppercase tracking-tighter">
+          <div className="text-lg font-black text-white italic truncate uppercase tracking-tighter max-w-[80vw]">
             {currentRoadName || 'Mapeando Via...'}
           </div>
         </motion.div>
       </div>
 
       {/* Status Indicators */}
-      <div className="px-10 flex items-center gap-4">
+      <div className="px-14 flex items-center gap-4">
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${isOfflineMode ? 'bg-yellow-500' : 'bg-green-500'} animate-pulse`} />
           <span className="text-[10px] font-black text-white uppercase tracking-widest">
@@ -237,7 +237,7 @@ export function CorneringAssistantHUD({
       </motion.div>
 
       {/* Bottom Display (Speed & Mini-map) */}
-      <div className="relative z-10 p-10 flex items-end justify-between">
+      <div className="relative z-10 p-14 flex items-end justify-between">
         
         {/* Left: Mini Map */}
         <div className="relative group">

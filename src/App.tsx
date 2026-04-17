@@ -4146,18 +4146,18 @@ export default function App() {
                   </div>
                 </motion.div>
 
-                {/* 1.2 Ranking Regional */}
+                {/* 1.2 Assistente de Curvas */}
                 <motion.div 
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => setScreen('regional-ranking')}
+                  onClick={() => setScreen('cornering-assistant')}
                   className="relative group h-40 bg-zinc-900 rounded-[24px] border border-white/5 cursor-pointer overflow-hidden transition-all hover:border-brand-primary/40 shadow-xl"
                 >
-                  <img src="/assets/ranking_banner.png" alt="Ranking" className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover:scale-110 transition-transform duration-700" />
+                  <img src="/assets/cornering_banner.png" alt="Curves" className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover:scale-110 transition-transform duration-700" />
                   <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent" />
-                  <div className="absolute top-3 right-3"><Trophy className="w-7 h-7 text-brand-primary animate-pulse" /></div>
+                  <div className="absolute top-3 right-3"><Navigation className="w-7 h-7 text-brand-primary animate-pulse -rotate-90" /></div>
                   <div className="absolute bottom-4 left-4 right-4">
-                    <span className="px-1.5 py-0.5 bg-brand-primary/20 backdrop-blur-md rounded border border-brand-primary/30 text-[7px] font-black text-brand-primary uppercase tracking-widest mb-1.5 inline-block">Top tempos</span>
-                    <h4 className="text-sm font-display font-black italic text-white leading-tight uppercase tracking-tighter">Ranking <span className="text-brand-primary font-bold">Regional</span></h4>
+                    <span className="px-1.5 py-0.5 bg-brand-primary/20 backdrop-blur-md rounded border border-brand-primary/30 text-[7px] font-black text-brand-primary uppercase tracking-widest mb-1.5 inline-block">Pro HUD</span>
+                    <h4 className="text-sm font-display font-black italic text-white leading-tight uppercase tracking-tighter">Assistente <span className="text-brand-primary font-bold">Curvas</span></h4>
                   </div>
                 </motion.div>
 
@@ -4192,39 +4192,6 @@ export default function App() {
                 </motion.div>
               </section>
 
-              {/* 2. NEW Cornering Assistant Featured Banner */}
-              <motion.section 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                onClick={() => setScreen('cornering-assistant')}
-                className="relative h-48 rounded-[32px] overflow-hidden group cursor-pointer border border-brand-primary/20 shadow-2xl shadow-brand-primary/10"
-              >
-                <img src="/assets/cornering_banner.png" alt="Curves" className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" />
-                <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 via-zinc-950/60 to-transparent" />
-                <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-transparent opacity-80" />
-                
-                <div className="absolute inset-0 p-8 flex flex-col justify-end">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="px-2 py-0.5 bg-brand-primary text-zinc-950 text-[8px] font-black uppercase tracking-widest rounded italic">NOVO</span>
-                    <div className="flex items-center gap-1">
-                      <div className="w-1.5 h-1.5 rounded-full bg-brand-primary animate-pulse" />
-                      <span className="text-[9px] font-black text-brand-primary uppercase tracking-[0.2em]">Assistente Pro</span>
-                    </div>
-                  </div>
-                  <h3 className="text-3xl font-display font-black italic text-white uppercase tracking-tighter leading-none mb-2">
-                    ASSISTENTE <span className="text-brand-primary">DE CURVAS</span>
-                  </h3>
-                  <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest leading-relaxed max-w-[200px]">
-                    Análise em tempo real de geometria e antecipação de traçado.
-                  </p>
-                </div>
-                
-                <div className="absolute top-6 right-6">
-                  <div className="w-12 h-12 bg-brand-primary/20 backdrop-blur-xl rounded-2xl border border-brand-primary/30 flex items-center justify-center">
-                    <Navigation className="w-6 h-6 text-brand-primary -rotate-90" />
-                  </div>
-                </div>
-              </motion.section>
 
 
 
