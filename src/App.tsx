@@ -3137,6 +3137,9 @@ export default function App() {
     destination
   );
 
+
+  const [screen, setScreen] = useState<Screen>('home');
+
   // --- Keep Awake Logic ---
   useEffect(() => {
     const shouldKeepAwake = isRunning || isWaiting || screen === 'cornering-assistant';
@@ -3155,8 +3158,6 @@ export default function App() {
 
     updateKeepAwake();
   }, [isRunning, isWaiting, screen]);
-
-  const [screen, setScreen] = useState<Screen>('home');
   const [showPerformanceMenu, setShowPerformanceMenu] = useState(false);
 
   useEffect(() => {
