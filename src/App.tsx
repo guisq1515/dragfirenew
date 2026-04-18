@@ -51,43 +51,24 @@ import {
   uploadString
 } from 'firebase/storage';
 import { auth, db, storage, googleProvider } from './firebase';
-import { 
-  Plus, 
-  Minus, 
-  Map as MapIcon, 
-  Trophy, 
-  Settings, 
-  ChevronRight, 
-  User, 
-  History, 
-  Share2, 
-  Clock, 
-  Zap, 
-  Timer, 
-  Activity, 
-  AlertTriangle, 
-  CheckCircle2, 
-  X, 
-  RotateCcw, 
-  Fuel, 
-  Navigation, 
-  LayoutGrid, 
-  ArrowRight, 
-  Locate, 
-  Smartphone, 
-  Info, 
-  Signal, 
-  ChevronLeft, 
-  Search, 
-  Star, 
-  Camera as CameraIcon, 
-  Trash2, 
-  Car, 
-  Sparkles, 
-  MessageSquare, 
-  Bell, 
-  Eye, 
-  LogOut,
+import {
+  AlertCircle,
+  Play,
+  Lock,
+  ArrowLeft as ArrowLeftIcon,
+  Share2 as Share2Icon,
+  Flag,
+  Weight,
+  Scale,
+  Home,
+  Gauge,
+  LayoutDashboard,
+  Activity as ActivityIcon,
+  History,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  EyeOff,
   Swords,
   Users,
   Instagram,
@@ -107,24 +88,43 @@ import {
   Download,
   CloudUpload,
   Filter,
-  AlertCircle,
-  Play,
-  Lock,
-  ArrowLeft as ArrowLeftIcon,
-  Share2 as Share2Icon,
-  Flag,
-  Home,
-  Gauge,
-  LayoutDashboard,
-  Activity,
-  History,
-  ChevronLeft,
-  ChevronRight
+  Plus,
+  Minus,
+  Map as MapIcon,
+  Trophy,
+  Settings as SettingsIcon,
+  User,
+  Clock,
+  Zap,
+  Timer,
+  AlertTriangle,
+  CheckCircle2,
+  X,
+  RotateCcw,
+  Fuel,
+  Navigation,
+  LayoutGrid,
+  ArrowRight,
+  Locate,
+  Smartphone,
+  Info,
+  Signal,
+  Search,
+  Star,
+  Camera as CameraIcon,
+  Trash2,
+  Car,
+  Sparkles,
+  MessageSquare,
+  Bell,
+  Eye,
+  LogOut,
+  Settings2
 } from 'lucide-react';
 import { PerformanceChart } from './components/PerformanceChart';
 import { TripAnalysis } from './components/TripAnalysis';
 import { FuelCalculator } from './components/FuelCalculator';
-import { editCarImage } from './services/geminiService';
+import { editCarImage, fetchVehicleSpecs } from './services/geminiService';
 import { AIPhotoEditor } from './components/AIPhotoEditor';
 import { GasStations } from './components/GasStations';
 import { AntigravityImporter } from './components/AntigravityImporter';
@@ -206,7 +206,7 @@ import {
   Legend
 } from 'recharts';
 import { usePerformanceTimer } from './hooks/usePerformanceTimer';
-import { RunMode, RunConfig, RunResult, Challenge, Vehicle, RankingEntry, GPSPoint, UserProfile, TelemetryConfig, SystemSettings } from './types';
+import { RunMode, RunConfig, RunResult, Challenge, Vehicle, RankingEntry, GPSPoint, UserProfile, TelemetryConfig, SystemSettings, Activity, PowerReference } from './types';
 import { calculateDistance } from './lib/utils';
 import { VEHICLE_DATA, YEARS } from './constants/vehicles';
 
@@ -218,6 +218,27 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon.png',
   shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
 });
+
+const baseVehicle: Vehicle = {
+  type: 'car',
+  nickname: '',
+  brand: '',
+  model: '',
+  year: YEARS ? YEARS[0] : '2024',
+  category: 'custom',
+  photoURL: '',
+  hp: 0,
+  stage: 'Stock',
+  maxSpeed: 0,
+  mods: '',
+  observations: '',
+  engine: '',
+  transmission: '',
+  weight: 0,
+  stockHp: 0,
+  stockTorque: 0,
+  stockWeight: 0
+};
 
 enum OperationType {
   CREATE = 'create',
@@ -599,6 +620,7 @@ function HistoryView({
   user,
   isGuest,
   isPremium,
+  isAdmin,
   onBack 
 }: { 
   user: FirebaseUser | null,
@@ -611,6 +633,7 @@ function HistoryView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<string>('');
 
   const handleSyncRanking = async () => {
     if (!user || syncing) return;
@@ -895,7 +918,7 @@ function SearchUsers({
           }
           const snapshot = await getDocs(q);
           const users = snapshot.docs
-            .map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile))
+            .map(doc => ({ uid: doc.id, ...(doc.data() as any) } as UserProfile))
             .filter(u => u.uid !== currentUserId);
           setResults(users);
         } catch (error) {
@@ -1088,7 +1111,8 @@ function PublicProfile({
   uid, 
   currentUserId,
   onBack,
-  onEditVehicles
+  onEditVehicles,
+  onViewVehicle
 }: { 
   uid: string, 
   currentUserId: string | undefined,
@@ -1234,7 +1258,7 @@ function PublicProfile({
           onClick={handleShare}
           className="absolute top-6 right-6 z-20 p-2 bg-black/40 backdrop-blur-md rounded-xl text-white"
         >
-          <Share2 className="w-5 h-5" />
+          <Share2Icon className="w-5 h-5" />
         </button>
       </div>
 
@@ -1591,7 +1615,7 @@ function ProfileSettings({
 }: { 
   user: FirebaseUser | null, 
   userProfile: UserProfile | null,
-  onUpdate: (data: { displayName?: string, photoURL?: string, isPremium?: boolean, bio?: string, instagram?: string, isPrivate?: boolean }) => void, 
+  onUpdate: (data: Partial<UserProfile>) => void, 
   onBack: () => void 
 }) {
   const [displayName, setDisplayName] = useState(user?.displayName || '');
@@ -1781,28 +1805,6 @@ function ProfileSettings({
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Privacidade</label>
-          <div 
-            onClick={() => setIsPrivate(!isPrivate)}
-            className="flex items-center justify-between p-4 bg-zinc-900 border border-white/5 rounded-xl cursor-pointer hover:border-brand-primary/30 transition-all"
-          >
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isPrivate ? 'bg-brand-primary/20 text-brand-primary' : 'bg-zinc-800 text-zinc-500'}`}>
-                {isPrivate ? <Lock className="w-5 h-5" /> : <Users className="w-5 h-5" />}
-              </div>
-              <div>
-                <p className="text-sm font-bold text-white">{isPrivate ? 'Conta Privada' : 'Conta Pública'}</p>
-                <p className="text-[10px] text-zinc-500 font-medium">
-                  {isPrivate ? 'Apenas seguidores podem ver seus dados' : 'Qualquer pessoa pode ver seus dados'}
-                </p>
-              </div>
-            </div>
-            <div className={`w-12 h-6 rounded-full p-1 transition-colors ${isPrivate ? 'bg-brand-primary' : 'bg-zinc-800'}`}>
-              <div className={`w-4 h-4 bg-white rounded-full transition-transform ${isPrivate ? 'translate-x-6' : 'translate-x-0'}`} />
-            </div>
-          </div>
-        </div>
 
         {followRequests.length > 0 && (
           <div className="space-y-3">
@@ -2355,23 +2357,53 @@ function VehicleSettings({
   vehicles,
   userProfile,
   isPremium,
+  userId,
+  editingVehicle,
+  setEditingVehicle,
   onSave, 
   onDelete,
-  onBack 
+  onBack,
+  setScreen,
+  setCatalogVehicle
 }: { 
   vehicles: Vehicle[], 
   userProfile: UserProfile | null,
   isPremium: boolean,
+  userId: string,
+  editingVehicle: Vehicle | null,
+  setEditingVehicle: (v: Vehicle | null) => void,
   onSave: (v: Vehicle) => void, 
   onDelete: (v: Vehicle) => void,
-  onBack: () => void 
+  onBack: () => void,
+  setScreen: (v: string) => void,
+  setCatalogVehicle: (v: Vehicle | null) => void
 }) {
-  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadStatus, setUploadStatus] = useState<string>('');
   const canAddMore = isPremium || vehicles.length < 1;
-  const [formData, setFormData] = useState<Vehicle>({base_vehicle});
+  const baseVehicle: Vehicle = {
+    uid: userId || '',
+    type: 'car',
+    nickname: '',
+    brand: '',
+    model: '',
+    year: YEARS[0],
+    category: 'custom',
+    photoURL: '',
+    hp: 0,
+    stage: 'Stock',
+    maxSpeed: 0,
+    mods: '',
+    observations: '',
+    engine: '',
+    transmission: '',
+    weight: 0,
+    stockHp: 0,
+    stockTorque: 0,
+    stockWeight: 0
+  };
+  const [formData, setFormData] = useState<Vehicle>(baseVehicle);
   const [activeTab, setActiveTab] = useState<'basics' | 'technical'>('basics');
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement> | null) => {
@@ -2490,13 +2522,38 @@ function VehicleSettings({
     }
   };
   const brands = useMemo(() => {
-    return Object.keys(VEHICLE_DATA[formData.type]);
+    return Object.keys(VEHICLE_DATA[formData.type] || {});
   }, [formData.type]);
 
   const models = useMemo(() => {
     if (!formData.brand) return [];
-    return (VEHICLE_DATA[formData.type] as any)[formData.brand] || [];
+    return Object.keys(VEHICLE_DATA[formData.type]?.[formData.brand] || {});
   }, [formData.type, formData.brand]);
+
+  const specs = useMemo(() => {
+    if (!formData.brand || !formData.model) return [];
+    return VEHICLE_DATA[formData.type]?.[formData.brand]?.[formData.model] || [];
+  }, [formData.type, formData.brand, formData.model]);
+
+  const [isFetchingAI, setIsFetchingAI] = useState(false);
+  const handleMagicaIA = async () => {
+    if (!formData.brand || !formData.model || !isPremium) return;
+    setIsFetchingAI(true);
+    try {
+      const data = await fetchVehicleSpecs(formData.brand, formData.model, formData.year, formData.engine);
+      setFormData(prev => ({
+        ...prev,
+        hp: data.hp || prev.hp,
+        stockHp: data.hp,
+        stockWeight: data.weight,
+        weight: data.weight || prev.weight
+      }));
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setIsFetchingAI(false);
+    }
+  };
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -2519,11 +2576,14 @@ function VehicleSettings({
       
       setEditingVehicle(null);
       setFormData({
-        type: 'car',
-        brand: '',
-        model: '',
-        year: '',
-        nickname: ''
+        year: YEARS[0],
+        nickname: '',
+        hp: 0,
+        weight: 0,
+        engine: '',
+        transmission: '',
+        stockHp: 0,
+        stockWeight: 0
       });
     } catch (error: any) {
       console.error('Error in handleSubmit:', error);
@@ -2533,13 +2593,14 @@ function VehicleSettings({
     }
   };
 
-  const handleEdit = (v: Vehicle) => {
+  const internalHandleEdit = (v: Vehicle) => {
     setEditingVehicle(v);
     setFormData(v);
   };
 
-  const handleAddNew = () => {
+  const internalHandleAddNew = () => {
     setEditingVehicle({
+      ...baseVehicle,
       type: 'car',
       brand: '',
       model: '',
@@ -2547,6 +2608,7 @@ function VehicleSettings({
       nickname: ''
     } as Vehicle);
     setFormData({
+      ...baseVehicle,
       type: 'car',
       brand: '',
       model: '',
@@ -2598,11 +2660,14 @@ function VehicleSettings({
                 >
                   VER CATÁLOGO
                 </button>
-                <button 
-                  onClick={() => handleEdit(v)}
+              <button 
+                  onClick={() => {
+                    setEditingVehicle(v);
+                    setScreen('vehicle-settings');
+                  }}
                   className="p-2 bg-zinc-800 rounded-lg text-zinc-400 hover:text-white"
                 >
-                  <Settings className="w-4 h-4" />
+                  <SettingsIcon className="w-4 h-4" />
                 </button>
                 <button 
                   onClick={() => onDelete(v)}
@@ -2616,7 +2681,7 @@ function VehicleSettings({
 
           {canAddMore ? (
             <button 
-              onClick={handleAddNew}
+              onClick={internalHandleAddNew}
               className="w-full py-4 border-2 border-dashed border-white/5 rounded-2xl flex items-center justify-center gap-2 text-zinc-500 hover:text-white hover:border-white/10 transition-all"
             >
               <Plus className="w-5 h-5" />
@@ -2861,50 +2926,103 @@ function VehicleSettings({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        {/* Brand/Model/Spec Selection */}
+        <div className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Marca</label>
             <select 
               value={formData.brand}
-              onChange={e => setFormData({...formData, brand: e.target.value, model: ''})}
-              className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-white focus:outline-none focus:border-brand-primary/50 transition-colors appearance-none"
+              onChange={e => setFormData({ ...formData, brand: e.target.value, model: '', engine: '' })}
+              className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-white focus:outline-none focus:border-brand-primary/50 transition-colors"
+              required
             >
-              <option value="">Selecione</option>
-              {brands.map(brand => (
-                <option key={brand} value={brand}>{brand}</option>
-              ))}
+              <option value="">Selecione a Marca</option>
+              {brands.map(b => <option key={b} value={b}>{b}</option>)}
+              <option value="Outra">Outra (Digitar)</option>
             </select>
+            {formData.brand === 'Outra' && (
+              <input 
+                type="text"
+                placeholder="Nome da Marca"
+                onChange={e => setFormData({ ...formData, brand: e.target.value })}
+                className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 mt-2 text-white focus:border-brand-primary/50"
+              />
+            )}
           </div>
+
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Modelo</label>
             <select 
               value={formData.model}
-              onChange={e => setFormData({...formData, model: e.target.value})}
-              className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-white focus:outline-none focus:border-brand-primary/50 transition-colors appearance-none disabled:opacity-50 disabled:cursor-not-allowed"
+              onChange={e => setFormData({ ...formData, model: e.target.value, engine: '' })}
+              className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-white focus:outline-none focus:border-brand-primary/50 transition-colors"
+              required
               disabled={!formData.brand}
             >
-              <option value="">Selecione</option>
-              {models.map((model: string) => (
-                <option key={model} value={model}>{model}</option>
-              ))}
+              <option value="">Selecione o Modelo</option>
+              {models.map(m => <option key={m} value={m}>{m}</option>)}
+              <option value="Outro">Outro (Digitar)</option>
             </select>
+            {formData.model === 'Outro' && (
+              <input 
+                type="text"
+                placeholder="Nome do Modelo"
+                onChange={e => setFormData({ ...formData, model: e.target.value })}
+                className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 mt-2 text-white focus:border-brand-primary/50"
+              />
+            )}
           </div>
-        </div>
 
-        <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Ano</label>
-            <select 
-              value={formData.year}
-              onChange={e => setFormData({...formData, year: e.target.value})}
-              className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-white focus:outline-none focus:border-brand-primary/50 transition-colors appearance-none"
-            >
-              <option value="">Selecione</option>
-              {YEARS.map(year => (
-                <option key={year} value={year}>{year}</option>
-              ))}
-            </select>
+              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">
+                {formData.type === 'car' ? 'Versão / Motorização / Câmbio' : 'Versão / Setup (Opcional)'}
+              </label>
+              <div className="relative group">
+                <select 
+                  value={formData.engine}
+                  onChange={e => setFormData({ ...formData, engine: e.target.value })}
+                  className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-white focus:outline-none focus:border-brand-primary/50 transition-colors"
+                  disabled={!formData.model}
+                >
+                  <option value="">Selecione a Versão</option>
+                  {specs.map(s => <option key={s} value={s}>{s}</option>)}
+                  <option value="Custom">Outra / Customizada</option>
+                </select>
+                {formData.engine === 'Custom' && (
+                  <input 
+                    type="text"
+                  placeholder={formData.type === 'car' ? "Ex: 2.0 Turbo Manual 180cv" : "Ex: Edição Especial / Remap"}
+                  onChange={e => setFormData({ ...formData, engine: e.target.value })}
+                    className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 mt-2 text-white focus:border-brand-primary/50"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Ano</label>
+              <select 
+                value={formData.year}
+                onChange={e => setFormData({ ...formData, year: e.target.value })}
+                className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-white focus:outline-none focus:border-brand-primary/50 transition-colors"
+              >
+                {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1.5 flex flex-col justify-end">
+               <button
+                 type="button"
+                 disabled={!(formData.type === 'motorcycle' ? formData.model : formData.engine) || isFetchingAI || !isPremium}
+                 onClick={handleMagicaIA}
+                 className={`w-full h-[54px] rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 ${(!(formData.type === 'motorcycle' ? formData.model : formData.engine) || !isPremium) ? 'bg-zinc-900 text-zinc-700 border border-white/5' : 'bg-brand-secondary/20 text-brand-secondary border border-brand-secondary/30 hover:bg-brand-secondary/30'}`}
+               >
+                 {isFetchingAI ? <div className="w-4 h-4 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                 Mágica IA
+               </button>
+            </div>
           </div>
+
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1 text-brand-primary">Peso Total (kg)</label>
             <input 
@@ -2914,7 +3032,7 @@ function VehicleSettings({
               placeholder="Ex: 1450"
               className="w-full bg-zinc-900 border border-brand-primary/20 rounded-xl p-4 text-white placeholder:text-zinc-800 focus:outline-none focus:border-brand-primary/50 transition-colors"
             />
-            <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter px-1">Carro + Piloto + Combustível</p>
+            <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter px-1">{formData.type === 'car' ? 'Carro + Piloto + Combustível' : 'Moto + Piloto + Equipamento'}</p>
           </div>
         </div>
 
@@ -3272,8 +3390,8 @@ const PRESETS = [
   { id: '201m', label: '201m', mode: 'distance' as const, target: 201, startSpeed: 0, description: '1/8 de milha (Arrancada)', icon: Flag, color: 'from-blue-500 to-cyan-500', type: 'standing' },
   { id: '402m', label: '402m', mode: 'distance' as const, target: 402, startSpeed: 0, description: '1/4 de milha (Padrão)', icon: Trophy, color: 'from-purple-500 to-pink-500', type: 'standing' },
   { id: '1km', label: '1km', mode: 'distance' as const, target: 1000, startSpeed: 0, description: 'Velocidade final máxima', icon: Flag, color: 'from-zinc-500 to-zinc-400', type: 'standing' },
-  { id: 'free', label: 'Modo Livre', mode: 'free' as const, target: 0, startSpeed: 0, description: 'Ajuste mecânico e telemetria', icon: Activity, color: 'from-zinc-700 to-zinc-600', type: 'manual' },
-  { id: 'custom', label: 'Personalizada', mode: 'custom' as const, target: 0, startSpeed: 0, description: 'Crie seu próprio teste', icon: Settings, color: 'from-brand-primary to-brand-secondary', type: 'custom' },
+  { id: 'free', label: 'Modo Livre', mode: 'free' as const, target: 0, startSpeed: 0, description: 'Ajuste mecânico e telemetria', icon: ActivityIcon, color: 'from-zinc-700 to-zinc-600', type: 'manual' },
+  { id: 'custom', label: 'Personalizada', mode: 'custom' as const, target: 0, startSpeed: 0, description: 'Crie seu próprio teste', icon: SettingsIcon, color: 'from-brand-primary to-brand-secondary', type: 'custom' },
   { id: 'trip', label: 'Modo Viagem', mode: 'trip' as const, target: 0, startSpeed: 0, description: 'Média de viagem e análise de percurso', icon: MapIcon, color: 'from-blue-600 to-indigo-600', type: 'manual' },
 ];
 
@@ -3565,6 +3683,25 @@ export default function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [calibrationMode, setCalibrationMode] = useState<Partial<PowerReference> | null>(null);
   const [catalogVehicle, setCatalogVehicle] = useState<Vehicle | null>(null);
+  const [runVehicleId, setRunVehicleId] = useState<string | null>(null);
+  const [isQuickSwitchOpen, setIsQuickSwitchOpen] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+
+  const handleEdit = (v: Vehicle) => {
+    setEditingVehicle(v);
+    setScreen('vehicle-settings');
+  };
+
+  const handleAddNew = () => {
+    setEditingVehicle(baseVehicle);
+    setScreen('vehicle-settings');
+  };
+
+  useEffect(() => {
+    if (vehicle?.id && !runVehicleId) {
+      setRunVehicleId(vehicle.id);
+    }
+  }, [vehicle]);
 
   const logActivity = async (type: Activity['type'], data: Activity['data']) => {
     if (!user || !userProfile) return;
@@ -4068,17 +4205,22 @@ export default function App() {
               }
             }
             
+            const activeVehicle = runVehicleId === 'anonimo' ? null : (vehicles.find(v => v.id === runVehicleId) || vehicle);
+            
             let estimatedPowerCV = 0;
-            if (isUserPremium && vehicle?.weight && lastResult.time > 0) {
+            if (isUserPremium && lastResult.time > 0) {
+              const weightForEstimation = activeVehicle?.weight || 1500;
               // Basic physics estimation with current test data
-              estimatedPowerCV = powerService.estimateHorsepower(lastResult, vehicle.weight, []);
+              estimatedPowerCV = powerService.estimateHorsepower(lastResult, weightForEstimation, []);
             }
+
+            const selectedVehicle = activeVehicle;
 
             const runData = { 
               ...lastResult, 
               uid: user.uid,
-              vehicleId: vehicle?.id || null,
-              vehicleName: vehicle ? `${vehicle.nickname} (${vehicle.model})` : 'Piloto',
+              vehicleId: selectedVehicle?.id || null,
+              vehicleName: selectedVehicle ? `${selectedVehicle.nickname} (${selectedVehicle.model})` : 'Piloto Anônimo',
               estimatedPowerCV
             };
             await addDoc(collection(db, 'runs'), runData);
@@ -4112,12 +4254,14 @@ export default function App() {
           (lastResult.maxG ?? 0) < 3.8 &&
           lastResult.time > 1.2
         ) {
+            const selectedVehicle = runVehicleId === 'anonimo' ? null : (vehicles.find(v => v.id === runVehicleId) || vehicle);
+
             const rankingData: Omit<RankingEntry, 'id'> = {
               uid: user.uid,
               userName: user.displayName || 'Piloto',
               userPhoto: user.photoURL || undefined,
-              vehicleName: vehicle ? `${vehicle.nickname} (${vehicle.model})` : 'Veículo não cadastrado',
-              vehicleType: vehicle?.type || 'car',
+              vehicleName: selectedVehicle ? `${selectedVehicle.nickname} (${selectedVehicle.model})` : 'Veículo não vinculado',
+              vehicleType: selectedVehicle?.type || 'car',
               time: lastResult.time,
               maxSpeed: lastResult.maxSpeed,
               timestamp: lastResult.timestamp,
@@ -4125,7 +4269,7 @@ export default function App() {
               latitude: lastResult.location.latitude,
               longitude: lastResult.location.longitude,
               slope: lastResult.slope || 0,
-              vehicleId: vehicle?.id || undefined
+              vehicleId: selectedVehicle?.id || undefined
             };
           addDoc(collection(db, 'rankings'), rankingData)
             .catch(err => handleFirestoreError(err, OperationType.WRITE, 'rankings'));
@@ -4148,7 +4292,7 @@ export default function App() {
         setScreen('trip-view');
       }
     }
-  }, [lastResult, user, isGuest, userProfile?.isPremium]);
+  }, [lastResult, user, isGuest, userProfile?.isPremium, vehicle]);
 
   const handleSelectPreset = (preset: typeof PRESETS[0]) => {
     setActiveConfig(preset);
@@ -4409,9 +4553,14 @@ export default function App() {
               vehicles={vehicles} 
               userProfile={userProfile}
               isPremium={isUserPremium}
+              userId={user?.uid || ''}
+              editingVehicle={editingVehicle}
+              setEditingVehicle={setEditingVehicle}
               onSave={saveVehicle} 
               onDelete={deleteVehicle}
               onBack={() => setScreen('settings')} 
+              setScreen={setScreen}
+              setCatalogVehicle={setCatalogVehicle}
             />
           </motion.div>
         ) : screen === 'profile-settings' ? (
@@ -4503,6 +4652,10 @@ export default function App() {
               vehicle={catalogVehicle} 
               onBack={() => setScreen(selectedProfileUid ? 'public-profile' : 'settings')}
               isOwnCar={user?.uid === catalogVehicle.uid}
+              onEditVehicle={(v) => {
+                handleEdit(v);
+                setScreen('vehicle-settings');
+              }}
             />
           </motion.div>
         ) : screen === 'history' ? (
@@ -4600,7 +4753,7 @@ export default function App() {
                   onClick={() => setScreen('settings')}
                   className="p-2 bg-zinc-900 rounded-full text-zinc-400 hover:text-white transition-colors"
                 >
-                  <Settings className="w-5 h-5" />
+                  <SettingsIcon className="w-5 h-5" />
                 </button>
               </div>
             </header>
@@ -4893,7 +5046,7 @@ export default function App() {
                   alert('Resultado do duelo copiado!');
                 }}
               >
-                <Share2 className="w-4 h-4 text-zinc-400" />
+                <Share2Icon className="w-4 h-4 text-zinc-400" />
               </button>
             </header>
             <DuelComparison challenge={activeChallenge} />
@@ -4924,7 +5077,7 @@ export default function App() {
                   alert('Relatório de viagem copiado!');
                 }}
               >
-                <Share2 className="w-4 h-4 text-zinc-400" />
+                <Share2Icon className="w-4 h-4 text-zinc-400" />
               </button>
             </header>
             <div className="flex-1 overflow-y-auto p-4">
@@ -5024,30 +5177,8 @@ export default function App() {
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 
-                {/* Mini Vehicle Selector */}
-                {!isGuest && vehicles.length > 0 && (
-                  <div className="flex items-center gap-2 px-2 py-1 bg-white/5 rounded-lg border border-white/5 truncate max-w-[120px]">
-                    <div className="w-5 h-5 rounded-md bg-zinc-800 flex items-center justify-center shrink-0 overflow-hidden">
-                      {vehicle?.photoURL ? (
-                        <img src={vehicle.photoURL} className="w-full h-full object-cover" />
-                      ) : (
-                        <Car className="w-3 h-3 text-zinc-500" />
-                      )}
-                    </div>
-                    <select 
-                      value={vehicle?.id || ''} 
-                      onChange={(e) => {
-                        const v = vehicles.find(veh => veh.id === e.target.value);
-                        if (v) selectVehicle(v);
-                      }}
-                      className="bg-transparent text-[10px] font-black text-zinc-400 uppercase tracking-tight focus:outline-none cursor-pointer truncate appearance-none"
-                    >
-                      {vehicles.map(v => (
-                        <option key={v.id} value={v.id} className="bg-zinc-900 text-white">{v.nickname}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                {/* Header Title */}
+                <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em] ml-2">Performance Test</span>
               </div>
               
               <div className="flex flex-col items-center">
@@ -5056,7 +5187,7 @@ export default function App() {
               </div>
 
               <button className="p-1.5 hover:bg-white/5 rounded-full transition-colors">
-                <Settings className="w-4 h-4 text-zinc-400" />
+                <SettingsIcon className="w-4 h-4 text-zinc-400" />
               </button>
             </header>
 
@@ -5109,6 +5240,7 @@ export default function App() {
               {/* Speedometer */}
               {!lastResult && (
                 <div className="relative aspect-square w-full max-w-[280px] mx-auto flex flex-col items-center justify-center">
+                  {/* Speedometer Gauges */}
                   <div className="absolute inset-0 border-[12px] border-zinc-900 rounded-full" />
                   <motion.div 
                     className="absolute inset-0 border-[12px] border-brand-primary rounded-full border-t-transparent border-l-transparent"
@@ -5116,6 +5248,36 @@ export default function App() {
                     transition={{ type: 'spring', damping: 15 }}
                   />
                   
+                  {/* Floating Vehicle Badge (Top Left of Speedo) */}
+                  {!isGuest && (
+                    <div 
+                      className="absolute -top-4 -left-4 z-20 group"
+                      style={{ transform: 'translate(10%, 10%)' }}
+                    >
+                      <button 
+                        onClick={() => !isRunning && setIsQuickSwitchOpen(true)}
+                        className={`flex items-center gap-2 p-2 rounded-2xl border transition-all ${runVehicleId === 'anonimo' ? 'bg-zinc-900/40 border-white/10' : 'bg-brand-primary/10 border-brand-primary/30'} backdrop-blur-md active:scale-95`}
+                        disabled={isRunning && currentSpeed > 5}
+                      >
+                        <div className="w-8 h-8 rounded-xl bg-zinc-950 flex items-center justify-center overflow-hidden border border-white/5">
+                          {(() => {
+                            const v = vehicles.find(veh => veh.id === runVehicleId);
+                            if (v?.photoURL) return <img src={v.photoURL} className="w-full h-full object-cover" />;
+                            if (v?.type === 'motorcycle') return <Navigation className="w-4 h-4 text-zinc-600 -rotate-90" />;
+                            return <Car className="w-4 h-4 text-zinc-600" />;
+                          })()}
+                        </div>
+                        <div className="text-left pr-2">
+                          <p className="text-[7px] font-black text-brand-primary uppercase tracking-widest leading-none mb-0.5">Veículo</p>
+                          <p className="text-[9px] font-black text-white uppercase italic tracking-tighter truncate max-w-[80px]">
+                            {vehicles.find(v => v.id === runVehicleId)?.nickname || 'Anônimo'}
+                          </p>
+                        </div>
+                        <ChevronDown className={`w-3 h-3 text-zinc-600 transition-transform ${isQuickSwitchOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                    </div>
+                  )}
+
                   <div className="text-center z-10">
                     <motion.div 
                       className={`block text-8xl font-display font-black italic tracking-tighter speed-text leading-none ${isRunning ? 'text-brand-primary drop-shadow-[0_0_20px_rgba(239,68,68,0.6)]' : ''}`}
@@ -5126,7 +5288,7 @@ export default function App() {
                     <span className="text-zinc-500 font-bold uppercase tracking-widest text-sm">km/h</span>
                     {isRunning && (
                       <div className="mt-2 flex items-center justify-center gap-1">
-                        <Activity className="w-3 h-3 text-brand-accent" />
+                        <ActivityIcon className="w-3 h-3 text-brand-accent" />
                         <span className="text-brand-accent font-mono font-bold text-sm tracking-tighter">{gForce.toFixed(2)}G</span>
                       </div>
                     )}
@@ -5223,7 +5385,7 @@ export default function App() {
                       )}
 
                       <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white/5 rounded-xl border border-white/10 w-fit mx-auto">
-                        <Activity className="w-3 h-3 text-brand-primary" />
+                        <ActivityIcon className="w-3 h-3 text-brand-primary" />
                         <span className="text-[9px] font-black uppercase text-zinc-400 tracking-wider">Sensor IMU Ativo - Launch Trigger</span>
                       </div>
 
@@ -5394,7 +5556,7 @@ export default function App() {
                           <button 
                             className="px-4 py-3 bg-brand-accent/10 hover:bg-brand-accent/20 text-brand-accent rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors border border-brand-accent/20"
                           >
-                            <Share2 className="w-4 h-4" />
+                            <Share2Icon className="w-4 h-4" />
                           </button>
                         </div>
                         {lastResult.config.mode !== 'free' && !lastResult.config.isCustom && (
@@ -5455,6 +5617,84 @@ export default function App() {
                     </motion.div>
                   )}
                 </AnimatePresence>
+                
+                {/* Quick Vehicle Switch Modal */}
+                <AnimatePresence>
+                  {isQuickSwitchOpen && (
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-xl flex items-end justify-center p-4"
+                      onClick={() => setIsQuickSwitchOpen(false)}
+                    >
+                      <motion.div 
+                        initial={{ y: "100%" }}
+                        animate={{ y: 0 }}
+                        exit={{ y: "100%" }}
+                        className="w-full max-w-md bg-zinc-900 border-t border-white/10 rounded-t-[40px] p-8 space-y-6 overflow-hidden"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="text-xl font-display font-black italic text-white uppercase tracking-tight">Vincular Veículo</h3>
+                            <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Apenas para este teste</p>
+                          </div>
+                          <button 
+                            onClick={() => setIsQuickSwitchOpen(false)}
+                            className="p-2 bg-white/5 rounded-xl text-zinc-400"
+                          >
+                            <ChevronDown className="w-5 h-5 transition-transform group-hover:translate-y-0.5" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+                          {/* Anonymous Option */}
+                          <button
+                            onClick={() => {
+                              setRunVehicleId('anonimo');
+                              setIsQuickSwitchOpen(false);
+                            }}
+                            className={`flex flex-col gap-2 p-3 rounded-[32px] border transition-all ${runVehicleId === 'anonimo' ? 'bg-zinc-800 border-brand-primary shadow-lg shadow-red-600/20' : 'bg-zinc-950/50 border-white/5'}`}
+                          >
+                            <div className="aspect-[4/3] w-full rounded-2xl bg-zinc-900 flex flex-col items-center justify-center border border-white/5 gap-1">
+                              <EyeOff className="w-5 h-5 text-zinc-600" />
+                              <span className="text-[7px] text-zinc-700 font-black uppercase tracking-widest">Ghost Mode</span>
+                            </div>
+                            <div className="text-center px-1">
+                              <p className="text-[10px] font-black text-white uppercase italic">Sem Veículo</p>
+                              <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-tight">Anônimo</p>
+                            </div>
+                          </button>
+
+                          {/* Vehicle List */}
+                          {vehicles.map(v => (
+                            <button
+                              key={v.id}
+                              onClick={() => {
+                                setRunVehicleId(v.id);
+                                setIsQuickSwitchOpen(false);
+                              }}
+                              className={`flex flex-col gap-2 p-3 rounded-[32px] border transition-all ${runVehicleId === v.id ? 'bg-zinc-800 border-brand-primary shadow-lg shadow-red-600/20' : 'bg-zinc-950/50 border-white/5'}`}
+                            >
+                              <div className="aspect-[4/3] w-full rounded-2xl bg-zinc-900 flex items-center justify-center overflow-hidden border border-white/5">
+                                {v.photoURL ? (
+                                  <img src={v.photoURL} alt={v.nickname} className="w-full h-full object-cover" />
+                                ) : (
+                                  v.type === 'car' ? <Car className="w-6 h-6 text-zinc-700" /> : <Navigation className="w-6 h-6 -rotate-90 text-zinc-700" />
+                                )}
+                              </div>
+                              <div className="text-center px-1">
+                                <p className="text-[10px] font-black text-white uppercase italic truncate w-full">{v.nickname}</p>
+                                <p className="text-[7px] text-zinc-500 font-black uppercase tracking-widest truncate w-full">{v.brand} {v.model}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </main>
           </motion.div>
@@ -5507,7 +5747,7 @@ export default function App() {
               />
               <button 
                 onClick={handleSearchUsersForChallenge}
-                className="absolute right-3 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-brand-primary text-white text-[10px] font-black uppercase rounded-lg"
+                className="absolute right-3 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-brand-primary text-white text-[10px] font-black uppercase rounded-lg active:scale-95 transition-all"
               >
                 Buscar
               </button>
@@ -5618,7 +5858,7 @@ export default function App() {
 );
 }
 
-function VehicleCatalog({ vehicle, onBack, isOwnCar }: { vehicle: Vehicle, onBack: () => void, isOwnCar: boolean }) {
+function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle: Vehicle, onBack: () => void, isOwnCar: boolean, onEditVehicle: (v: Vehicle) => void }) {
   const [runs, setRuns] = useState<RunResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'stats' | 'photos' | 'results'>('stats');
@@ -5645,227 +5885,183 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar }: { vehicle: Vehicle, onBac
   }, [vehicle.id]);
 
   const best0to100 = runs.filter(r => r.config.mode === 'speed' && r.config.target === 100).sort((a,b) => a.time - b.time)[0];
-  const best201m = runs.filter(r => r.config.mode === 'distance' && r.config.target === 201).sort((a,b) => a.time - b.time)[0];
   const maxSpeed = Math.max(...runs.map(r => r.maxSpeed), 0);
-
-  // NFS Style progress bar mapping
   const accelScore = best0to100 ? Math.max(10, 100 - (best0to100.time * 5)) : 0;
   const speedScore = maxSpeed ? Math.min(100, (maxSpeed / 300) * 100) : 0;
+  const handlingScore = Math.min(100, (runs[0]?.maxG || 0.8) * 80);
+
+  const handleShareVehicle = async () => {
+    const shareData = {
+      title: `Confira meu ${vehicle.brand} ${vehicle.model}`,
+      text: `Veja os detalhes e a performance do meu carro no DragFire!`,
+      url: window.location.href
+    };
+    try {
+      if (navigator.share) await navigator.share(shareData);
+      else {
+        await navigator.clipboard.writeText(window.location.href);
+        alert('Link do veículo copiado!');
+      }
+    } catch (e) { console.error(e); }
+  };
 
   return (
     <div className="flex-1 flex flex-col bg-zinc-950 overflow-hidden relative">
-      {/* Background Ambience */}
+      {/* Dynamic Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-brand-primary/10 blur-[120px] rounded-full" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-brand-accent/10 blur-[120px] rounded-full" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] opacity-20 bg-[url('https://images.unsplash.com/photo-1542281286-9e0a16bb7366?q=80&w=2000')] bg-cover grayscale blur-sm" />
+        <div className="absolute inset-0 bg-gradient-to-b from-zinc-950 via-zinc-950/40 to-zinc-950" />
       </div>
 
-      <header className="p-6 flex items-center justify-between relative z-10 pt-12">
-        <button onClick={onBack} className="p-2 bg-zinc-900/50 backdrop-blur-md border border-white/10 rounded-xl text-white">
+      <header className="px-6 py-4 flex items-center justify-between relative z-10 pt-10">
+        <button onClick={onBack} className="p-2 bg-black/40 backdrop-blur-md rounded-xl text-white/50 hover:text-white transition-colors">
           <ChevronLeft className="w-5 h-5" />
         </button>
-        <div className="text-right">
-          <h2 className="text-2xl font-display font-black italic text-white uppercase tracking-tighter leading-none">{vehicle.nickname}</h2>
-          <p className="text-[10px] text-brand-primary font-black uppercase tracking-widest mt-1 italic">Car Select</p>
+        <div className="flex items-center gap-2">
+           <div className="text-right">
+             <p className="text-[10px] text-brand-primary font-black uppercase tracking-[0.3em] mb-1 italic">Car Selection</p>
+             <h2 className="text-sm font-black text-white/40 uppercase tracking-widest leading-none">My Cars</h2>
+           </div>
+           {isOwnCar && (
+             <button 
+               onClick={() => onEditVehicle?.(vehicle)}
+               className="ml-4 p-2 bg-brand-primary/10 border border-brand-primary/20 rounded-xl text-brand-primary hover:bg-brand-primary hover:text-white transition-all active:scale-95"
+             >
+               <SettingsIcon className="w-5 h-5" />
+             </button>
+           )}
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-6 pb-24 relative z-10">
-        {/* Main Photo Section */}
-        <div className="relative aspect-[16/10] bg-zinc-900 rounded-[32px] overflow-hidden border border-white/5 shadow-2xl mb-6">
-          <img 
-            src={vehicle.photoURL || 'https://images.unsplash.com/photo-1542281286-9e0a16bb7366?q=80&w=800'} 
-            className="w-full h-full object-cover"
-            alt={vehicle.nickname}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/80 via-transparent to-transparent" />
-          
-          <div className="absolute bottom-6 left-6 right-6 flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-black text-white italic tracking-tighter uppercase">{vehicle.brand}</h3>
-              <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest">{vehicle.model} • {vehicle.year}</p>
-            </div>
-            <div className="bg-zinc-950/50 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10">
-              <span className="text-[10px] font-black text-brand-primary uppercase tracking-widest">Stock Class</span>
-            </div>
+      <main className="flex-1 flex flex-col relative z-10 overflow-hidden">
+        {/* Main Brand Bar */}
+        <div className="px-6 relative mb-4">
+          <div className="bg-black/40 backdrop-blur-xl border border-white/5 rounded-3xl p-6 flex items-center justify-between shadow-2xl relative overflow-hidden">
+             <div className="absolute inset-0 bg-gradient-to-r from-brand-primary/5 to-transparent pointer-events-none" />
+             <div className="flex items-center gap-6">
+                <div className="w-16 h-16 bg-zinc-950 rounded-2xl flex items-center justify-center border border-white/10 shadow-inner">
+                   <div className="w-10 h-10 text-white/20 font-black italic text-2xl flex items-center justify-center border-t-2 border-brand-primary/30">{vehicle.brand.charAt(0)}</div>
+                </div>
+                <div>
+                   <h1 className="text-4xl font-display font-black italic text-white leading-none tracking-tighter uppercase">{vehicle.brand}</h1>
+                   <div className="flex items-center gap-2 mt-1">
+                      <span className="text-brand-primary text-xs font-black italic uppercase tracking-widest">{vehicle.model}</span>
+                      <span className="w-1.5 h-1.5 bg-zinc-700 rounded-full" />
+                      <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{vehicle.nickname}</span>
+                   </div>
+                </div>
+             </div>
+             <div className="text-right">
+                <p className="text-2xl font-display font-black italic text-white/10 leading-none">GTR</p>
+                <p className="text-[10px] font-black text-brand-primary uppercase mt-1">Stage {vehicle.stage}</p>
+             </div>
           </div>
         </div>
 
-        {/* NFS Underground Menu */}
-        <div className="flex gap-1 bg-zinc-900/40 p-1 rounded-2xl border border-white/5 mb-8">
-          {[
-            { id: 'stats', label: 'Estatísticas', icon: Activity },
-            { id: 'photos', label: 'Garagem', icon: ImageIcon },
-            { id: 'results', label: 'Testes', icon: History }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex-1 py-3 px-2 rounded-xl flex flex-col items-center gap-1 transition-all ${activeTab === tab.id ? 'bg-brand-primary text-white shadow-lg shadow-red-600/20' : 'text-zinc-500 hover:text-white'}`}
-            >
-              <tab.icon className="w-4 h-4" />
-              <span className="text-[8px] font-black uppercase tracking-widest">{tab.label}</span>
-            </button>
-          ))}
+        {/* Vehicle Display Area */}
+        <div className="flex-1 relative flex items-center justify-center perspective-[1000px]">
+          <motion.div 
+            initial={{ scale: 0.9, opacity: 0, rotateY: 10 }}
+            animate={{ scale: 1, opacity: 1, rotateY: 0 }}
+            className="w-full h-full max-h-[350px] px-4"
+          >
+            <div className="relative w-full h-full rounded-[40px] overflow-hidden group shadow-[0_40px_100px_rgba(0,0,0,0.8)] border border-white/5">
+               <img 
+                 src={vehicle.photoURL || 'https://images.unsplash.com/photo-1542281286-9e0a16bb7366?q=80&w=1200'} 
+                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
+               />
+               <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-zinc-950/20" />
+               
+               {/* Technical Specs Tags */}
+               <div className="absolute top-6 left-6 flex flex-col gap-2">
+                  <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 flex items-center gap-3">
+                     <Zap className="w-4 h-4 text-brand-primary fill-current" />
+                     <div className="text-left">
+                        <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-widest leading-none">Potência Est.</p>
+                        <p className="text-sm font-black text-white italic">{vehicle.hp || '--'} CV</p>
+                     </div>
+                  </div>
+                  <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 flex items-center gap-3">
+                     <Weight className="w-4 h-4 text-zinc-400" />
+                     <div className="text-left">
+                        <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-widest leading-none">Peso</p>
+                        <p className="text-sm font-black text-white italic">{vehicle.weight || '--'} KG</p>
+                     </div>
+                  </div>
+               </div>
+            </div>
+          </motion.div>
         </div>
 
-        {/* Tab Content */}
-        <AnimatePresence mode="wait">
-          {activeTab === 'stats' && (
-            <motion.div
-              key="stats"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="space-y-8"
-            >
-              {/* Performance Bars */}
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center px-1">
-                    <span className="text-[9px] font-black text-white uppercase tracking-widest italic">ACELERAÇÃO (0-100)</span>
-                    <span className="text-[9px] font-black text-brand-primary">{best0to100?.time.toFixed(2) || '--'}s</span>
-                  </div>
-                  <div className="h-2.5 bg-zinc-900 rounded-full border border-white/5 overflow-hidden">
+        {/* Performance Gauges (Bottom) */}
+        <div className="px-6 py-8 space-y-6 bg-zinc-950/80 backdrop-blur-xl border-t border-white/5">
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {/* Acceleration */}
+              <div className="space-y-2">
+                 <div className="flex justify-between items-center text-[10px] font-black italic tracking-widest">
+                    <span className="text-white uppercase">Acceleration</span>
+                    <span className="text-brand-primary">{best0to100?.time.toFixed(2) || '0.00'}s</span>
+                 </div>
+                 <div className="h-3 bg-zinc-900 rounded-full border border-white/5 p-0.5 overflow-hidden">
                     <motion.div 
-                      className="h-full bg-brand-primary shadow-[0_0_15px_rgba(239,68,68,0.5)]"
+                      className="h-full bg-brand-primary rounded-full shadow-[0_0_20px_rgba(239,68,68,0.5)]"
                       initial={{ width: 0 }}
                       animate={{ width: `${accelScore}%` }}
-                      transition={{ duration: 1.5, ease: "easeOut" }}
+                      transition={{ duration: 1, delay: 0.1 }}
                     />
-                  </div>
-                </div>
+                 </div>
+              </div>
 
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center px-1">
-                    <span className="text-[9px] font-black text-white uppercase tracking-widest italic">VELOCIDADE MÁXIMA</span>
-                    <span className="text-[9px] font-black text-brand-accent">{maxSpeed.toFixed(0) || '--'} KM/H</span>
-                  </div>
-                  <div className="h-2.5 bg-zinc-900 rounded-full border border-white/5 overflow-hidden">
+              {/* Top Speed */}
+              <div className="space-y-2">
+                 <div className="flex justify-between items-center text-[10px] font-black italic tracking-widest">
+                    <span className="text-white uppercase">Top Speed</span>
+                    <span className="text-brand-accent">{maxSpeed.toFixed(0)} KM/H</span>
+                 </div>
+                 <div className="h-3 bg-zinc-900 rounded-full border border-white/5 p-0.5 overflow-hidden">
                     <motion.div 
-                      className="h-full bg-brand-accent shadow-[0_0_15px_rgba(0,242,255,0.5)]"
+                      className="h-full bg-brand-accent rounded-full shadow-[0_0_20px_rgba(0,242,255,0.5)]"
                       initial={{ width: 0 }}
                       animate={{ width: `${speedScore}%` }}
-                      transition={{ duration: 1.5, ease: "easeOut", delay: 0.2 }}
+                      transition={{ duration: 1, delay: 0.3 }}
                     />
-                  </div>
-                </div>
+                 </div>
+              </div>
 
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center px-1">
-                    <span className="text-[9px] font-black text-white uppercase tracking-widest italic">ESTABILIDADE (G-MAX)</span>
-                    <span className="text-[9px] font-black text-yellow-500">{runs[0]?.maxG?.toFixed(2) || '0.00'}G</span>
-                  </div>
-                  <div className="h-2.5 bg-zinc-900 rounded-full border border-white/5 overflow-hidden">
+              {/* Handling */}
+              <div className="space-y-2">
+                 <div className="flex justify-between items-center text-[10px] font-black italic tracking-widest">
+                    <span className="text-white uppercase">Handling</span>
+                    <span className="text-brand-secondary">{runs[0]?.maxG?.toFixed(2) || '0.00'}G</span>
+                 </div>
+                 <div className="h-3 bg-zinc-900 rounded-full border border-white/5 p-0.5 overflow-hidden">
                     <motion.div 
-                      className="h-full bg-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]"
+                      className="h-full bg-brand-secondary rounded-full shadow-[0_0_20px_rgba(34,197,94,0.5)]"
                       initial={{ width: 0 }}
-                      animate={{ width: `${Math.min(100, (runs[0]?.maxG || 0) * 60)}%` }}
-                      transition={{ duration: 1.5, ease: "easeOut", delay: 0.4 }}
+                      animate={{ width: `${handlingScore}%` }}
+                      transition={{ duration: 1, delay: 0.5 }}
                     />
-                  </div>
-                </div>
+                 </div>
               </div>
+           </div>
 
-              {/* Specs Grid */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-zinc-900/50 p-4 rounded-2xl border border-white/5">
-                  <span className="text-[8px] text-zinc-500 font-black uppercase tracking-widest mb-1 block">Potência</span>
-                  <p className="text-white font-black italic uppercase">{vehicle.hp || '--'} CV</p>
-                </div>
-                <div className="bg-zinc-900/50 p-4 rounded-2xl border border-white/5">
-                  <span className="text-[8px] text-zinc-500 font-black uppercase tracking-widest mb-1 block">Preparação</span>
-                  <p className="text-brand-primary font-black italic uppercase">{vehicle.stage || 'Stock'}</p>
-                </div>
-                <div className="bg-zinc-900/50 p-4 rounded-2xl border border-white/5">
-                  <span className="text-[8px] text-zinc-500 font-black uppercase tracking-widest mb-1 block">Peso</span>
-                  <p className="text-white font-black italic uppercase">{vehicle.weight || '--'} KG</p>
-                </div>
-                <div className="bg-zinc-900/50 p-4 rounded-2xl border border-white/5">
-                  <span className="text-[8px] text-zinc-500 font-black uppercase tracking-widest mb-1 block">Ano</span>
-                  <p className="text-white font-black italic uppercase">{vehicle.year || '--'}</p>
-                </div>
-              </div>
-
-              {/* Advanced Specs */}
-              {(vehicle.mods || vehicle.observations) && (
-                <div className="space-y-3">
-                  {vehicle.mods && (
-                    <div className="bg-zinc-900/30 p-4 rounded-2xl border border-white/5">
-                      <span className="text-[8px] text-brand-primary font-black uppercase tracking-widest mb-2 block flex items-center gap-1.5">
-                        <Zap className="w-3 h-3" /> Modificações
-                      </span>
-                      <p className="text-[10px] text-zinc-300 font-medium leading-relaxed uppercase italic">{vehicle.mods}</p>
-                    </div>
-                  )}
-                  {vehicle.observations && (
-                    <div className="bg-zinc-900/30 p-4 rounded-2xl border border-white/5">
-                      <span className="text-[8px] text-zinc-500 font-black uppercase tracking-widest mb-2 block">Observações</span>
-                      <p className="text-[10px] text-zinc-400 font-medium leading-relaxed uppercase italic">{vehicle.observations}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {activeTab === 'photos' && (
-            <motion.div
-              key="photos"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="grid grid-cols-1 gap-4"
-            >
-              <div className="aspect-video rounded-3xl overflow-hidden border-2 border-brand-primary/20 shadow-xl">
-                 <img src={vehicle.photoURL} className="w-full h-full object-cover" />
-              </div>
-              {vehicle.photoURLs && vehicle.photoURLs.length > 0 ? (
-                vehicle.photoURLs.map((url, i) => (
-                  <div key={i} className="aspect-video rounded-3xl overflow-hidden border border-white/5 shadow-xl">
-                    <img src={url} className="w-full h-full object-cover" />
-                  </div>
-                ))
-              ) : (
-                <div className="py-12 text-center text-zinc-500">
-                  <ImageIcon className="w-8 h-8 mx-auto mb-2 opacity-20" />
-                  <p className="text-[10px] font-black uppercase tracking-widest">Nenhuma foto adicional</p>
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {activeTab === 'results' && (
-            <motion.div
-              key="results"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="space-y-2"
-            >
-              {loading ? (
-                <div className="py-12 flex justify-center"><div className="w-6 h-6 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" /></div>
-              ) : runs.length > 0 ? (
-                runs.map(run => (
-                  <div key={run.id} className="bg-zinc-900/50 p-4 rounded-2xl border border-white/5 flex items-center justify-between">
-                    <div>
-                      <p className="text-[9px] font-black text-brand-primary uppercase italic">{run.config.mode === 'speed' ? `0-${run.config.target} KM/H` : `${run.config.target}M`}</p>
-                      <p className="text-[8px] text-zinc-500 font-bold">{new Date(run.timestamp).toLocaleDateString()}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xl font-display font-black italic text-white leading-none">{run.time.toFixed(2)}s</p>
-                      <p className="text-[9px] text-zinc-500 font-bold uppercase">{run.maxSpeed.toFixed(0)} KM/H</p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="py-12 text-center text-zinc-500">
-                   <p className="text-[10px] font-black uppercase tracking-widest">Nenhum teste registrado para este carro</p>
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+           {/* Quick Actions Footer */}
+           <div className="flex items-center justify-center gap-2 pt-4">
+              <button 
+                onClick={onBack}
+                className="flex-1 h-12 bg-zinc-900 border border-white/10 rounded-full font-black uppercase text-[10px] tracking-widest text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all active:scale-95"
+              >
+                Back
+              </button>
+              <button 
+                onClick={handleShareVehicle}
+                className="flex-[2] h-12 bg-brand-primary text-white rounded-full font-black uppercase text-[10px] tracking-widest shadow-lg shadow-red-600/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                <Share2Icon className="w-4 h-4" />
+                Continuar / Compartilhar
+              </button>
+           </div>
+        </div>
       </main>
     </div>
   );

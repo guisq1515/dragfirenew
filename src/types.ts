@@ -46,7 +46,6 @@ export interface RankingEntry {
   longitude: number;
   slope: number;
   vehicleId?: string;
-  vehicleName?: string;
 }
 
 export interface Challenge {
@@ -105,6 +104,7 @@ export interface Vehicle {
   model: string;
   year: string;
   nickname: string;
+  category?: string;
   photoURL?: string;
   photoURLs?: string[]; // Multiple photos for premium
   active?: boolean;
@@ -114,6 +114,11 @@ export interface Vehicle {
   maxSpeed?: number;    // KM/H
   mods?: string;        // Text list of modifications
   observations?: string;
+  engine?: string;
+  transmission?: string;
+  stockHp?: number;
+  stockTorque?: number;
+  stockWeight?: number;
   createdAt?: string;
   updatedAt?: string;
 }

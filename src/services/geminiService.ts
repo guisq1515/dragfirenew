@@ -53,3 +53,35 @@ export const editCarImage = async (base64Image: string, prompt: string) => {
     throw error;
   }
 };
+
+export const fetchVehicleSpecs = async (brand: string, model: string, year: string, spec?: string) => {
+  const ai = getGenAI();
+  if (!ai) throw new Error("Recurso de IA desativado.");
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-1.5-flash',
+      contents: [
+        {
+          parts: [
+            {
+              text: `You are a technical automotive data expert. Provide original factory specs for: ${brand} ${model} ${year}${spec ? ' version ' + spec : ''}. 
+              Focus on Brazilian market specifications if applicable.
+              Response MUST be only valid JSON in this format: {"hp": number, "torque": number, "weight": number}. 
+              Use CV for horsepower, kgfm for torque, and kg for weight. If unsure, provide mid-range estimates. Do NOT include any markdown or extra text.`,
+            },
+          ],
+        },
+      ],
+    });
+
+    const text = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    // Clean JSON if needed (some models might wrap it in ```json)
+    const jsonStr = text.replace(/```json|```|json/g, '').trim();
+    if (!jsonStr) throw new Error("IA retornou resposta vazia.");
+    return JSON.parse(jsonStr) as { hp: number, torque: number, weight: number };
+  } catch (error) {
+    console.error("Error fetching specs with Gemini:", error);
+    throw new Error("Não foi possível buscar os dados técnicos automaticamente.");
+  }
+};
