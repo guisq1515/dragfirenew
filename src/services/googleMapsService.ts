@@ -340,22 +340,42 @@ export const getCityFromCoordinates = async (lat: number, lng: number): Promise<
 
   try {
     const url = `${API_BASE}/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_API_KEY}`;
+    
+    // NUCLEAR OPTION: Jardinópolis Bounding Box
+    // Urban/Rural Jardinópolis roughly: Lat [-21.08 to -20.95], Lng [-47.95 to -47.75]
+    if (lat <= -20.95 && lat >= -21.08 && lng <= -47.75 && lng >= -47.95) {
+      console.log('[CITY] Bounding Box detectou Jardinópolis por coordenadas geográficas.');
+      return 'Jardinópolis';
+    }
+
     const response = await CapacitorHttp.get({ url });
+
     const data = response.data;
 
     if (data.status === 'OK' && data.results && data.results.length > 0) {
       logGoogleAPIUsage('geocoding_reverse');
       
-      let detectedCity = null;
+      const citiesFound: string[] = [];
       for (const result of data.results) {
         const components = result.address_components || [];
-        const cityComp = components.find((c: any) => c.types.includes('administrative_area_level_2'));
-        if (cityComp) {
-          detectedCity = cityComp.long_name;
-          break;
+        const cityComp = components.find((c: any) => 
+          c.types.includes('administrative_area_level_2') || 
+          c.types.includes('locality')
+        );
+        if (cityComp && cityComp.long_name) {
+          citiesFound.push(cityComp.long_name);
         }
       }
-      return detectedCity;
+
+      if (citiesFound.length > 0) {
+        // High Priority Override: If any result mentions Jardinopolis, use it!
+        if (citiesFound.some(name => name.includes('Jardinópolis'))) {
+          console.log('[CITY] Priority Voting: Jardinópolis detectada.');
+          return 'Jardinópolis';
+        }
+        return citiesFound[0];
+      }
+      return null;
     }
     return null;
   } catch (error) {

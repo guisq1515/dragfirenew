@@ -45,8 +45,10 @@ import {
 import { 
   ref, 
   uploadBytes, 
+  uploadBytesResumable,
   getDownloadURL,
-  deleteObject
+  deleteObject,
+  uploadString
 } from 'firebase/storage';
 import { auth, db, storage, googleProvider } from './firebase';
 import { 
@@ -113,7 +115,11 @@ import {
   Flag,
   Home,
   Gauge,
-  LayoutDashboard
+  LayoutDashboard,
+  Activity,
+  History,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { PerformanceChart } from './components/PerformanceChart';
 import { TripAnalysis } from './components/TripAnalysis';
@@ -127,7 +133,19 @@ import { APP_VERSION } from './versions';
 import { useCorneringAssistant } from './hooks/useCorneringAssistant';
 import { CorneringAssistantHUD } from './components/CorneringAssistantHUD';
 import { MiniCorneringWidget } from './components/MiniCorneringWidget';
+import { powerService } from './services/powerService';
 import { KeepAwake } from '@capgo/capacitor-keep-awake';
+
+// Helper to convert Base64 to Uint8Array for stable Capacitor uploads
+const base64ToUint8Array = (base64String: string): Uint8Array => {
+  const binaryString = window.atob(base64String);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+};
 
 // --- Error Boundary ---
 class ErrorBoundary extends React.Component<any, any> {
@@ -255,7 +273,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 const TERMS_VERSION = '1.0.0';
 const ADMIN_EMAILS = ['guisq1515@gmail.com'];
 
-type Screen = 'home' | 'timer' | 'challenge' | 'duel-result' | 'settings' | 'login' | 'terms' | 'vehicle-settings' | 'profile-settings' | 'regional-ranking' | 'history' | 'gps-guide' | 'custom-setup' | 'trip-view' | 'fuel-calculator' | 'public-profile' | 'feed' | 'search' | 'ai-editor' | 'fuel-stations' | 'anp-import' | 'admin-dashboard' | 'cornering-assistant';
+type Screen = 'home' | 'timer' | 'challenge' | 'duel-result' | 'settings' | 'login' | 'terms' | 'vehicle-settings' | 'profile-settings' | 'regional-ranking' | 'history' | 'gps-guide' | 'custom-setup' | 'trip-view' | 'fuel-calculator' | 'public-profile' | 'feed' | 'search' | 'ai-editor' | 'fuel-stations' | 'anp-import' | 'admin-dashboard' | 'cornering-assistant' | 'vehicle-catalog';
 
 function GPSGuide({ onBack }: { onBack: () => void }) {
   const tips = [
@@ -544,13 +562,26 @@ function HistoryItem({ run, isPremium, onDelete }: HistoryItemProps) {
                     </div>
                     <div className="flex justify-between items-end">
                       <div>
+                        <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1 font-display">Potência (CV)</span>
+                        {!isPremium ? (
+                          <div className="flex items-center gap-1.5 text-yellow-500/40">
+                            <Lock className="w-3.5 h-3.5" />
+                            <span className="text-[8px] font-black uppercase tracking-tighter">Premium</span>
+                          </div>
+                        ) : (
+                          <p className="text-[8px] font-black text-brand-primary uppercase italic leading-none animate-pulse">
+                            Em Desenvolvimento
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right">
                         <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Pico G</span>
                         <p className="text-lg font-display font-black text-white italic leading-none">{run.maxG?.toFixed(2)}G</p>
                       </div>
-                      <div className="text-right">
-                        <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Precisão</span>
-                        <p className="text-xs font-bold text-zinc-400">{run.avgAccuracy?.toFixed(1)}m</p>
-                      </div>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-white/5">
+                      <span className="text-[10px] font-black text-zinc-600 uppercase">Precisão</span>
+                      <p className="text-xs font-bold text-zinc-500">{run.avgAccuracy?.toFixed(1)}m</p>
                     </div>
                   </div>
               </div>
@@ -573,11 +604,72 @@ function HistoryView({
   user: FirebaseUser | null,
   isGuest?: boolean,
   isPremium?: boolean,
+  isAdmin?: boolean,
   onBack: () => void 
 }) {
   const [runs, setRuns] = useState<RunResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSyncRanking = async () => {
+    if (!user || syncing) return;
+    setSyncing(true);
+    setUploadStatus('Sincronizando Ranking...');
+    
+    let syncedCount = 0;
+    try {
+      // 1. Get current rankings to avoid duplicates (simplified check)
+      const existingQ = query(collection(db, 'rankings'), where('uid', '==', user.uid));
+      const existingSnap = await getDocs(existingQ);
+      const existingTimestamps = new Set(existingSnap.docs.map(d => d.data().timestamp));
+
+      // 2. Filter valid runs from local state
+      const validRuns = runs.filter(r => {
+        const isStandard0to100 = r.config.mode === 'speed' && r.config.target === 100;
+        const isStandard201m = r.config.mode === 'distance' && r.config.target === 201;
+        
+        return (isStandard0to100 || isStandard201m) && 
+               r.isValidSlope && 
+               r.location && 
+               (r.avgAccuracy ?? 100) < 18 &&
+               !existingTimestamps.has(r.timestamp);
+      });
+
+      if (validRuns.length === 0) {
+        alert('Nenhuma puxada nova válida para sincronizar.');
+        return;
+      }
+
+      // 3. Batch upload (conceptual, using individual adds for simplicity and progress feedback)
+      for (const r of validRuns) {
+        const rankingData: Omit<RankingEntry, 'id'> = {
+          uid: user.uid,
+          userName: user.displayName || 'Piloto',
+          userPhoto: user.photoURL || undefined,
+          vehicleName: 'Sync Histórico', // We don't have the full vehicle object here easily, but we can improve this
+          vehicleType: r.config.mode === 'distance' ? 'car' : 'car', 
+          time: r.time,
+          maxSpeed: r.maxSpeed,
+          timestamp: r.timestamp,
+          category: r.config.mode === 'speed' ? '0-100' : '201m',
+          latitude: r.location.latitude,
+          longitude: r.location.longitude,
+          slope: r.slope || 0
+        };
+        await addDoc(collection(db, 'rankings'), rankingData);
+        syncedCount++;
+      }
+
+      alert(`${syncedCount} puxadas sincronizadas com sucesso!`);
+    } catch (err: any) {
+      console.error("Sync error:", err);
+      alert("Erro na sincronização: " + err.message);
+    } finally {
+      setSyncing(false);
+      setUploadStatus('');
+    }
+  };
 
   useEffect(() => {
     if (isGuest) {
@@ -648,9 +740,21 @@ function HistoryView({
   return (
     <div className="flex-1 flex flex-col p-6 pb-32 space-y-6 overflow-y-auto bg-zinc-950">
       <div className="flex items-center gap-4 bg-zinc-900/50 p-4 rounded-2xl border border-white/5">
-        <button onClick={onBack} className="p-2 bg-zinc-800 rounded-lg text-zinc-400">
-          <ChevronLeft className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-3">
+          {isAdmin && (
+            <button 
+              onClick={handleSyncRanking}
+              disabled={syncing}
+              className={`p-2 rounded-lg flex items-center gap-2 text-[9px] font-black uppercase tracking-widest transition-all ${syncing ? 'bg-zinc-800 text-zinc-600' : 'bg-brand-primary/20 text-brand-primary border border-brand-primary/30 active:scale-95'}`}
+            >
+              <RefreshCcw className={`w-3 h-3 ${syncing ? 'animate-spin' : ''}`} />
+              {syncing ? 'Sincronizando...' : 'Sinc Ranking'}
+            </button>
+          )}
+          <button onClick={onBack} className="p-2 bg-zinc-900 rounded-lg text-zinc-400">
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+        </div>
         <div>
           <h2 className="text-xl font-display font-black italic text-white leading-none">HISTÓRICO</h2>
           <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest mt-1">Suas puxadas recentes</p>
@@ -770,27 +874,36 @@ function SearchUsers({
       return;
     }
 
-    const delayDebounceFn = setTimeout(async () => {
-      setLoading(true);
-      try {
-        // Simple prefix search for display names
-        const q = query(
-          collection(db, 'users'),
-          where('displayName', '>=', searchTerm),
-          where('displayName', '<=', searchTerm + '\uf8ff'),
-          limit(20)
-        );
-        const snapshot = await getDocs(q);
-        const users = snapshot.docs
-          .map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile))
-          .filter(u => u.uid !== currentUserId);
-        setResults(users);
-      } catch (error) {
-        console.error("Error searching users:", error);
-      } finally {
-        setLoading(false);
-      }
-    }, 500);
+      const delayDebounceFn = setTimeout(async () => {
+        setLoading(true);
+        try {
+          let q;
+          if (searchTerm.startsWith('#')) {
+            const handleSearch = searchTerm.substring(1).toLowerCase();
+            q = query(
+              collection(db, 'users'),
+              where('handle', '==', handleSearch),
+              limit(10)
+            );
+          } else {
+            q = query(
+              collection(db, 'users'),
+              where('displayName', '>=', searchTerm),
+              where('displayName', '<=', searchTerm + '\uf8ff'),
+              limit(20)
+            );
+          }
+          const snapshot = await getDocs(q);
+          const users = snapshot.docs
+            .map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile))
+            .filter(u => u.uid !== currentUserId);
+          setResults(users);
+        } catch (error) {
+          console.error("Error searching users:", error);
+        } finally {
+          setLoading(false);
+        }
+      }, 500);
 
     return () => clearTimeout(delayDebounceFn);
   }, [searchTerm, currentUserId]);
@@ -860,21 +973,112 @@ function SearchUsers({
 }
 
 function Feed() {
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchFeed = async () => {
+      if (!auth.currentUser) return;
+      setLoading(true);
+      try {
+        // 1. Get follow list
+        const followQ = query(collection(db, 'follows'), where('followerId', '==', auth.currentUser.uid));
+        const followSnap = await getDocs(followQ);
+        const followingIds = followSnap.docs.map(d => d.data().followingId);
+        
+        // Add self to feed as well
+        followingIds.push(auth.currentUser.uid);
+
+        if (followingIds.length === 0) {
+          setActivities([]);
+          setLoading(false);
+          return;
+        }
+
+        // 2. Get activities (Firestore limit 10 for 'in' operator)
+        // Divide in chunks if more than 10, but for now let's limit to 10 followings
+        const activityQ = query(
+          collection(db, 'activities'),
+          where('uid', 'in', followingIds.slice(0, 10)),
+          orderBy('timestamp', 'desc'),
+          limit(20)
+        );
+        const activitySnap = await getDocs(activityQ);
+        setActivities(activitySnap.docs.map(d => ({ id: d.id, ...d.data() } as Activity)));
+      } catch (e) {
+        console.error("Error fetching feed:", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchFeed();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex flex-col bg-zinc-950 p-6 items-center justify-center">
+        <div className="w-6 h-6 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex-1 flex flex-col bg-zinc-950 p-6 space-y-6 items-center justify-center pb-32">
-      <div className="w-20 h-20 bg-brand-primary/10 rounded-3xl flex items-center justify-center border border-brand-primary/20 mb-4">
-        <Play className="w-10 h-10 text-brand-primary fill-current" />
+    <div className="flex-1 flex flex-col bg-zinc-950 overflow-y-auto pb-32">
+      <div className="p-6 pb-2 space-y-2">
+        <h2 className="text-2xl font-display font-black italic text-white uppercase tracking-tighter">FEED SOCIAL</h2>
+        <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em]">Atividades da Pista</p>
       </div>
-      <div className="text-center space-y-2">
-        <h2 className="text-2xl font-display font-black italic text-white uppercase tracking-tighter">FEED DE ATIVIDADES</h2>
-        <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] max-w-[200px] mx-auto">
-          Em breve você verá as puxadas e conquistas dos seus amigos aqui!
-        </p>
-      </div>
-      <div className="w-full max-w-xs p-6 bg-zinc-900/50 border border-white/5 rounded-3xl border-dashed">
-        <p className="text-[10px] text-zinc-600 font-bold uppercase tracking-widest text-center">
-          Funcionalidade em desenvolvimento
-        </p>
+
+      <div className="px-6 space-y-4 mt-4">
+        {activities.length > 0 ? (
+          activities.map((act) => (
+            <motion.div
+              key={act.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-zinc-900/50 border border-white/5 rounded-[24px] p-4 space-y-4"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full overflow-hidden bg-zinc-800 shrink-0">
+                  {act.userPhoto ? (
+                    <img src={act.userPhoto} alt={act.userName} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center"><User className="w-5 h-5 text-zinc-600" /></div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                   <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-black text-white italic uppercase tracking-tight truncate">{act.userName}</span>
+                      {act.handle && <span className="text-[9px] text-brand-primary font-black italic">#{act.handle}</span>}
+                   </div>
+                   <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">{new Date(act.timestamp).toLocaleDateString()} • {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                </div>
+              </div>
+
+              <div className="bg-zinc-950/50 rounded-2xl p-4 border border-white/5 flex items-center gap-4">
+                 <div className="w-12 h-12 bg-brand-primary/10 rounded-xl flex items-center justify-center shrink-0">
+                    {act.type === 'new_run' ? <Zap className="w-6 h-6 text-brand-primary fill-current" /> : <Car className="w-6 h-6 text-brand-primary" />}
+                 </div>
+                 <div className="flex-1 min-w-0">
+                    <p className="text-[8px] font-black text-brand-primary uppercase tracking-widest mb-0.5 italic">
+                       {act.type === 'new_run' ? 'Novo Resultado' : 'Novo Veículo na Garagem'}
+                    </p>
+                    <h4 className="text-sm font-black text-white uppercase italic tracking-tighter truncate">
+                       {act.data.vehicleName || 'Veículo'}
+                    </h4>
+                    <p className="text-[10px] text-zinc-400 font-bold">
+                       {act.type === 'new_run' ? `${act.data.target}: ${act.data.time}` : act.data.description}
+                    </p>
+                 </div>
+              </div>
+            </motion.div>
+          ))
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 opacity-30">
+             <Users className="w-12 h-12 text-zinc-600" />
+             <p className="text-[10px] font-black uppercase tracking-widest max-w-[150px]">O feed está vazio. Siga outros pilotos para ver as atividades!</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -889,7 +1093,8 @@ function PublicProfile({
   uid: string, 
   currentUserId: string | undefined,
   onBack: () => void,
-  onEditVehicles?: () => void
+  onEditVehicles?: () => void,
+  onViewVehicle?: (v: Vehicle) => void
 }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -904,24 +1109,30 @@ function PublicProfile({
       try {
         const profileDoc = await getDoc(doc(db, 'users', uid));
         if (profileDoc.exists()) {
-          setProfile(profileDoc.data() as UserProfile);
+          const data = profileDoc.data() as UserProfile;
+          setProfile(data);
+          
+          // Enhanced Privacy Check
+          const canViewContent = currentUserId === uid || isFollowing || !data.privacySettings?.isPrivate;
+          
+          if (canViewContent) {
+            const vehiclesQuery = query(collection(db, 'vehicles'), where('uid', '==', uid));
+            const vehiclesSnap = await getDocs(vehiclesQuery);
+            setVehicles(vehiclesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Vehicle)));
+
+            const runsQuery = query(collection(db, 'runs'), where('uid', '==', uid), limit(20));
+            const runsSnap = await getDocs(runsQuery);
+            const fetchedRuns = runsSnap.docs
+              .map(d => ({ id: d.id, ...d.data() } as RunResult))
+              .sort((a, b) => {
+                const tA = (a.timestamp as any)?.seconds || 0;
+                const tB = (b.timestamp as any)?.seconds || 0;
+                return tB - tA;
+              })
+              .slice(0, 10);
+            setRuns(fetchedRuns);
+          }
         }
-
-        const vehiclesQuery = query(collection(db, 'vehicles'), where('uid', '==', uid));
-        const vehiclesSnap = await getDocs(vehiclesQuery);
-        setVehicles(vehiclesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Vehicle)));
-
-        const runsQuery = query(collection(db, 'runs'), where('uid', '==', uid), limit(20));
-        const runsSnap = await getDocs(runsQuery);
-        const fetchedRuns = runsSnap.docs
-          .map(d => ({ id: d.id, ...d.data() } as RunResult))
-          .sort((a, b) => {
-            const tA = (a.timestamp as any)?.seconds || 0;
-            const tB = (b.timestamp as any)?.seconds || 0;
-            return tB - tA;
-          })
-          .slice(0, 10);
-        setRuns(fetchedRuns);
 
         if (currentUserId) {
           const followDoc = await getDoc(doc(db, 'follows', `${currentUserId}_${uid}`));
@@ -1077,6 +1288,9 @@ function PublicProfile({
             <h2 className="text-2xl font-display font-black italic text-white leading-none">
               {profile.displayName || 'Piloto Anônimo'}
             </h2>
+            {profile.handle && (
+              <p className="w-full text-xs text-brand-primary font-black italic tracking-widest mt-1 uppercase">#{profile.handle}</p>
+            )}
             {profile.isVerified && (
               <CheckCircle2 className="w-5 h-5 text-blue-400 fill-blue-400/10" />
             )}
@@ -1109,7 +1323,7 @@ function PublicProfile({
         </div>
 
         {/* Vehicles & Runs (Privacy Check) */}
-        {profile.isPrivate && !isFollowing && currentUserId !== uid ? (
+        {((profile.privacySettings?.isPrivate || profile.isPrivate) && !isFollowing && currentUserId !== uid) ? (
           <div className="flex flex-col items-center justify-center py-12 px-6 text-center space-y-4 bg-zinc-900/30 rounded-3xl border border-white/5">
             <div className="w-16 h-16 bg-zinc-900 rounded-full flex items-center justify-center">
               <Lock className="w-8 h-8 text-zinc-700" />
@@ -1142,7 +1356,11 @@ function PublicProfile({
               
               <div className="grid grid-cols-1 gap-3">
                 {vehicles.map(v => (
-                  <div key={v.id} className="glass-panel rounded-2xl p-4 border-white/5 flex flex-col gap-4">
+                  <button 
+                    key={v.id} 
+                    onClick={() => onViewVehicle?.(v)}
+                    className="glass-panel rounded-2xl p-4 border-white/5 flex flex-col gap-4 text-left active:scale-[0.98] transition-all"
+                  >
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-xl bg-zinc-900 flex items-center justify-center overflow-hidden border border-white/5">
                         {v.photoURL ? (
@@ -1156,18 +1374,7 @@ function PublicProfile({
                         <p className="text-[10px] text-zinc-500 font-bold uppercase">{v.brand} {v.model} • {v.year}</p>
                       </div>
                     </div>
-                    
-                    {/* Vehicle Photos (Premium) */}
-                    {v.photoURLs && v.photoURLs.length > 0 && (
-                      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                        {v.photoURLs.map((url, idx) => (
-                          <div key={idx} className="flex-shrink-0 w-24 h-24 rounded-xl overflow-hidden border border-white/5">
-                            <img src={url} alt={`Vehicle ${idx}`} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -1224,7 +1431,14 @@ function RegionalRanking({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, 'rankings'), orderBy('time', 'asc'), limit(100));
+    setLoading(true);
+    const q = query(
+      collection(db, 'rankings'), 
+      where('category', '==', filter.includes('201') || filter === 'regional-201' ? '201m' : '0-100'),
+      orderBy('time', 'asc'), 
+      limit(100)
+    );
+    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RankingEntry));
       setRankings(data);
@@ -1234,7 +1448,7 @@ function RegionalRanking({
       setLoading(false);
     });
     return () => unsubscribe();
-  }, []);
+  }, [filter]); // Re-fetch when filter changes
 
   const filteredRankings = useMemo(() => {
     let result = rankings;
@@ -1277,13 +1491,13 @@ function RegionalRanking({
             onClick={() => setFilter('regional')}
             className={`flex-1 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${filter === 'regional' ? 'bg-brand-primary text-white shadow-lg' : 'text-zinc-500'}`}
           >
-            20km
+            0-100 (20km)
           </button>
           <button 
-            onClick={() => setFilter('regional-100')}
-            className={`flex-1 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${filter === 'regional-100' ? 'bg-brand-primary text-white shadow-lg' : 'text-zinc-500'}`}
+            onClick={() => setFilter('regional-201')}
+            className={`flex-1 py-2 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all ${filter === 'regional-201' ? 'bg-brand-primary text-white shadow-lg' : 'text-zinc-500'}`}
           >
-            100km
+            201m (20km)
           </button>
           <button 
             onClick={() => setFilter('general')}
@@ -1385,7 +1599,16 @@ function ProfileSettings({
   const [instagram, setInstagram] = useState(userProfile?.instagram || '');
   const [isPrivate, setIsPrivate] = useState(userProfile?.isPrivate || false);
   const [photoURL, setPhotoURL] = useState(user?.photoURL || '');
+  const [handle, setHandle] = useState(userProfile?.handle || '');
+  const [handleError, setHandleError] = useState<string | null>(null);
+  const [privacySettings, setPrivacySettings] = useState(userProfile?.privacySettings || {
+    isPrivate: false,
+    showHistory: true,
+    showGarage: true,
+    showRankings: true
+  });
   const [uploading, setUploading] = useState(false);
+  const [isCheckingHandle, setIsCheckingHandle] = useState(false);
   const [followRequests, setFollowRequests] = useState<any[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
 
@@ -1463,9 +1686,38 @@ function ProfileSettings({
     }
   };
 
+  const checkHandle = async (val: string) => {
+    if (!val || val === userProfile?.handle) {
+      setHandleError(null);
+      return;
+    }
+    setIsCheckingHandle(true);
+    try {
+      const q = query(collection(db, 'users'), where('handle', '==', val));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        setHandleError('Este identificador já está sendo usado por outro piloto.');
+      } else {
+        setHandleError(null);
+      }
+    } catch (e) {
+      console.error("Error checking handle:", e);
+    } finally {
+      setIsCheckingHandle(false);
+    }
+  };
+
   const handleSubmit = (e: any) => {
     e.preventDefault();
-    onUpdate({ displayName, bio, instagram, isPrivate });
+    if (handleError) return;
+    onUpdate({ 
+      displayName, 
+      bio, 
+      instagram, 
+      isPrivate: privacySettings.isPrivate,
+      handle: handle.toLowerCase().replace(/[^a-z0-9_]/g, ''),
+      privacySettings 
+    });
     onBack();
   };
 
@@ -1615,8 +1867,29 @@ function ProfileSettings({
           <p className="text-[9px] text-zinc-600 text-right">{bio.length}/150</p>
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Instagram</label>
+        <div className="space-y-4">
+          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Racing ID & Social</label>
+          
+          <div className="space-y-1.5">
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-brand-primary text-lg">#</span>
+              <input 
+                type="text"
+                value={handle}
+                onChange={e => {
+                  const val = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+                  setHandle(val);
+                  checkHandle(val);
+                }}
+                placeholder="seu_nome_de_piloto"
+                className={`w-full bg-zinc-900 border ${handleError ? 'border-red-500' : 'border-white/5'} rounded-xl py-4 pl-10 pr-4 text-white placeholder:text-zinc-700 focus:outline-none focus:border-brand-primary/50 transition-colors uppercase font-black italic tracking-tighter`}
+              />
+            </div>
+            {isCheckingHandle && <p className="text-[8px] text-zinc-500 animate-pulse px-1">Verificando disponibilidade...</p>}
+            {handleError && <p className="text-[8px] text-red-500 px-1">{handleError}</p>}
+            {!handleError && handle && <p className="text-[8px] text-green-500 px-1">Identificador disponível!</p>}
+          </div>
+
           <div className="relative">
             <Instagram className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
             <input 
@@ -1626,6 +1899,42 @@ function ProfileSettings({
               placeholder="@seu_perfil"
               className="w-full bg-zinc-900 border border-white/5 rounded-xl py-4 pl-12 pr-4 text-white placeholder:text-zinc-700 focus:outline-none focus:border-brand-primary/50 transition-colors"
             />
+          </div>
+        </div>
+
+        {/* Central de Privacidade */}
+        <div className="space-y-4 pt-4 border-t border-white/5">
+          <div className="flex items-center gap-2 px-1">
+            <Shield className="w-4 h-4 text-brand-primary" />
+            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Central de Privacidade</label>
+          </div>
+
+          <div className="space-y-2">
+            {[
+              { id: 'isPrivate', label: 'Conta Privada', desc: 'Apenas seguidores podem ver seu perfil completo', icon: Lock },
+              { id: 'showHistory', label: 'Mostrar Histórico', desc: 'Permitir que outros vejam suas puxadas salvas', icon: History },
+              { id: 'showGarage', label: 'Mostrar Garagem', desc: 'Permitir que outros vejam seus veículos', icon: Car },
+              { id: 'showRankings', label: 'Aparecer no Ranking', desc: 'Permitir que seu tempo apareça no ranking global', icon: Trophy }
+            ].map((item) => (
+              <div 
+                key={item.id}
+                onClick={() => setPrivacySettings({ ...privacySettings, [item.id]: !((privacySettings as any)[item.id]) })}
+                className="flex items-center justify-between p-4 bg-zinc-900 border border-white/5 rounded-2xl cursor-pointer hover:border-brand-primary/30 transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${((privacySettings as any)[item.id]) ? 'bg-brand-primary/10 text-brand-primary' : 'bg-zinc-800 text-zinc-500'}`}>
+                    <item.icon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white">{item.label}</p>
+                    <p className="text-[9px] text-zinc-500 font-medium">{item.desc}</p>
+                  </div>
+                </div>
+                <div className={`w-10 h-5 rounded-full p-1 transition-colors ${((privacySettings as any)[item.id]) ? 'bg-brand-primary' : 'bg-zinc-800'}`}>
+                  <div className={`w-3 h-3 bg-white rounded-full transition-transform ${((privacySettings as any)[item.id]) ? 'translate-x-5' : 'translate-x-0'}`} />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -2059,176 +2368,112 @@ function VehicleSettings({
 }) {
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const [uploadStatus, setUploadStatus] = useState<string>('');
   const canAddMore = isPremium || vehicles.length < 1;
-  const [formData, setFormData] = useState<Vehicle>({
-    type: 'car',
-    brand: '',
-    model: '',
-    year: YEARS[0],
-    nickname: ''
-  });
+  const [formData, setFormData] = useState<Vehicle>({base_vehicle});
+  const [activeTab, setActiveTab] = useState<'basics' | 'technical'>('basics');
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement> | null) => {
     let blob: Blob | null = null;
+    let dataToUpload: string | null = null;
+    let isBase64Str = false;
     let downloadURL = '';
 
     setIsUploading(true);
     
     // Safety timeout (30s)
     const timeout = setTimeout(() => {
-      if (isUploading) {
-        setIsUploading(false);
-        alert('O carregamento demorou demais. Verifique sua conexão e tente novamente.');
-      }
+      setIsUploading(false);
+      // We don't alert here because if it finally finishes, it will just update the state.
+      // But we must release the UI.
     }, 30000);
 
     try {
-      if (Capacitor.isNativePlatform() && !e) {
-        const photo = await Camera.getPhoto({
-          quality: 60,
-          allowEditing: false,
-          resultType: CameraResultType.Uri,
-          source: CameraSource.Photos,
-          width: 800,
-          height: 800
-        });
-
-        if (!photo.webPath) throw new Error('Falha ao obter caminho da imagem');
-        const response = await fetch(photo.webPath);
-        blob = await response.blob();
-      } else if (e) {
-        const file = e.target.files?.[0];
-        if (!file) {
-          setIsUploading(false);
-          clearTimeout(timeout);
-          return;
-        }
-
-        const img = new Image();
-        img.src = URL.createObjectURL(file);
-        await new Promise((resolve) => (img.onload = resolve));
-
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 800;
-        const MAX_HEIGHT = 800;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-        } else {
-          if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-
-        blob = await new Promise<Blob | null>((resolve) => 
-          canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.6)
-        );
-      }
-
-      if (!blob || !auth.currentUser) throw new Error('Falha ao processar arquivo');
-
-      const storageRef = ref(storage, `vehicles/${auth.currentUser.uid}/${Date.now()}.jpg`);
+      if (!auth.currentUser) throw new Error('Usuário não autenticado.');
       
-      if (formData.photoURL) {
-        try {
-          const oldRef = ref(storage, formData.photoURL);
-          await deleteObject(oldRef);
-        } catch (err) {
-          console.warn('Could not delete old photo:', err);
-        }
-      }
-
-      const snapshot = await uploadBytes(storageRef, blob);
-      downloadURL = await getDownloadURL(snapshot.ref);
+      setUploadStatus('[S1] Abrindo Galeria...');
       
-      setFormData({ ...formData, photoURL: downloadURL });
-    } catch (error) {
-      console.error('Photo upload error:', error);
-      alert('Erro ao carregar foto. Tente novamente.');
+      const photo = await Camera.getPhoto({
+        quality: 50,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl, 
+        source: CameraSource.Photos,
+        width: 600,
+        height: 600
+      });
+
+      if (!photo.dataUrl) throw new Error('Câmera não retornou dados.');
+      
+      setUploadStatus('[S2] Processando...');
+      // Storage-Free Logic: Just use the Base64 Data URL directly
+      setFormData({ ...formData, photoURL: photo.dataUrl });
+      
+      setUploadStatus('Sucesso!');
+    } catch (error: any) {
+      console.error('Photo Error:', error);
+      alert(`Erro ao processar foto: ${error.message || 'Erro desconhecido'}`);
     } finally {
       clearTimeout(timeout);
       setIsUploading(false);
+      setUploadProgress(0);
+      setUploadStatus('');
     }
   };
 
   const handleAdditionalPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement> | null) => {
     if (!auth.currentUser || !isPremium) return;
     
-    let blob: Blob | null = null;
     setIsUploading(true);
-
-    const timeout = setTimeout(() => {
-      if (isUploading) setIsUploading(false);
-    }, 30000);
+    const timeout = setTimeout(() => setIsUploading(false), 30000);
 
     try {
-       if (Capacitor.isNativePlatform() && !e) {
+      setUploadStatus('[S1] Abrindo Galeria...');
+      let dataUrlResult = '';
+
+      if (Capacitor.isNativePlatform() && !e) {
         const photo = await Camera.getPhoto({
-          quality: 60,
+          quality: 40,
           allowEditing: false,
-          resultType: CameraResultType.Uri,
+          resultType: CameraResultType.DataUrl,
           source: CameraSource.Photos,
-          width: 800,
-          height: 800
+          width: 600,
+          height: 600
         });
-        if (!photo.webPath) throw new Error('Caminho não encontrado');
-        const response = await fetch(photo.webPath);
-        blob = await response.blob();
+        dataUrlResult = photo.dataUrl || '';
       } else if (e) {
-        const file = e.target.files?.[0];
-        if (!file) {
-          setIsUploading(false);
-          clearTimeout(timeout);
-          return;
-        }
-
-        const img = new Image();
-        img.src = URL.createObjectURL(file);
-        await new Promise((resolve) => (img.onload = resolve));
-
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 800;
-        const MAX_HEIGHT = 800;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-        } else {
-          if (height > MAX_HEIGHT) { width *= MAX_HEIGHT / height; height = MAX_HEIGHT; }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-
-        blob = await new Promise<Blob | null>((resolve) => 
-          canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.6)
-        );
+          const file = e.target.files?.[0];
+          if (file) {
+            const reader = new FileReader();
+            dataUrlResult = await new Promise((resolve) => {
+              reader.onload = () => resolve(reader.result as string);
+              reader.readAsDataURL(file);
+            });
+          }
       }
 
-      if (!blob) throw new Error('Blob nulo');
-
-      const storageRef = ref(storage, `vehicles/${auth.currentUser.uid}/${Date.now()}_extra.jpg`);
-      const snapshot = await uploadBytes(storageRef, blob);
-      const downloadURL = await getDownloadURL(snapshot.ref);
+      if (!dataUrlResult) throw new Error('Câmera não retornou dados.');
       
-      setFormData({ 
-        ...formData, 
-        photoURLs: [...(formData.photoURLs || []), downloadURL] 
+      setUploadStatus('[S2] Processando...');
+      const currentPhotos = formData.photoURLs || [];
+      if (currentPhotos.length >= 3) {
+        alert('Limite de 3 fotos extras atingido.');
+        return;
+      }
+
+      setFormData({
+        ...formData,
+        photoURLs: [...currentPhotos, dataUrlResult]
       });
-    } catch (error) {
-      console.error('Extra photo upload error:', error);
-      alert('Erro ao carregar foto extra.');
+
+      setUploadStatus('Sucesso!');
+    } catch (error: any) {
+      console.error('Extra Photo Error:', error);
+      alert(`Erro ao processar foto: ${error.message || 'Erro desconhecido'}`);
     } finally {
       clearTimeout(timeout);
       setIsUploading(false);
+      setUploadStatus('');
     }
   };
 
@@ -2345,6 +2590,15 @@ function VehicleSettings({
               </div>
               <div className="flex items-center gap-2">
                 <button 
+                  onClick={() => {
+                    setCatalogVehicle(v);
+                    setScreen('vehicle-catalog');
+                  }}
+                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-[8px] font-black uppercase tracking-widest text-zinc-400 rounded-lg border border-white/5 active:scale-95 transition-all"
+                >
+                  VER CATÁLOGO
+                </button>
+                <button 
                   onClick={() => handleEdit(v)}
                   className="p-2 bg-zinc-800 rounded-lg text-zinc-400 hover:text-white"
                 >
@@ -2390,12 +2644,29 @@ function VehicleSettings({
           <h2 className="text-xl font-display font-black italic text-white leading-none">
             {editingVehicle.id ? 'EDITAR VEÍCULO' : 'NOVO VEÍCULO'}
           </h2>
-          <p className="text-xs text-brand-primary font-bold uppercase tracking-widest mt-1">Dados Técnicos</p>
+          <p className="text-xs text-brand-primary font-bold uppercase tracking-widest mt-1">Configurações</p>
         </div>
       </div>
 
+      <div className="flex gap-2 bg-zinc-900 border border-white/5 p-1 rounded-xl">
+        <button
+          onClick={() => setActiveTab('basics')}
+          className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === 'basics' ? 'bg-brand-primary text-white shadow-lg shadow-red-600/20' : 'text-zinc-500 hover:text-white'}`}
+        >
+          Informações Básicas
+        </button>
+        <button
+          onClick={() => setActiveTab('technical')}
+          className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === 'technical' ? 'bg-brand-primary text-white shadow-lg shadow-red-600/20' : 'text-zinc-500 hover:text-white'}`}
+        >
+          Informações Técnicas
+        </button>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="flex flex-col items-center gap-4 py-2">
+        {activeTab === 'basics' ? (
+          <>
+            <div className="flex flex-col items-center gap-4 py-2">
           <div className="relative group">
             <div 
               onClick={() => {
@@ -2418,8 +2689,16 @@ function VehicleSettings({
                 <CameraIcon className="w-8 h-8 text-zinc-700 hover:text-brand-primary/50 transition-colors" />
               )}
               {isUploading && (
-                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2">
                   <div className="w-6 h-6 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
+                  {uploadStatus && (
+                     <span className="text-[10px] font-black text-white uppercase tracking-widest px-2 text-center leading-tight">
+                       {uploadStatus}
+                     </span>
+                  )}
+                  {uploadProgress > 0 && (
+                    <span className="text-[10px] font-black text-brand-primary">{uploadProgress}%</span>
+                  )}
                 </div>
               )}
               <input 
@@ -2475,6 +2754,81 @@ function VehicleSettings({
             className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-white placeholder:text-zinc-700 focus:outline-none focus:border-brand-primary/50 transition-colors"
           />
         </div>
+          </>
+        ) : (
+          <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300">
+             <div className="bg-zinc-900/50 p-6 rounded-[24px] border border-white/5 space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-brand-primary/10 flex items-center justify-center">
+                    <Zap className="w-5 h-5 text-brand-primary" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-white uppercase italic tracking-tighter">Performance de Fábrica</h4>
+                    <p className="text-[10px] text-zinc-500 font-bold uppercase">Configure o potencial do seu motor</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest px-1">Potência (CV)</label>
+                    <input 
+                      type="number"
+                      value={formData.hp || ''}
+                      onChange={e => setFormData({...formData, hp: parseInt(e.target.value)})}
+                      placeholder="Ex: 230"
+                      className="w-full bg-zinc-950 border border-white/5 rounded-xl p-3 text-white placeholder:text-zinc-800 focus:outline-none focus:border-brand-primary/50 transition-colors font-black italic"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest px-1">Velo. Máx (kM/h)</label>
+                    <input 
+                      type="number"
+                      value={formData.maxSpeed || ''}
+                      onChange={e => setFormData({...formData, maxSpeed: parseInt(e.target.value)})}
+                      placeholder="Ex: 250"
+                      className="w-full bg-zinc-950 border border-white/5 rounded-xl p-3 text-white placeholder:text-zinc-800 focus:outline-none focus:border-brand-primary/50 transition-colors font-black italic"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest px-1">Nível de Preparação (STAGE)</label>
+                  <div className="grid grid-cols-4 gap-2">
+                    {['Stock', 'Stage 1', 'Stage 2', 'Stage 3'].map((stage) => (
+                      <button
+                        key={stage}
+                        type="button"
+                        onClick={() => setFormData({...formData, stage})}
+                        className={`py-2 px-1 rounded-lg text-[8px] font-black uppercase tracking-widest border transition-all ${formData.stage === stage ? 'bg-brand-primary border-brand-primary text-white' : 'bg-zinc-950 border-white/5 text-zinc-600'}`}
+                      >
+                        {stage}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                   <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest px-1">Modificações / Setup</label>
+                   <textarea 
+                    value={formData.mods || ''}
+                    onChange={e => setFormData({...formData, mods: e.target.value})}
+                    placeholder="Ex: Filtro K&N, Remap, Escape Full..."
+                    className="w-full bg-zinc-950 border border-white/5 rounded-xl p-4 text-[10px] text-white placeholder:text-zinc-800 focus:outline-none focus:border-brand-primary/50 transition-colors min-h-[100px] resize-none"
+                   />
+                </div>
+
+                <div className="space-y-1.5">
+                   <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest px-1">Observações Adicionais</label>
+                   <textarea 
+                    value={formData.observations || ''}
+                    onChange={e => setFormData({...formData, observations: e.target.value})}
+                    placeholder="Detalhes únicos que você queira registrar..."
+                    className="w-full bg-zinc-950 border border-white/5 rounded-xl p-4 text-[10px] text-white placeholder:text-zinc-800 focus:outline-none focus:border-brand-primary/50 transition-colors min-h-[80px] resize-none"
+                   />
+                </div>
+             </div>
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Fotos Extras (Premium - Máx 3)</label>
@@ -2537,18 +2891,31 @@ function VehicleSettings({
           </div>
         </div>
 
-        <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Ano</label>
-          <select 
-            value={formData.year}
-            onChange={e => setFormData({...formData, year: e.target.value})}
-            className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-white focus:outline-none focus:border-brand-primary/50 transition-colors appearance-none"
-          >
-            <option value="">Selecione</option>
-            {YEARS.map(year => (
-              <option key={year} value={year}>{year}</option>
-            ))}
-          </select>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Ano</label>
+            <select 
+              value={formData.year}
+              onChange={e => setFormData({...formData, year: e.target.value})}
+              className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-white focus:outline-none focus:border-brand-primary/50 transition-colors appearance-none"
+            >
+              <option value="">Selecione</option>
+              {YEARS.map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1 text-brand-primary">Peso Total (kg)</label>
+            <input 
+              type="number"
+              value={formData.weight || ''}
+              onChange={e => setFormData({...formData, weight: Number(e.target.value)})}
+              placeholder="Ex: 1450"
+              className="w-full bg-zinc-900 border border-brand-primary/20 rounded-xl p-4 text-white placeholder:text-zinc-800 focus:outline-none focus:border-brand-primary/50 transition-colors"
+            />
+            <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter px-1">Carro + Piloto + Combustível</p>
+          </div>
         </div>
 
         {saveError && (
@@ -3121,22 +3488,6 @@ export default function App() {
     currentHeading
   } = usePerformanceTimer(telemetryConfig);
 
-  // --- Cornering Assistant Integration ---
-  const [destination, setDestination] = useState<string | null>(null);
-  const { 
-    nextCurve, 
-    upcomingNodes, 
-    isRouteMode, 
-    currentRoadName 
-  } = useCorneringAssistant(
-    currentLat, 
-    currentLng, 
-    currentHeading, 
-    currentSpeed, 
-    telemetryConfig.lookAheadBaseDistance || 500,
-    destination
-  );
-
 
   const [screen, setScreen] = useState<Screen>('home');
 
@@ -3212,6 +3563,43 @@ export default function App() {
   const [searchTarget, setSearchTarget] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [calibrationMode, setCalibrationMode] = useState<Partial<PowerReference> | null>(null);
+  const [catalogVehicle, setCatalogVehicle] = useState<Vehicle | null>(null);
+
+  const logActivity = async (type: Activity['type'], data: Activity['data']) => {
+    if (!user || !userProfile) return;
+    try {
+      await addDoc(collection(db, 'activities'), {
+        uid: user.uid,
+        userName: userProfile.displayName,
+        userPhoto: userProfile.photoURL,
+        handle: userProfile.handle,
+        type,
+        data,
+        timestamp: Date.now()
+      });
+    } catch (e) {
+      console.error("Error logging activity:", e);
+    }
+  };
+
+  // --- Cornering Assistant Integration ---
+  const [destination, setDestination] = useState<string | null>(null);
+  const { 
+    nextCurve, 
+    upcomingNodes, 
+    isRouteMode, 
+    currentRoadName 
+  } = useCorneringAssistant(
+    currentLat, 
+    currentLng, 
+    currentHeading, 
+    currentSpeed, 
+    user?.uid,
+    isGuest,
+    { baseDist: telemetryConfig.lookAheadBaseDistance || 500 },
+    destination
+  );
 
   // Challenge Listener
   useEffect(() => {
@@ -3537,9 +3925,21 @@ export default function App() {
           uid: user.uid, 
           active: vehicles.length === 0, // Set as active if it's the first one
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString() 
+          updatedAt: new Date().toISOString(),
+          hp: v.hp || 0,
+          stage: v.stage || 'Stock',
+          maxSpeed: v.maxSpeed || 0,
+          mods: v.mods || '',
+          observations: v.observations || ''
         };
         const newDocRef = await addDoc(collection(db, 'vehicles'), vehicleData);
+        
+        logActivity('new_vehicle', {
+          vehicleId: newDocRef.id,
+          vehicleName: v.nickname,
+          description: `${v.brand} ${v.model} (${v.year})`
+        });
+        
         console.log('Vehicle creation successful, ID:', newDocRef.id);
       }
 
@@ -3594,6 +3994,40 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (lastResult && calibrationMode) {
+      // HANDLE CALIBRATION TEST
+      const saveCalibration = async () => {
+        try {
+          const newId = `ref_${Date.now()}`;
+          const newRef: PowerReference = {
+            id: newId,
+            carName: calibrationMode.carName || 'Capturado',
+            weight: calibrationMode.weight || 0,
+            time: lastResult.time,
+            distance: lastResult.config.target,
+            slope: lastResult.slope || 0,
+            verifiedCV: calibrationMode.verifiedCV || 0,
+            timestamp: Date.now(),
+            isLiveTest: true,
+            rawRunId: lastResult.id
+          };
+          
+          await setDoc(doc(db, 'power_references', newId), newRef);
+          
+          // Show success and return to admin
+          alert(`Teste de Calibração salvo!\nTempo: ${lastResult.time.toFixed(2)}s\nLocal: ${lastResult.slope?.toFixed(1)}%`);
+          setCalibrationMode(null);
+          setScreen('admin-dashboard');
+        } catch (e) {
+          console.error("Failed to save calibration reference:", e);
+          alert("Erro ao salvar calibração.");
+          setCalibrationMode(null);
+        }
+      };
+      saveCalibration();
+      return; // Skip normal saving flow
+    }
+
     if (lastResult && activeChallenge && activeChallenge.status === 'pending') {
       const updatedChallenge: Challenge = {
         ...activeChallenge,
@@ -3634,14 +4068,30 @@ export default function App() {
               }
             }
             
+            let estimatedPowerCV = 0;
+            if (isUserPremium && vehicle?.weight && lastResult.time > 0) {
+              // Basic physics estimation with current test data
+              estimatedPowerCV = powerService.estimateHorsepower(lastResult, vehicle.weight, []);
+            }
+
             const runData = { 
               ...lastResult, 
               uid: user.uid,
               vehicleId: vehicle?.id || null,
-              vehicleName: vehicle ? `${vehicle.nickname} (${vehicle.model})` : 'Piloto'
+              vehicleName: vehicle ? `${vehicle.nickname} (${vehicle.model})` : 'Piloto',
+              estimatedPowerCV
             };
             await addDoc(collection(db, 'runs'), runData);
             lastSavedRunIdRef.current = lastResult.id;
+            
+            logActivity('new_run', {
+              runId: lastResult.id,
+              vehicleId: vehicle?.id,
+              vehicleName: vehicle?.nickname,
+              target: `${lastResult.config.target}${lastResult.config.mode === 'speed' ? ' KM/H' : 'M'}`,
+              time: `${lastResult.time.toFixed(2)}s`
+            });
+            
             console.log("Run saved to Firestore successfully");
           } catch (err) {
             handleFirestoreError(err, OperationType.WRITE, 'runs');
@@ -3650,29 +4100,33 @@ export default function App() {
         
         saveRun();
 
-        // Save to rankings if it's a valid 0-100 run
+        // Save to rankings if it's a valid standard run
+        const isStandard0to100 = lastResult.config.mode === 'speed' && lastResult.config.target === 100;
+        const isStandard201m = lastResult.config.mode === 'distance' && lastResult.config.target === 201;
+
         if (
-          lastResult.config.mode === 'speed' && 
-          lastResult.config.target === 100 && 
+          (isStandard0to100 || isStandard201m) && 
           lastResult.isValidSlope && 
           lastResult.location &&
-          (lastResult.avgAccuracy ?? 100) < 15 &&
+          (lastResult.avgAccuracy ?? 100) < 18 && // Relaxed slightly for more inclusion
           (lastResult.maxG ?? 0) < 3.8 &&
           lastResult.time > 1.2
         ) {
-          const rankingData: Omit<RankingEntry, 'id'> = {
-            uid: user.uid,
-            userName: user.displayName || 'Piloto',
-            userPhoto: user.photoURL || undefined,
-            vehicleName: vehicle ? `${vehicle.nickname} (${vehicle.model})` : 'Veículo não cadastrado',
-            vehicleType: vehicle?.type || 'car',
-            time: lastResult.time,
-            maxSpeed: lastResult.maxSpeed,
-            timestamp: lastResult.timestamp,
-            latitude: lastResult.location.latitude,
-            longitude: lastResult.location.longitude,
-            slope: lastResult.slope || 0
-          };
+            const rankingData: Omit<RankingEntry, 'id'> = {
+              uid: user.uid,
+              userName: user.displayName || 'Piloto',
+              userPhoto: user.photoURL || undefined,
+              vehicleName: vehicle ? `${vehicle.nickname} (${vehicle.model})` : 'Veículo não cadastrado',
+              vehicleType: vehicle?.type || 'car',
+              time: lastResult.time,
+              maxSpeed: lastResult.maxSpeed,
+              timestamp: lastResult.timestamp,
+              category: isStandard0to100 ? '0-100' : '201m',
+              latitude: lastResult.location.latitude,
+              longitude: lastResult.location.longitude,
+              slope: lastResult.slope || 0,
+              vehicleId: vehicle?.id || undefined
+            };
           addDoc(collection(db, 'rankings'), rankingData)
             .catch(err => handleFirestoreError(err, OperationType.WRITE, 'rankings'));
         }
@@ -4031,6 +4485,24 @@ export default function App() {
               currentUserId={user?.uid}
               onBack={() => setScreen('regional-ranking')} 
               onEditVehicles={() => setScreen('vehicle-settings')}
+              onViewVehicle={(v) => {
+                setCatalogVehicle(v);
+                setScreen('vehicle-catalog');
+              }}
+            />
+          </motion.div>
+        ) : screen === 'vehicle-catalog' && catalogVehicle ? (
+          <motion.div
+            key="vehicle-catalog"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="flex-1 flex flex-col overflow-hidden"
+          >
+            <VehicleCatalog 
+              vehicle={catalogVehicle} 
+              onBack={() => setScreen(selectedProfileUid ? 'public-profile' : 'settings')}
+              isOwnCar={user?.uid === catalogVehicle.uid}
             />
           </motion.div>
         ) : screen === 'history' ? (
@@ -4045,6 +4517,7 @@ export default function App() {
               user={user} 
               isGuest={isGuest}
               isPremium={isUserPremium}
+              isAdmin={isAdmin}
               onBack={() => setScreen('home')} 
             />
           </motion.div>
@@ -4100,13 +4573,18 @@ export default function App() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h1 className="font-display font-extrabold text-2xl tracking-tighter italic leading-none whitespace-nowrap">
-                      DRAG<span className="text-brand-primary">FIRE</span>
-                    </h1>
-                  </div>
-                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1 whitespace-nowrap overflow-visible">
-                    {isGuest ? 'Modo Visitante' : (vehicle ? `${vehicle.nickname} • ${vehicle.model}` : user?.displayName || 'Piloto')}
-                  </p>
+                  <h1 className="font-display font-extrabold text-2xl tracking-tighter italic leading-none whitespace-nowrap">
+                    DRAG<span className="text-brand-primary">FIRE</span>
+                  </h1>
+                </div>
+                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1 whitespace-nowrap overflow-visible flex items-center gap-1.5">
+                  {isGuest ? 'Modo Visitante' : (
+                    <>
+                      {vehicle ? `${vehicle.nickname} • ${vehicle.model}` : user?.displayName || 'Piloto'}
+                      {userProfile?.handle && <span className="text-brand-primary italic">#{userProfile.handle}</span>}
+                    </>
+                  )}
+                </p>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -4518,7 +4996,15 @@ export default function App() {
             exit={{ opacity: 0, x: 20 }}
             className="flex-1 flex flex-col overflow-hidden"
           >
-            <AdminDashboard onBack={() => setScreen('settings')} />
+            <AdminDashboard 
+              onBack={() => setScreen('settings')} 
+              onStartLiveCalibration={(data) => {
+                setCalibrationMode(data);
+                // Set preset for 201m
+                setActiveConfig({ mode: 'distance', target: 201 });
+                setScreen('timer');
+              }}
+            />
           </motion.div>
         ) : (
           <motion.div 
@@ -5130,4 +5616,257 @@ export default function App() {
     </div>
   </ErrorBoundary>
 );
+}
+
+function VehicleCatalog({ vehicle, onBack, isOwnCar }: { vehicle: Vehicle, onBack: () => void, isOwnCar: boolean }) {
+  const [runs, setRuns] = useState<RunResult[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'stats' | 'photos' | 'results'>('stats');
+
+  useEffect(() => {
+    const fetchRuns = async () => {
+      if (!vehicle.id) return;
+      try {
+        const q = query(
+          collection(db, 'runs'),
+          where('vehicleId', '==', vehicle.id),
+          orderBy('timestamp', 'desc'),
+          limit(10)
+        );
+        const snapshot = await getDocs(q);
+        setRuns(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RunResult)));
+      } catch (e) {
+        console.error("Error fetching vehicle runs:", e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRuns();
+  }, [vehicle.id]);
+
+  const best0to100 = runs.filter(r => r.config.mode === 'speed' && r.config.target === 100).sort((a,b) => a.time - b.time)[0];
+  const best201m = runs.filter(r => r.config.mode === 'distance' && r.config.target === 201).sort((a,b) => a.time - b.time)[0];
+  const maxSpeed = Math.max(...runs.map(r => r.maxSpeed), 0);
+
+  // NFS Style progress bar mapping
+  const accelScore = best0to100 ? Math.max(10, 100 - (best0to100.time * 5)) : 0;
+  const speedScore = maxSpeed ? Math.min(100, (maxSpeed / 300) * 100) : 0;
+
+  return (
+    <div className="flex-1 flex flex-col bg-zinc-950 overflow-hidden relative">
+      {/* Background Ambience */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] bg-brand-primary/10 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] bg-brand-accent/10 blur-[120px] rounded-full" />
+      </div>
+
+      <header className="p-6 flex items-center justify-between relative z-10 pt-12">
+        <button onClick={onBack} className="p-2 bg-zinc-900/50 backdrop-blur-md border border-white/10 rounded-xl text-white">
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+        <div className="text-right">
+          <h2 className="text-2xl font-display font-black italic text-white uppercase tracking-tighter leading-none">{vehicle.nickname}</h2>
+          <p className="text-[10px] text-brand-primary font-black uppercase tracking-widest mt-1 italic">Car Select</p>
+        </div>
+      </header>
+
+      <main className="flex-1 overflow-y-auto px-6 pb-24 relative z-10">
+        {/* Main Photo Section */}
+        <div className="relative aspect-[16/10] bg-zinc-900 rounded-[32px] overflow-hidden border border-white/5 shadow-2xl mb-6">
+          <img 
+            src={vehicle.photoURL || 'https://images.unsplash.com/photo-1542281286-9e0a16bb7366?q=80&w=800'} 
+            className="w-full h-full object-cover"
+            alt={vehicle.nickname}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-zinc-950/80 via-transparent to-transparent" />
+          
+          <div className="absolute bottom-6 left-6 right-6 flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-black text-white italic tracking-tighter uppercase">{vehicle.brand}</h3>
+              <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest">{vehicle.model} • {vehicle.year}</p>
+            </div>
+            <div className="bg-zinc-950/50 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/10">
+              <span className="text-[10px] font-black text-brand-primary uppercase tracking-widest">Stock Class</span>
+            </div>
+          </div>
+        </div>
+
+        {/* NFS Underground Menu */}
+        <div className="flex gap-1 bg-zinc-900/40 p-1 rounded-2xl border border-white/5 mb-8">
+          {[
+            { id: 'stats', label: 'Estatísticas', icon: Activity },
+            { id: 'photos', label: 'Garagem', icon: ImageIcon },
+            { id: 'results', label: 'Testes', icon: History }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex-1 py-3 px-2 rounded-xl flex flex-col items-center gap-1 transition-all ${activeTab === tab.id ? 'bg-brand-primary text-white shadow-lg shadow-red-600/20' : 'text-zinc-500 hover:text-white'}`}
+            >
+              <tab.icon className="w-4 h-4" />
+              <span className="text-[8px] font-black uppercase tracking-widest">{tab.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Tab Content */}
+        <AnimatePresence mode="wait">
+          {activeTab === 'stats' && (
+            <motion.div
+              key="stats"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-8"
+            >
+              {/* Performance Bars */}
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-[9px] font-black text-white uppercase tracking-widest italic">ACELERAÇÃO (0-100)</span>
+                    <span className="text-[9px] font-black text-brand-primary">{best0to100?.time.toFixed(2) || '--'}s</span>
+                  </div>
+                  <div className="h-2.5 bg-zinc-900 rounded-full border border-white/5 overflow-hidden">
+                    <motion.div 
+                      className="h-full bg-brand-primary shadow-[0_0_15px_rgba(239,68,68,0.5)]"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${accelScore}%` }}
+                      transition={{ duration: 1.5, ease: "easeOut" }}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-[9px] font-black text-white uppercase tracking-widest italic">VELOCIDADE MÁXIMA</span>
+                    <span className="text-[9px] font-black text-brand-accent">{maxSpeed.toFixed(0) || '--'} KM/H</span>
+                  </div>
+                  <div className="h-2.5 bg-zinc-900 rounded-full border border-white/5 overflow-hidden">
+                    <motion.div 
+                      className="h-full bg-brand-accent shadow-[0_0_15px_rgba(0,242,255,0.5)]"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${speedScore}%` }}
+                      transition={{ duration: 1.5, ease: "easeOut", delay: 0.2 }}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center px-1">
+                    <span className="text-[9px] font-black text-white uppercase tracking-widest italic">ESTABILIDADE (G-MAX)</span>
+                    <span className="text-[9px] font-black text-yellow-500">{runs[0]?.maxG?.toFixed(2) || '0.00'}G</span>
+                  </div>
+                  <div className="h-2.5 bg-zinc-900 rounded-full border border-white/5 overflow-hidden">
+                    <motion.div 
+                      className="h-full bg-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.5)]"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${Math.min(100, (runs[0]?.maxG || 0) * 60)}%` }}
+                      transition={{ duration: 1.5, ease: "easeOut", delay: 0.4 }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Specs Grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-zinc-900/50 p-4 rounded-2xl border border-white/5">
+                  <span className="text-[8px] text-zinc-500 font-black uppercase tracking-widest mb-1 block">Potência</span>
+                  <p className="text-white font-black italic uppercase">{vehicle.hp || '--'} CV</p>
+                </div>
+                <div className="bg-zinc-900/50 p-4 rounded-2xl border border-white/5">
+                  <span className="text-[8px] text-zinc-500 font-black uppercase tracking-widest mb-1 block">Preparação</span>
+                  <p className="text-brand-primary font-black italic uppercase">{vehicle.stage || 'Stock'}</p>
+                </div>
+                <div className="bg-zinc-900/50 p-4 rounded-2xl border border-white/5">
+                  <span className="text-[8px] text-zinc-500 font-black uppercase tracking-widest mb-1 block">Peso</span>
+                  <p className="text-white font-black italic uppercase">{vehicle.weight || '--'} KG</p>
+                </div>
+                <div className="bg-zinc-900/50 p-4 rounded-2xl border border-white/5">
+                  <span className="text-[8px] text-zinc-500 font-black uppercase tracking-widest mb-1 block">Ano</span>
+                  <p className="text-white font-black italic uppercase">{vehicle.year || '--'}</p>
+                </div>
+              </div>
+
+              {/* Advanced Specs */}
+              {(vehicle.mods || vehicle.observations) && (
+                <div className="space-y-3">
+                  {vehicle.mods && (
+                    <div className="bg-zinc-900/30 p-4 rounded-2xl border border-white/5">
+                      <span className="text-[8px] text-brand-primary font-black uppercase tracking-widest mb-2 block flex items-center gap-1.5">
+                        <Zap className="w-3 h-3" /> Modificações
+                      </span>
+                      <p className="text-[10px] text-zinc-300 font-medium leading-relaxed uppercase italic">{vehicle.mods}</p>
+                    </div>
+                  )}
+                  {vehicle.observations && (
+                    <div className="bg-zinc-900/30 p-4 rounded-2xl border border-white/5">
+                      <span className="text-[8px] text-zinc-500 font-black uppercase tracking-widest mb-2 block">Observações</span>
+                      <p className="text-[10px] text-zinc-400 font-medium leading-relaxed uppercase italic">{vehicle.observations}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {activeTab === 'photos' && (
+            <motion.div
+              key="photos"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="grid grid-cols-1 gap-4"
+            >
+              <div className="aspect-video rounded-3xl overflow-hidden border-2 border-brand-primary/20 shadow-xl">
+                 <img src={vehicle.photoURL} className="w-full h-full object-cover" />
+              </div>
+              {vehicle.photoURLs && vehicle.photoURLs.length > 0 ? (
+                vehicle.photoURLs.map((url, i) => (
+                  <div key={i} className="aspect-video rounded-3xl overflow-hidden border border-white/5 shadow-xl">
+                    <img src={url} className="w-full h-full object-cover" />
+                  </div>
+                ))
+              ) : (
+                <div className="py-12 text-center text-zinc-500">
+                  <ImageIcon className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                  <p className="text-[10px] font-black uppercase tracking-widest">Nenhuma foto adicional</p>
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {activeTab === 'results' && (
+            <motion.div
+              key="results"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-2"
+            >
+              {loading ? (
+                <div className="py-12 flex justify-center"><div className="w-6 h-6 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" /></div>
+              ) : runs.length > 0 ? (
+                runs.map(run => (
+                  <div key={run.id} className="bg-zinc-900/50 p-4 rounded-2xl border border-white/5 flex items-center justify-between">
+                    <div>
+                      <p className="text-[9px] font-black text-brand-primary uppercase italic">{run.config.mode === 'speed' ? `0-${run.config.target} KM/H` : `${run.config.target}M`}</p>
+                      <p className="text-[8px] text-zinc-500 font-bold">{new Date(run.timestamp).toLocaleDateString()}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl font-display font-black italic text-white leading-none">{run.time.toFixed(2)}s</p>
+                      <p className="text-[9px] text-zinc-500 font-bold uppercase">{run.maxSpeed.toFixed(0)} KM/H</p>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="py-12 text-center text-zinc-500">
+                   <p className="text-[10px] font-black uppercase tracking-widest">Nenhum teste registrado para este carro</p>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+    </div>
+  );
 }

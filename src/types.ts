@@ -26,6 +26,9 @@ export interface RunResult {
     latitude: number;
     longitude: number;
   } | null;
+  estimatedPowerCV?: number; // Estimated engine horsepower
+  vehicleId?: string;       // Associated vehicle
+  vehicleName?: string;     // Associated vehicle name
 }
 
 export interface RankingEntry {
@@ -38,9 +41,12 @@ export interface RankingEntry {
   time: number;
   maxSpeed: number;
   timestamp: number;
+  category: '0-100' | '201m' | '402m';
   latitude: number;
   longitude: number;
   slope: number;
+  vehicleId?: string;
+  vehicleName?: string;
 }
 
 export interface Challenge {
@@ -82,6 +88,13 @@ export interface UserProfile {
   isPrivate?: boolean;
   followingCount?: number;
   isAdmin?: boolean;
+  handle?: string;
+  privacySettings?: {
+    isPrivate?: boolean;
+    showHistory?: boolean;
+    showGarage?: boolean;
+    showRankings?: boolean;
+  };
 }
 
 export interface Vehicle {
@@ -95,6 +108,12 @@ export interface Vehicle {
   photoURL?: string;
   photoURLs?: string[]; // Multiple photos for premium
   active?: boolean;
+  weight?: number;      // Total weight in kg
+  hp?: number;          // CV
+  stage?: string;       // Stage 1, 2, 3, etc.
+  maxSpeed?: number;    // KM/H
+  mods?: string;        // Text list of modifications
+  observations?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -167,3 +186,33 @@ export interface SystemSettings {
   profiles: Record<string, TelemetryProfile>;
 }
 
+export interface PowerReference {
+  id: string;
+  carName: string;
+  weight: number;      // kg
+  time: number;        // seconds (can be 0-100 or 201m time)
+  distance?: number;   // meters (optional, defaults to 201)
+  time0to100?: number; // legacy support
+  slope: number;       // percentage
+  verifiedCV: number;  // Horsepower
+  timestamp: number;
+  isLiveTest?: boolean;
+  rawRunId?: string;
+}
+export interface Activity {
+  id?: string;
+  uid: string;
+  userName: string;
+  userPhoto?: string;
+  handle?: string;
+  type: 'new_run' | 'new_vehicle' | 'new_record' | 'follow';
+  data: {
+    runId?: string;
+    vehicleId?: string;
+    vehicleName?: string;
+    description?: string;
+    target?: string;
+    time?: string;
+  };
+  timestamp: number;
+}

@@ -21,9 +21,16 @@ import {
   Navigation
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { UserProfile, TelemetryConfig, SystemSettings, TelemetryProfile } from '../types';
+import { UserProfile, TelemetryConfig, SystemSettings, TelemetryProfile, PowerReference } from '../types';
+import { deleteDoc } from 'firebase/firestore';
 
-export function AdminDashboard({ onBack }: { onBack: () => void }) {
+export function AdminDashboard({ 
+  onBack,
+  onStartLiveCalibration
+}: { 
+  onBack: () => void,
+  onStartLiveCalibration?: (data: Partial<PowerReference>) => void
+}) {
   const [usageData, setUsageData] = useState<{ places: number; geocode: number } | null>(null);
   const [apiLoading, setApiLoading] = useState(true);
   
@@ -62,6 +69,18 @@ export function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [saveLoading, setSaveLoading] = useState(false);
   const [profileNameInput, setProfileNameInput] = useState('');
   const [showNewProfileModal, setShowNewProfileModal] = useState(false);
+  
+  // Power References state
+  const [powerRefs, setPowerRefs] = useState<PowerReference[]>([]);
+  const [showPowerForm, setShowPowerForm] = useState(false);
+  const [refFormData, setRefFormData] = useState<Partial<PowerReference>>({
+    carName: '',
+    weight: undefined,
+    time: undefined,
+    distance: 201, // Default distance for calibration
+    slope: 0,
+    verifiedCV: undefined
+  });
 
   // Consider 15,000 requests per month as the absolute safe free-tier limit before any billing starts
   const FREE_TIER_LIMIT = 15000;
@@ -113,8 +132,20 @@ export function AdminDashboard({ onBack }: { onBack: () => void }) {
       }
     };
 
+    const fetchPowerRefs = async () => {
+      try {
+        const q = query(collection(db, 'power_references'), limit(50));
+        const snapshot = await getDocs(q);
+        const refs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as PowerReference));
+        setPowerRefs(refs.sort((a, b) => b.timestamp - a.timestamp));
+      } catch (e) {
+        console.error('Failed to load power references', e);
+      }
+    };
+
     fetchUsage();
     fetchSettings();
+    fetchPowerRefs();
   }, []);
 
   const updateGlobalSettings = async (updatedProfiles: Record<string, TelemetryProfile>, activeId: string) => {
@@ -240,6 +271,45 @@ export function AdminDashboard({ onBack }: { onBack: () => void }) {
       setUsers(prev => prev.map(u => u.uid === targetUser.uid ? { ...u, isPremium: !u.isPremium } : u));
     } catch (error) {
       console.error("Error toggling premium:", error);
+    }
+  };
+
+  const handleSavePowerRef = async () => {
+    if (!refFormData.carName || !refFormData.weight) return;
+    setSaveLoading(true);
+    try {
+      const newId = `ref-${Date.now()}`;
+      const newRef: PowerReference = {
+        id: newId,
+        carName: refFormData.carName!,
+        weight: Number(refFormData.weight),
+        time: Number(refFormData.time),
+        distance: Number(refFormData.distance || 201),
+        slope: Number(refFormData.slope || 0),
+        verifiedCV: Number(refFormData.verifiedCV),
+        timestamp: Date.now()
+      };
+
+      await setDoc(doc(db, 'power_references', newId), newRef);
+      setPowerRefs([newRef, ...powerRefs]);
+      setShowPowerForm(false);
+      setRefFormData({ carName: '', weight: 0, time: 0, distance: 201, slope: 0, verifiedCV: 0 });
+      alert('Referência salva com sucesso!');
+    } catch (e) {
+      console.error('Failed to save power ref', e);
+      alert('Erro ao salvar referência');
+    } finally {
+      setSaveLoading(false);
+    }
+  };
+
+  const deletePowerRef = async (id: string) => {
+    if (!window.confirm('Excluir esta referência de potência?')) return;
+    try {
+      await deleteDoc(doc(db, 'power_references', id));
+      setPowerRefs(powerRefs.filter(r => r.id !== id));
+    } catch (e) {
+      console.error('Failed to delete power ref', e);
     }
   };
 
@@ -685,6 +755,155 @@ export function AdminDashboard({ onBack }: { onBack: () => void }) {
           </div>
 
         </div>
+      </div>
+
+      {/* Power Reference Management Section */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
+            <Gauge className="w-3 h-3 text-brand-primary" />
+            Gestão de Potência & Calibração
+          </h3>
+          <div className="flex gap-2">
+            <button 
+              onClick={async () => {
+                const q = query(collection(db, 'power_references'), limit(50));
+                const snapshot = await getDocs(q);
+                const refs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as PowerReference));
+                setPowerRefs(refs.sort((a, b) => b.timestamp - a.timestamp));
+              }}
+              className="p-2 bg-zinc-900 rounded-lg text-zinc-400 active:rotate-180 transition-all duration-500 border border-white/5"
+            >
+              <RotateCw className="w-4 h-4" />
+            </button>
+            <button 
+              onClick={() => setShowPowerForm(!showPowerForm)}
+              className="p-2 bg-zinc-900 rounded-lg text-brand-primary active:scale-95 transition-all border border-brand-primary/20"
+            >
+              {showPowerForm ? <ChevronLeft className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        {showPowerForm ? (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="glass-panel p-6 rounded-3xl border border-brand-primary/20 bg-brand-primary/5 space-y-4"
+          >
+             <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2 space-y-1">
+                  <label className="text-[9px] font-black text-zinc-500 uppercase px-1">Nome do Veículo Base</label>
+                  <input 
+                    type="text" 
+                    value={refFormData.carName}
+                    onChange={e => setRefFormData({...refFormData, carName: e.target.value})}
+                    placeholder="Ex: Marea Turbo (Fase 2)"
+                    className="w-full bg-zinc-950 border border-white/5 rounded-xl p-3 text-sm text-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-zinc-500 uppercase px-1">Peso (kg)</label>
+                  <input 
+                    type="number" 
+                    value={refFormData.weight || ''}
+                    onChange={e => setRefFormData({...refFormData, weight: Number(e.target.value)})}
+                    placeholder="1450"
+                    className="w-full bg-zinc-950 border border-white/5 rounded-xl p-3 text-sm text-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-zinc-500 uppercase px-1">Tempo (s)</label>
+                  <input 
+                    type="number" 
+                    value={refFormData.time || ''}
+                    onChange={e => setRefFormData({...refFormData, time: Number(e.target.value)})}
+                    placeholder="8.50"
+                    className="w-full bg-zinc-950 border border-white/5 rounded-xl p-3 text-sm text-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-zinc-500 uppercase px-1">Inclinação (%)</label>
+                  <input 
+                    type="number" 
+                    value={refFormData.slope || ''}
+                    onChange={e => setRefFormData({...refFormData, slope: Number(e.target.value)})}
+                    placeholder="0.0"
+                    className="w-full bg-zinc-950 border border-white/5 rounded-xl p-3 text-sm text-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-zinc-500 uppercase px-1">Cavalaria Real (cv)</label>
+                  <input 
+                    type="number" 
+                    value={refFormData.verifiedCV || ''}
+                    onChange={e => setRefFormData({...refFormData, verifiedCV: Number(e.target.value)})}
+                    placeholder="182"
+                    className="w-full bg-zinc-950 border border-white/5 rounded-xl p-3 text-sm text-white"
+                  />
+                </div>
+             </div>
+              <div className="grid grid-cols-2 gap-3 pb-2 pt-4">
+                <button 
+                  onClick={handleSavePowerRef}
+                  disabled={saveLoading}
+                  className="py-4 bg-zinc-800 text-white rounded-2xl font-black uppercase tracking-widest border border-white/5 active:scale-95 transition-all text-[10px]"
+                >
+                  {saveLoading ? '...' : 'Salvar Manual'}
+                </button>
+                <button 
+                  onClick={() => {
+                    if (!refFormData.carName || !refFormData.weight || !refFormData.verifiedCV) {
+                      alert("Preencha Nome, Peso e CV para iniciar o teste real.");
+                      return;
+                    }
+                    onStartLiveCalibration?.(refFormData);
+                  }}
+                  className="py-4 bg-brand-primary text-white rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-brand-primary/20 active:scale-95 transition-all text-[10px]"
+                >
+                  Iniciar Teste Real (201m)
+                </button>
+              </div>
+          </motion.div>
+        ) : (
+          <div className="space-y-2">
+            {powerRefs.length > 0 ? (
+              powerRefs.map(ref => (
+                <div key={ref.id} className="glass-panel p-4 rounded-2xl border border-white/5 bg-zinc-900/40 flex items-center justify-between group">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-black text-white italic leading-tight uppercase">{ref.carName}</h4>
+                      {ref.isLiveTest && (
+                         <span className="bg-brand-primary/20 text-brand-primary px-1.5 py-0.5 rounded text-[6px] font-black uppercase border border-brand-primary/30">Sensor Data</span>
+                      )}
+                    </div>
+                    <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-1.5 flex flex-wrap gap-x-2 gap-y-1">
+                      <span>{ref.weight}kg</span>
+                      <span className="text-zinc-700">•</span>
+                      <span className="text-zinc-300">{ref.distance || 201}m @ {ref.time.toFixed(2)}s</span>
+                      <span className="text-zinc-700">•</span>
+                      <span className={`font-black ${Math.abs(ref.slope) > 2 ? 'text-red-500' : 'text-zinc-400'}`}>
+                        {ref.slope > 0 ? '+' : ''}{ref.slope.toFixed(1)}% Incl.
+                      </span>
+                      <span className="text-zinc-700">•</span>
+                      <span className="text-brand-primary font-black italic">{ref.verifiedCV} CV REAL</span>
+                    </p>
+                  </div>
+                  <button 
+                    onClick={() => deletePowerRef(ref.id)}
+                    className="p-2.5 text-zinc-700 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all active:scale-95"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))
+            ) : (
+              <div className="p-8 border-2 border-dashed border-white/5 rounded-3xl text-center opacity-30">
+                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Nenhuma referência cadastrada</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* User Management Section */}

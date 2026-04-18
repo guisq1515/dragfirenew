@@ -311,17 +311,6 @@ export function GasStations({ onBack }: { onBack: () => void }) {
         allStations.sort((a, b) => (a.dist || 999) - (b.dist || 999));
         setStations(allStations);
 
-        if (!currentCity && googleResults.length > 0) {
-          const firstStation = googleResults[0];
-          const parts = firstStation.vicinity.split(',');
-          if (parts.length >= 2) {
-             const cityStatePart = parts.find(p => p.includes(' - '));
-             if (cityStatePart) {
-               const cityCandidate = cityStatePart.split('-')[0].trim();
-               if (cityCandidate) setCurrentCity(cityCandidate);
-             }
-          }
-        }
       } catch (err: any) {
         console.error('[CRITICAL] Falha geral ao carregar postos:', err);
       } finally {
@@ -463,11 +452,10 @@ export function GasStations({ onBack }: { onBack: () => void }) {
               <h2 className="text-xl font-display font-black italic text-white leading-none">LOCALIZAR POSTOS</h2>
               <p className="text-[10px] text-brand-primary font-bold uppercase tracking-wider flex items-center gap-2">
                 <span className="opacity-60">Comparando Preços</span>
-                <span className="w-1 h-1 bg-zinc-800 rounded-full"></span>
-                <span className="flex items-center gap-1">
-                  <MapPin className="w-3 h-3" />
-                  {currentCity ? currentCity : 'Localizando...'}
-                </span>
+                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1.5 flex items-center gap-1.5">
+                    <MapPin className="w-3 h-3 text-brand-primary" />
+                    {currentCity ? currentCity : 'Localizando...'}
+                  </p>
               </p>
             </div>
           </div>

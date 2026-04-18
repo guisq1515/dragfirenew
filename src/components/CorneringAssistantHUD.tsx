@@ -90,60 +90,60 @@ export function CorneringAssistantHUD({
       </div>
 
       {/* NEW Top Control Bar */}
-      <div className="relative z-50 p-6 flex items-center justify-between gap-4">
+      <div className="relative z-50 p-3 flex items-center justify-between gap-3">
         <button 
           onClick={onBack}
-          className="bg-white/5 border border-white/10 p-4 rounded-2xl hover:bg-white/10 transition-all active:scale-95"
+          className="bg-white/5 border border-white/10 p-3 rounded-xl hover:bg-white/10 transition-all active:scale-95 shrink-0"
         >
-          <ChevronLeft className="w-6 h-6 text-zinc-400" />
+          <ChevronLeft className="w-5 h-5 text-zinc-400" />
         </button>
 
-        <div className="flex-1 max-w-md">
+        <div className="flex-1 min-w-0">
           <button 
             onClick={() => setIsSearching(true)}
-            className="w-full bg-zinc-900/50 border border-white/10 rounded-2xl py-3 px-4 flex items-center gap-3 text-zinc-500 hover:border-brand-primary/30 transition-all"
+            className="w-full bg-zinc-900/50 border border-white/10 rounded-xl py-2.5 px-3 flex items-center gap-2 text-zinc-500 hover:border-brand-primary/30 transition-all"
           >
-            <SearchIcon className="w-4 h-4" />
-            <span className="text-xs font-bold uppercase tracking-widest truncate">
+            <SearchIcon className="w-3.5 h-3.5" />
+            <span className="text-[9px] font-black uppercase tracking-wider truncate">
               {destination || 'Definir Destino...'}
             </span>
           </button>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <button 
             onClick={() => setIsMirrored(!isMirrored)}
-            className={`p-4 rounded-2xl border transition-all active:scale-95 ${isMirrored ? 'bg-brand-primary/20 border-brand-primary text-brand-primary' : 'bg-white/5 border-white/10 text-zinc-400'}`}
+            className={`p-3 rounded-xl border transition-all active:scale-95 ${isMirrored ? 'bg-brand-primary/20 border-brand-primary text-brand-primary' : 'bg-white/5 border-white/10 text-zinc-400'}`}
             title="Modo HUD (Inverter)"
           >
-            {isMirrored ? <Minimize2 className="w-6 h-6" /> : <Maximize2 className="w-6 h-6" />}
+            {isMirrored ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
           </button>
           
           <button 
             onClick={() => setIsOfflineMode(!isOfflineMode)}
-            className={`p-4 rounded-2xl border transition-all active:scale-95 ${isOfflineMode ? 'bg-yellow-500/20 border-yellow-500 text-yellow-500' : 'bg-white/5 border-white/10 text-zinc-400'}`}
+            className={`p-3 rounded-xl border transition-all active:scale-95 ${isOfflineMode ? 'bg-yellow-500/20 border-yellow-500 text-yellow-500' : 'bg-white/5 border-white/10 text-zinc-400'}`}
           >
-            <DownloadCloud className="w-6 h-6" />
+            <DownloadCloud className="w-5 h-5" />
           </button>
         </div>
       </div>
 
       {/* NEW: Road Name Display */}
-      <div className="px-14 mb-2">
+      <div className="px-6 mb-2">
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex flex-col"
         >
           <span className="text-[10px] font-black text-brand-primary uppercase tracking-[0.5em] mb-1">Via Atual</span>
-          <div className="text-lg font-black text-white italic truncate uppercase tracking-tighter max-w-[80vw]">
+          <div className="text-sm font-black text-white italic truncate uppercase tracking-tighter max-w-[80vw]">
             {currentRoadName || 'Mapeando Via...'}
           </div>
         </motion.div>
       </div>
 
       {/* Status Indicators */}
-      <div className="px-14 flex items-center gap-4">
+      <div className="px-6 flex items-center gap-4">
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${isOfflineMode ? 'bg-yellow-500' : 'bg-green-500'} animate-pulse`} />
           <span className="text-[10px] font-black text-white uppercase tracking-widest">
@@ -222,12 +222,14 @@ export function CorneringAssistantHUD({
                 <div className="absolute inset-0 bg-cyan-500/10 rounded-full blur-xl animate-ping" />
               </div>
               <div className="text-center">
-                <div className="text-xs font-black text-zinc-600 uppercase tracking-[0.6em] mb-2">Escaneando Geometria</div>
+                <div className="text-xs font-black text-zinc-600 uppercase tracking-[0.6em] mb-2">
+                  {upcomingNodes.length > 0 ? 'Via Analisada: Aguardando Curva' : 'Escaneando Geometria'}
+                </div>
                 <div className="h-1 w-48 bg-zinc-900 rounded-full overflow-hidden">
                   <motion.div 
-                    animate={{ x: [-192, 192] }}
-                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                    className="w-full h-full bg-gradient-to-r from-transparent via-cyan-500 to-transparent"
+                    animate={upcomingNodes.length > 0 ? { opacity: [0.3, 1, 0.3] } : { x: [-192, 192] }}
+                    transition={{ duration: upcomingNodes.length > 0 ? 1 : 2, repeat: Infinity, ease: "linear" }}
+                    className={`w-full h-full bg-gradient-to-r ${upcomingNodes.length > 0 ? 'from-green-500 via-green-400 to-green-500' : 'from-transparent via-cyan-500 to-transparent'}`}
                   />
                 </div>
               </div>
@@ -237,7 +239,7 @@ export function CorneringAssistantHUD({
       </motion.div>
 
       {/* Bottom Display (Speed & Mini-map) */}
-      <div className="relative z-10 p-14 flex items-end justify-between">
+      <div className="relative z-10 p-6 pb-8 flex items-end justify-between">
         
         {/* Left: Mini Map */}
         <div className="relative group">
@@ -247,7 +249,7 @@ export function CorneringAssistantHUD({
               Trajeto Analisado
             </span>
           </div>
-          <div className="glass-panel w-56 h-56 rounded-[2rem] border border-white/10 bg-zinc-900/60 overflow-hidden relative shadow-2xl">
+          <div className="glass-panel w-40 h-40 rounded-[2rem] border border-white/10 bg-zinc-900/60 overflow-hidden relative shadow-2xl">
             {/* Minimalist Grid */}
             <div className="absolute inset-0 opacity-10">
               <div className="w-full h-full border-2 border-white/5 rounded-full scale-150" />
@@ -285,10 +287,10 @@ export function CorneringAssistantHUD({
         </div>
 
         {/* Right: Telemetry Mini Info */}
-        <div className="flex flex-col items-end gap-10 text-right">
+        <div className="flex flex-col items-end gap-4 text-right">
           <div className="space-y-1">
             <div className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Janela de Varredura</div>
-            <div className="text-4xl font-black text-white italic">
+            <div className="text-2xl font-black text-white italic">
               {Math.round(lookAheadDistance)}<span className="text-base text-zinc-600 ml-1">metros</span>
             </div>
           </div>
@@ -298,7 +300,7 @@ export function CorneringAssistantHUD({
               <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-ping" />
               Telemetria GPS
             </div>
-            <div className="text-8xl font-black text-white italic leading-tight tracking-tighter">
+            <div className="text-6xl font-black text-white italic leading-tight tracking-tighter">
               {Math.round(speedKmh)}
               <span className="text-xl text-zinc-700 ml-2">KM/H</span>
             </div>

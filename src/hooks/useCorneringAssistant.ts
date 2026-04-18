@@ -24,16 +24,24 @@ export function useCorneringAssistant(
     baseDist?: number;
     speedFactor?: number;
     maxDist?: number;
-  }
+  },
+  externalDestination?: string | null
 ) {
   const [nextCurve, setNextCurve] = useState<CurveData | null>(null);
   const [upcomingNodes, setUpcomingNodes] = useState<RoadNode[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [destination, setDestination] = useState<string | null>(null);
+  const [destination, setDestination] = useState<string | null>(externalDestination || null);
   const [isRouteMode, setIsRouteMode] = useState(false);
   const [currentRoadName, setCurrentRoadName] = useState<string | null>(null);
   
   const lastFetchRef = useRef<{ lat: number, lng: number } | null>(null);
+
+  // Sync with external destination if provided
+  useEffect(() => {
+    if (externalDestination !== undefined) {
+      setDestination(externalDestination);
+    }
+  }, [externalDestination]);
 
   // Default values for look-ahead
   const baseDist = config?.baseDist ?? 500;

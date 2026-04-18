@@ -56,22 +56,28 @@ class CurveAnalysisService {
         // Simple approach: pick the closest way
         // In a production app, we would use map-matching (snapping)
         if (ways.length > 0) {
-          // Find the way whose nodes are closest to the current lat/lng
+          // Find the way closest to the current lat/lng
           let bestWay = ways[0];
           let minWayDist = Infinity;
 
           ways.forEach(w => {
-            if (w.nodes && w.nodes[0] && nodesMap[w.nodes[0]]) {
-              const node = nodesMap[w.nodes[0]];
-              const d = this.haversineDistance(lat, lng, node.lat, node.lng);
-              if (d < minWayDist) {
-                minWayDist = d;
-                bestWay = w;
-              }
+            if (w.nodes) {
+              // Check the distance to each node of the way to find the actually closest way
+              w.nodes.forEach((id: number) => {
+                const node = nodesMap[id];
+                if (node) {
+                  const d = this.haversineDistance(lat, lng, node.lat, node.lng);
+                  if (d < minWayDist) {
+                    minWayDist = d;
+                    bestWay = w;
+                  }
+                }
+              });
             }
           });
 
-          const roadName = bestWay.tags?.name || null;
+          const roadName = bestWay.tags?.name || 
+                        (bestWay.tags?.highway ? `Via ${bestWay.tags.highway.charAt(0).toUpperCase() + bestWay.tags.highway.slice(1)}` : null);
           const roadNodes = bestWay.nodes.map((id: number) => nodesMap[id]).filter(Boolean);
           this.cache.set(cacheKey, { nodes: roadNodes, roadName });
           return { nodes: roadNodes, roadName };

@@ -109,7 +109,7 @@ export function PerformanceChart({ result, opponentResult, isPremium }: Performa
             strokeWidth={3} 
             fillOpacity={1} 
             fill="url(#colorSpeed)" 
-            animationDuration={2000}
+            isAnimationActive={false}
           />
         </AreaChart>
       </ChartZone>
@@ -131,7 +131,7 @@ export function PerformanceChart({ result, opponentResult, isPremium }: Performa
             stroke="#10b981" 
             strokeWidth={2} 
             dot={false}
-            animationDuration={2500}
+            isAnimationActive={false}
           />
           <Line 
             type="monotone" 
@@ -140,7 +140,7 @@ export function PerformanceChart({ result, opponentResult, isPremium }: Performa
             stroke="#3b82f6" 
             strokeWidth={2} 
             dot={false}
-            animationDuration={2500}
+            isAnimationActive={false}
           />
           <Legend wrapperStyle={{ fontSize: '8px', textTransform: 'uppercase', fontWeight: 'black', marginTop: '10px' }} />
         </LineChart>
@@ -164,7 +164,7 @@ export function PerformanceChart({ result, opponentResult, isPremium }: Performa
               stroke="#ef4444" 
               strokeWidth={3} 
               dot={false}
-              animationDuration={3000}
+              isAnimationActive={false}
             />
             <Line 
               type="monotone" 
@@ -174,7 +174,7 @@ export function PerformanceChart({ result, opponentResult, isPremium }: Performa
               strokeDasharray="5 5"
               strokeWidth={2} 
               dot={false}
-              animationDuration={3000}
+              isAnimationActive={false}
             />
             <Legend wrapperStyle={{ fontSize: '8px', textTransform: 'uppercase', fontWeight: 'black', marginTop: '10px' }} />
           </LineChart>
