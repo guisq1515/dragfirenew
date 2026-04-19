@@ -108,6 +108,7 @@ export interface Vehicle {
   photoURL?: string;
   photoURLs?: string[]; // Multiple photos for premium
   active?: boolean;
+  catalogLayout?: 'overlay' | 'classic';
   weight?: number;      // Total weight in kg
   hp?: number;          // CV
   stage?: string;       // Stage 1, 2, 3, etc.

@@ -195,6 +195,130 @@ class ErrorBoundary extends React.Component<any, any> {
     return (this as any).props.children;
   }
 }
+
+// --- Brand Logo Component ---
+const DragFireLogo = ({ size = 'medium', className = '' }: { size?: 'small' | 'medium' | 'large', className?: string }) => {
+  const sizes = {
+    small: 'h-6',
+    medium: 'h-10',
+    large: 'h-24'
+  };
+
+  return (
+    <div className={`flex items-center gap-3 ${className}`}>
+      <div className={`relative ${sizes[size]} aspect-square`}>
+        {/* Flame Icon */}
+        <div className="absolute -top-1 -right-1 w-1/2 h-1/2 overflow-visible">
+          <svg viewBox="0 0 24 24" className="w-full h-full text-brand-primary drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]">
+            <path fill="currentColor" d="M12,18.5C10.07,18.5 8.5,16.93 8.5,15C8.5,13.07 10.07,11.5 12,11.5C13.93,11.5 15.5,13.07 15.5,15C15.5,16.93 13.93,18.5 12,18.5M12,2C12,2 17,7 17,11C17,14 14.5,16.5 12,16.5C9.5,16.5 7,14 7,11C7,7 12,2 12,2Z" />
+          </svg>
+        </div>
+        {/* DF Letters */}
+        <svg viewBox="0 0 100 100" className="w-full h-full">
+          <defs>
+            <linearGradient id="df-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style={{ stopColor: '#ffffff', stopOpacity: 1 }} />
+              <stop offset="100%" style={{ stopColor: '#e2e2e2', stopOpacity: 1 }} />
+            </linearGradient>
+          </defs>
+          <path 
+            d="M20 20 L50 20 Q70 20 70 40 L70 60 Q70 80 50 80 L20 80 Z" 
+            fill="none" 
+            stroke="white" 
+            strokeWidth="8" 
+            className="drop-shadow-[0_0_5px_rgba(255,255,255,0.3)]"
+          />
+          <text 
+            x="32" y="65" 
+            fontFamily="font-display, sans-serif" 
+            fontWeight="900" 
+            fontStyle="italic" 
+            fontSize="45" 
+            fill="white"
+          >D</text>
+          <path 
+            d="M60 30 L90 30 L90 40 L75 40 L75 50 L85 50 L85 60 L75 60 L75 80" 
+            fill="none" 
+            stroke="#ef4444" 
+            strokeWidth="8"
+            strokeLinecap="round"
+          />
+        </svg>
+      </div>
+      {(size === 'medium' || size === 'large') && (
+        <div className="flex flex-col">
+          <div className="flex items-baseline gap-1">
+            <span className={`font-display font-black italic text-white uppercase tracking-tighter ${size === 'large' ? 'text-4xl' : 'text-xl'}`}>DRAG</span>
+            <span className={`font-display font-black italic text-brand-primary uppercase tracking-tighter ${size === 'large' ? 'text-4xl' : 'text-xl'}`}>FIRE</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- Brand Icon Component [NEW] ---
+const BrandIcon = ({ brand, className = '' }: { brand: string, className?: string }) => {
+  const b = brand?.toLowerCase() || '';
+  
+  // Audi Rings
+  if (b.includes('audi')) return (
+    <svg viewBox="0 0 100 40" className={className} fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="20" cy="20" r="15" />
+      <circle cx="40" cy="20" r="15" />
+      <circle cx="60" cy="20" r="15" />
+      <circle cx="80" cy="20" r="15" />
+    </svg>
+  );
+
+  // BMW style
+  if (b.includes('bmw')) return (
+    <svg viewBox="0 0 100 100" className={className} fill="currentColor">
+      <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" strokeWidth="4" />
+      <path d="M50 50 L50 10 A40 40 0 0 1 90 50 Z" />
+      <path d="M50 50 L10 50 A40 40 0 0 1 50 90 Z" />
+    </svg>
+  );
+
+  // Honda / Hyundai style
+  if (b.includes('honda') || b.includes('hyundai')) return (
+    <svg viewBox="0 0 100 100" className={className} fill="none" stroke="currentColor" strokeWidth="6">
+      <rect x="15" y="15" width="70" height="70" rx="10" />
+      <path d="M30 30 L30 70 M70 30 L70 70 M30 50 L70 50" strokeLinecap="round" />
+    </svg>
+  );
+
+  // Porsche / Ferrari shield style
+  if (b.includes('porsche') || b.includes('ferrari') || b.includes('lamborghini')) return (
+    <svg viewBox="0 0 80 100" className={className} fill="currentColor">
+      <path d="M40 5 C10 5 5 20 5 50 C5 80 40 95 40 95 C40 95 75 80 75 50 C75 20 70 5 40 5Z" />
+      <text x="40" y="65" textAnchor="middle" fill="black" fontSize="40" fontWeight="900" fontStyle="italic">{brand.charAt(0).toUpperCase()}</text>
+    </svg>
+  );
+
+  // Mercedes
+  if (b.includes('mercedes')) return (
+    <svg viewBox="0 0 100 100" className={className} fill="none" stroke="currentColor" strokeWidth="4">
+      <circle cx="50" cy="50" r="45" />
+      <path d="M50 5 L50 50 L10 70 M50 50 L90 70" strokeLinecap="round" />
+    </svg>
+  );
+
+  // Yamaha / Moto
+  if (b.includes('yamaha') || b.includes('kawasaki') || b.includes('honda')) return (
+    <svg viewBox="0 0 100 100" className={className} fill="none" stroke="currentColor" strokeWidth="4">
+      <circle cx="50" cy="50" r="40" strokeDasharray="10 5" />
+      <path d="M50 20 L50 80 M20 50 L80 50" strokeLinecap="round" />
+    </svg>
+  );
+
+  // Default Stylish Shield
+  return (
+    <div className={`flex items-center justify-center bg-gradient-to-br from-brand-primary to-black border border-brand-primary/30 rounded-lg shadow-[0_0_10px_rgba(239,68,68,0.2)] ${className}`}>
+      <span className="text-[10px] font-black italic text-brand-primary uppercase">{brand.charAt(0).toUpperCase()}</span>
+    </div>
+  );
+};
 import { 
   ResponsiveContainer, 
   AreaChart, 
@@ -586,7 +710,9 @@ function HistoryItem({ run, isPremium, onDelete }: HistoryItemProps) {
                         <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1 font-display">Potência (CV)</span>
                         {!isPremium ? (
                           <div className="flex items-center gap-1.5 text-yellow-500/40">
-                            <Lock className="w-3.5 h-3.5" />
+                            <div className="flex flex-col items-center">
+                               <DragFireLogo size="small" />
+                            </div>
                             <span className="text-[8px] font-black uppercase tracking-tighter">Premium</span>
                           </div>
                         ) : (
@@ -2401,9 +2527,20 @@ function VehicleSettings({
     weight: 0,
     stockHp: 0,
     stockTorque: 0,
-    stockWeight: 0
+    stockWeight: 0,
+    catalogLayout: 'overlay'
   };
-  const [formData, setFormData] = useState<Vehicle>(baseVehicle);
+  const [formData, setFormData] = useState<Vehicle>(editingVehicle || baseVehicle);
+  
+  // Update formData if editingVehicle changes (important if component stays mounted)
+  useEffect(() => {
+    if (editingVehicle) {
+      setFormData(editingVehicle);
+    } else {
+      setFormData(baseVehicle);
+    }
+  }, [editingVehicle]);
+
   const [activeTab, setActiveTab] = useState<'basics' | 'technical'>('basics');
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement> | null) => {
@@ -2819,6 +2956,38 @@ function VehicleSettings({
             className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-white placeholder:text-zinc-700 focus:outline-none focus:border-brand-primary/50 transition-colors"
           />
         </div>
+
+        {/* Catalog Style Selection [NEW] */}
+        <div className="space-y-4 pt-2">
+          <div className="flex items-center gap-2 mb-2">
+             <div className="w-1 h-3 bg-brand-primary rounded-full transition-all" />
+             <h4 className="text-[10px] font-black text-white/50 uppercase tracking-widest">Estilo do Catálogo</h4>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+             <button 
+               type="button"
+               onClick={() => setFormData(p => ({...p, catalogLayout: 'overlay'}))}
+               className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${formData.catalogLayout === 'overlay' || !formData.catalogLayout ? 'bg-brand-primary/10 border-brand-primary text-white shadow-[0_0_20px_rgba(239,68,68,0.1)]' : 'bg-zinc-900 border-white/5 text-zinc-500'}`}
+             >
+               <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-white/10 relative overflow-hidden flex items-center justify-center">
+                  <div className={`absolute inset-0 bg-brand-primary/20 ${formData.catalogLayout === 'overlay' || !formData.catalogLayout ? 'opacity-100' : 'opacity-0'} transition-opacity`} />
+                  <div className="w-5 h-1.5 bg-white/40 rounded-full" />
+               </div>
+               <span className="text-[10px] font-bold uppercase tracking-tight">Overlay</span>
+             </button>
+             <button 
+               type="button"
+               onClick={() => setFormData(p => ({...p, catalogLayout: 'classic'}))}
+               className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${formData.catalogLayout === 'classic' ? 'bg-brand-primary/10 border-brand-primary text-white shadow-[0_0_20px_rgba(239,68,68,0.1)]' : 'bg-zinc-900 border-white/5 text-zinc-500'}`}
+             >
+               <div className="w-10 h-10 rounded-xl bg-zinc-800 border border-white/10 flex flex-col gap-1 items-center justify-center">
+                  <div className="w-6 h-4 bg-zinc-700 rounded-sm" />
+                  <div className={`w-5 h-1.5 bg-brand-primary/40 rounded-full ${formData.catalogLayout === 'classic' ? 'opacity-100' : 'opacity-0'} transition-opacity`} />
+               </div>
+               <span className="text-[10px] font-bold uppercase tracking-tight">Classic</span>
+             </button>
+          </div>
+        </div>
           </>
         ) : (
           <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300">
@@ -2911,7 +3080,7 @@ function VehicleSettings({
               </div>
             ))}
             {isPremium && (formData.photoURLs?.length || 0) < 3 && (
-              <label className="aspect-square rounded-xl border-2 border-dashed border-white/10 flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-brand-primary/50 transition-all text-zinc-600 hover:text-brand-primary/50">
+              <label className="aspect-square rounded-xl border-2 border-dashed border-white/5 flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-brand-primary/50 transition-all text-zinc-600 hover:text-brand-primary/50">
                 <ImageIcon className="w-5 h-5" />
                 <span className="text-[8px] font-black uppercase">Adicionar</span>
                 <input type="file" className="hidden" accept="image/*" onChange={handleAdditionalPhotoUpload} disabled={isUploading} />
@@ -4464,51 +4633,52 @@ export default function App() {
               <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
             </motion.div>
           ) : screen === 'login' ? (
-          <motion.div
-            key="login"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-black"
-          >
-            <div className="w-48 h-48 mb-4 relative flex items-center justify-center">
-              <div className="absolute inset-0 bg-brand-primary/10 blur-3xl rounded-full scale-150" />
-              <img 
-                src="/logo.png" 
-                alt="DragFire Logo" 
-                className="w-full h-full object-contain relative z-10"
-                style={{
-                  maskImage: 'radial-gradient(circle, black 50%, transparent 95%)',
-                  WebkitMaskImage: 'radial-gradient(circle, black 50%, transparent 95%)'
-                }}
-              />
-            </div>
-            <h1 className="text-4xl font-display font-black italic text-white leading-none tracking-tighter mb-2">DRAG<span className="text-brand-primary">FIRE</span></h1>
-            <p className="text-zinc-500 text-sm font-bold uppercase tracking-widest mb-12">Performance GPS Timer</p>
-            
-            <button 
-              onClick={handleLogin}
-              disabled={isLoggingIn}
-              className="w-full max-w-xs py-4 bg-white text-zinc-950 rounded-xl font-bold flex items-center justify-center gap-3 shadow-xl hover:bg-zinc-100 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
+            <div 
+              key="login"
+              className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-black relative overflow-hidden"
             >
-              {isLoggingIn ? (
-                <div className="w-5 h-5 border-2 border-zinc-950 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
-              )}
-              {isLoggingIn ? 'Entrando...' : 'Entrar com Google'}
-            </button>
+              {/* Animated Background Glows */}
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[200%] aspect-square bg-brand-primary/5 blur-[120px] rounded-full pointer-events-none" />
+              <div className="absolute bottom-0 right-0 w-[50%] aspect-square bg-brand-primary/10 blur-[100px] rounded-full pointer-events-none" />
+              
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                className="mb-16 relative z-10 flex flex-col items-center"
+              >
+                <DragFireLogo size="large" className="mb-8" />
+                <h2 className="text-zinc-500 font-bold uppercase tracking-[0.3em] text-[10px]">AFERIÇÃO DE PERFORMACE</h2>
+              </motion.div>
 
-            <button 
-              onClick={handleGuestLogin}
-              className="mt-4 w-full max-w-xs py-4 bg-zinc-900 text-zinc-400 rounded-xl font-bold flex items-center justify-center gap-3 border border-white/5 hover:bg-zinc-800 transition-all active:scale-95"
-            >
-              Entrar como Visitante
-            </button>
-            <p className="mt-8 text-[10px] text-zinc-600 uppercase font-bold tracking-widest">
-              Sincronize seus tempos e veículos na nuvem
-            </p>
-          </motion.div>
+              <div className="w-full max-w-xs space-y-4 relative z-10">
+                <button 
+                  onClick={handleLogin}
+                  disabled={isLoggingIn}
+                  className="w-full py-4 bg-white text-black hover:bg-zinc-200 rounded-2xl font-black italic text-lg transition-all active:scale-95 flex items-center justify-center gap-3 shadow-xl disabled:opacity-50"
+                >
+                  {isLoggingIn ? (
+                    <div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="Google" />
+                      ENTRAR COM GOOGLE
+                    </>
+                  )}
+                </button>
+                
+                <button 
+                  onClick={handleGuestLogin}
+                  className="w-full py-3 bg-zinc-950 text-white/40 hover:text-white rounded-2xl font-bold text-sm border border-white/5 transition-all active:scale-95"
+                >
+                  ENTRAR COMO VISITANTE
+                </button>
+              </div>
+
+              <div className="absolute bottom-10 left-0 right-0 px-8 opacity-20 z-10">
+                <p className="text-[8px] font-black tracking-[0.5em] text-white/50 mb-1">DESIGNED FOR SPEED</p>
+                <p className="text-[10px] font-mono text-white/50">v{APP_VERSION}-ELITE</p>
+              </div>
+            </div>
         ) : screen === 'terms' ? (
           <motion.div
             key="terms"
@@ -5701,7 +5871,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-    {(user || isGuest) && screen !== 'login' && screen !== 'terms' && screen !== 'timer' && screen !== 'custom-setup' && !isRunning && (
+    {(user || isGuest) && screen !== 'login' && screen !== 'terms' && screen !== 'timer' && screen !== 'custom-setup' && screen !== 'vehicle-catalog' && !isRunning && (
         <BottomNav 
           activeScreen={screen} 
           isGuest={isGuest}
@@ -5918,14 +6088,11 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle:
           <ChevronLeft className="w-5 h-5" />
         </button>
         <div className="flex items-center gap-2">
-           <div className="text-right">
-             <p className="text-[10px] text-brand-primary font-black uppercase tracking-[0.3em] mb-1 italic">Car Selection</p>
-             <h2 className="text-sm font-black text-white/40 uppercase tracking-widest leading-none">My Cars</h2>
-           </div>
+           <DragFireLogo size="small" />
            {isOwnCar && (
              <button 
                onClick={() => onEditVehicle?.(vehicle)}
-               className="ml-4 p-2 bg-brand-primary/10 border border-brand-primary/20 rounded-xl text-brand-primary hover:bg-brand-primary hover:text-white transition-all active:scale-95"
+               className="ml-4 p-3 bg-brand-primary/10 border border-brand-primary/20 rounded-xl text-brand-primary hover:bg-brand-primary hover:text-white transition-all active:scale-95"
              >
                <SettingsIcon className="w-5 h-5" />
              </button>
@@ -5933,134 +6100,191 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle:
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col relative z-10 overflow-hidden">
-        {/* Main Brand Bar */}
-        <div className="px-6 relative mb-4">
-          <div className="bg-black/40 backdrop-blur-xl border border-white/5 rounded-3xl p-6 flex items-center justify-between shadow-2xl relative overflow-hidden">
-             <div className="absolute inset-0 bg-gradient-to-r from-brand-primary/5 to-transparent pointer-events-none" />
-             <div className="flex items-center gap-6">
-                <div className="w-16 h-16 bg-zinc-950 rounded-2xl flex items-center justify-center border border-white/10 shadow-inner">
-                   <div className="w-10 h-10 text-white/20 font-black italic text-2xl flex items-center justify-center border-t-2 border-brand-primary/30">{vehicle.brand.charAt(0)}</div>
-                </div>
-                <div>
-                   <h1 className="text-4xl font-display font-black italic text-white leading-none tracking-tighter uppercase">{vehicle.brand}</h1>
-                   <div className="flex items-center gap-2 mt-1">
-                      <span className="text-brand-primary text-xs font-black italic uppercase tracking-widest">{vehicle.model}</span>
-                      <span className="w-1.5 h-1.5 bg-zinc-700 rounded-full" />
-                      <span className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest">{vehicle.nickname}</span>
-                   </div>
-                </div>
-             </div>
-             <div className="text-right">
-                <p className="text-2xl font-display font-black italic text-white/10 leading-none">GTR</p>
-                <p className="text-[10px] font-black text-brand-primary uppercase mt-1">Stage {vehicle.stage}</p>
-             </div>
-          </div>
-        </div>
+      <main className="flex-1 flex flex-col relative z-20 overflow-hidden">
+        {/* Top Spacer */}
+        <div className="h-4" />
 
         {/* Vehicle Display Area */}
-        <div className="flex-1 relative flex items-center justify-center perspective-[1000px]">
+        <div className="flex-1 relative flex flex-col items-center justify-center px-4">
           <motion.div 
-            initial={{ scale: 0.9, opacity: 0, rotateY: 10 }}
-            animate={{ scale: 1, opacity: 1, rotateY: 0 }}
-            className="w-full h-full max-h-[350px] px-4"
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className={`w-full relative aspect-[4/3] max-h-[400px] rounded-[40px] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.8)] border border-white/10 group bg-zinc-900 ${vehicle.catalogLayout === 'classic' ? 'mb-4' : ''}`}
           >
-            <div className="relative w-full h-full rounded-[40px] overflow-hidden group shadow-[0_40px_100px_rgba(0,0,0,0.8)] border border-white/5">
-               <img 
-                 src={vehicle.photoURL || 'https://images.unsplash.com/photo-1542281286-9e0a16bb7366?q=80&w=1200'} 
-                 className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
-               />
-               <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-transparent to-zinc-950/20" />
-               
-               {/* Technical Specs Tags */}
-               <div className="absolute top-6 left-6 flex flex-col gap-2">
-                  <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 flex items-center gap-3">
-                     <Zap className="w-4 h-4 text-brand-primary fill-current" />
-                     <div className="text-left">
-                        <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-widest leading-none">Potência Est.</p>
-                        <p className="text-sm font-black text-white italic">{vehicle.hp || '--'} CV</p>
+             <img 
+               src={vehicle.photoURL || 'https://images.unsplash.com/photo-1542281286-9e0a16bb7366?q=80&w=1200'} 
+               className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" 
+               referrerPolicy="no-referrer"
+             />
+             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
+             
+             {/* Premium Header Bar (Overlay mode) */}
+             {(vehicle.catalogLayout === 'overlay' || !vehicle.catalogLayout) && (
+               <div className="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-auto">
+                  <div className="flex items-center gap-3 bg-black/40 backdrop-blur-xl border border-white/10 px-4 py-2 rounded-2xl shadow-xl">
+                     <DragFireLogo size="small" />
+                     <div className="h-4 w-[1px] bg-white/10" />
+                     <div className="flex items-center gap-2">
+                         <BrandIcon brand={vehicle.brand} className="w-5 h-5" />
+                         <span className="text-[10px] font-black italic text-white uppercase tracking-tight">{vehicle.brand}</span>
                      </div>
                   </div>
-                  <div className="bg-black/60 backdrop-blur-md px-4 py-2 rounded-xl border border-white/10 flex items-center gap-3">
-                     <Weight className="w-4 h-4 text-zinc-400" />
-                     <div className="text-left">
-                        <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-widest leading-none">Peso</p>
-                        <p className="text-sm font-black text-white italic">{vehicle.weight || '--'} KG</p>
+
+                  <div className="flex items-center gap-2">
+                     <button 
+                       onClick={(e) => { e.stopPropagation(); handleShareVehicle(); }}
+                       className="p-3 bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl text-white hover:bg-brand-primary transition-all active:scale-90 shadow-lg"
+                     >
+                       <Share2Icon className="w-4 h-4" />
+                     </button>
+                     <div className="bg-brand-primary px-3 py-1.5 rounded-xl border border-white/10 flex items-center shadow-[0_0_15px_rgba(239,68,68,0.3)]">
+                        <span className="text-[9px] font-black italic text-zinc-950 uppercase tracking-widest whitespace-nowrap">ST_{vehicle.stage?.split(' ')[1] || 'S'}</span>
                      </div>
                   </div>
                </div>
-            </div>
+             )}
+
+             {/* Model Name Overlay (Left Aligned, Smaller) */}
+             {(vehicle.catalogLayout === 'overlay' || !vehicle.catalogLayout) && (
+               <div className="absolute bottom-6 left-6 right-6">
+                  <div className="flex flex-col items-start text-left">
+                     <h2 className="text-2xl font-display font-black italic text-white leading-none tracking-tighter uppercase drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)] mb-1">{vehicle.model}</h2>
+                     <span className="text-[9px] font-bold text-white/50 uppercase tracking-widest bg-black/40 backdrop-blur-sm px-2 py-0.5 rounded-md border border-white/5">{vehicle.nickname || 'Dragster'}</span>
+                  </div>
+               </div>
+             )}
           </motion.div>
+
+          {/* CLASSIC IDENTITY CARD */}
+          {vehicle.catalogLayout === 'classic' && (
+            <motion.div 
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              className="w-full bg-zinc-900 border border-white/5 rounded-3xl p-5 relative overflow-hidden flex items-center justify-between"
+            >
+               <div className="absolute inset-y-0 left-0 w-1 bg-brand-primary shadow-[0_0_15px_rgba(239,68,68,0.5)]" />
+               <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-black rounded-xl flex items-center justify-center border border-white/5">
+                     <BrandIcon brand={vehicle.brand} className="w-7 h-7" />
+                  </div>
+                  <div className="text-left">
+                     <h1 className="text-xl font-display font-black italic text-white leading-none tracking-tighter uppercase mb-0.5">{vehicle.brand}</h1>
+                     <div className="flex items-center gap-2">
+                        <span className="text-brand-primary text-[8px] font-black italic uppercase tracking-widest leading-none">{vehicle.model}</span>
+                        <span className="w-1 h-1 bg-zinc-700 rounded-full" />
+                        <span className="text-zinc-500 text-[8px] font-bold uppercase tracking-widest leading-none">{vehicle.nickname || vehicle.model}</span>
+                     </div>
+                  </div>
+               </div>
+               <div className="text-right">
+                  <div className="px-2 py-1 bg-brand-primary text-zinc-950 rounded-lg text-[8px] font-black uppercase tracking-widest italic mb-2">Stage {vehicle.stage?.split(' ')[1] || 'S'}</div>
+                  <button 
+                    onClick={handleShareVehicle}
+                    className="p-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-zinc-500 transition-colors"
+                  >
+                    <Share2Icon className="w-3.5 h-3.5" />
+                  </button>
+               </div>
+            </motion.div>
+          )}
         </div>
 
-        {/* Performance Gauges (Bottom) */}
-        <div className="px-6 py-8 space-y-6 bg-zinc-950/80 backdrop-blur-xl border-t border-white/5">
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {/* Acceleration */}
-              <div className="space-y-2">
-                 <div className="flex justify-between items-center text-[10px] font-black italic tracking-widest">
-                    <span className="text-white uppercase">Acceleration</span>
-                    <span className="text-brand-primary">{best0to100?.time.toFixed(2) || '0.00'}s</span>
-                 </div>
-                 <div className="h-3 bg-zinc-900 rounded-full border border-white/5 p-0.5 overflow-hidden">
-                    <motion.div 
-                      className="h-full bg-brand-primary rounded-full shadow-[0_0_20px_rgba(239,68,68,0.5)]"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${accelScore}%` }}
-                      transition={{ duration: 1, delay: 0.1 }}
-                    />
-                 </div>
-              </div>
+        {/* REFACTORED DASHBOARD (Two Columns) */}
+        <div className="px-6 py-6 pb-20 space-y-6 bg-zinc-950/90 backdrop-blur-2xl border-t border-white/5 z-30">
+          <div className="grid grid-cols-2 gap-6">
+             {/* LEFT COLUMN: PERFORMANCE BARS */}
+             <div className="space-y-5">
+                <div className="flex items-center gap-2 mb-2">
+                   <div className="w-1 h-3 bg-brand-primary rounded-full" />
+                   <h4 className="text-[10px] font-black text-white/50 uppercase tracking-[0.2em]">Dinâmica</h4>
+                </div>
 
-              {/* Top Speed */}
-              <div className="space-y-2">
-                 <div className="flex justify-between items-center text-[10px] font-black italic tracking-widest">
-                    <span className="text-white uppercase">Top Speed</span>
-                    <span className="text-brand-accent">{maxSpeed.toFixed(0)} KM/H</span>
-                 </div>
-                 <div className="h-3 bg-zinc-900 rounded-full border border-white/5 p-0.5 overflow-hidden">
-                    <motion.div 
-                      className="h-full bg-brand-accent rounded-full shadow-[0_0_20px_rgba(0,242,255,0.5)]"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${speedScore}%` }}
-                      transition={{ duration: 1, delay: 0.3 }}
-                    />
-                 </div>
-              </div>
+                {/* V-MAX BAR */}
+                <div className="space-y-1.5">
+                   <div className="flex justify-between items-end">
+                      <span className="text-[8px] font-black text-zinc-500 uppercase">Velocidade Máxima</span>
+                      <span className="text-xs font-display font-black italic text-white">{maxSpeed.toFixed(0)} <span className="text-brand-accent text-[8px] ml-0.5">KM/H</span></span>
+                   </div>
+                   <div className="h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${speedScore}%` }}
+                        className="h-full bg-brand-accent rounded-full shadow-[0_0_10px_rgba(34,197,94,0.3)]"
+                      />
+                   </div>
+                </div>
 
-              {/* Handling */}
-              <div className="space-y-2">
-                 <div className="flex justify-between items-center text-[10px] font-black italic tracking-widest">
-                    <span className="text-white uppercase">Handling</span>
-                    <span className="text-brand-secondary">{runs[0]?.maxG?.toFixed(2) || '0.00'}G</span>
-                 </div>
-                 <div className="h-3 bg-zinc-900 rounded-full border border-white/5 p-0.5 overflow-hidden">
-                    <motion.div 
-                      className="h-full bg-brand-secondary rounded-full shadow-[0_0_20px_rgba(34,197,94,0.5)]"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${handlingScore}%` }}
-                      transition={{ duration: 1, delay: 0.5 }}
-                    />
-                 </div>
-              </div>
-           </div>
+                {/* TORQUE BAR */}
+                <div className="space-y-1.5">
+                   <div className="flex justify-between items-end">
+                      <span className="text-[8px] font-black text-zinc-500 uppercase">Torque Estimado</span>
+                      <span className="text-xs font-display font-black italic text-white">{(vehicle.hp || 0) * 1.5 || '--'} <span className="text-orange-500 text-[8px] ml-0.5">NM</span></span>
+                   </div>
+                   <div className="h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: '65%' }}
+                        className="h-full bg-orange-500 rounded-full shadow-[0_0_10px_rgba(249,115,22,0.3)]"
+                      />
+                   </div>
+                </div>
 
-           {/* Quick Actions Footer */}
-           <div className="flex items-center justify-center gap-2 pt-4">
-              <button 
-                onClick={onBack}
-                className="flex-1 h-12 bg-zinc-900 border border-white/10 rounded-full font-black uppercase text-[10px] tracking-widest text-zinc-500 hover:text-white hover:bg-zinc-800 transition-all active:scale-95"
-              >
-                Back
-              </button>
-              <button 
-                onClick={handleShareVehicle}
-                className="flex-[2] h-12 bg-brand-primary text-white rounded-full font-black uppercase text-[10px] tracking-widest shadow-lg shadow-red-600/20 active:scale-95 transition-all flex items-center justify-center gap-2"
-              >
-                <Share2Icon className="w-4 h-4" />
-                Continuar / Compartilhar
-              </button>
-           </div>
+                {/* FORCE G BAR */}
+                <div className="space-y-1.5">
+                   <div className="flex justify-between items-end">
+                      <span className="text-[8px] font-black text-zinc-500 uppercase">Força G Acúm.</span>
+                      <span className="text-xs font-display font-black italic text-white">{(runs[0]?.maxG || 0.85).toFixed(2)} <span className="text-blue-500 text-[8px] ml-0.5">G</span></span>
+                   </div>
+                   <div className="h-1.5 bg-zinc-900 rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${handlingScore}%` }}
+                        className="h-full bg-blue-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.3)]"
+                      />
+                   </div>
+                </div>
+             </div>
+
+             {/* RIGHT COLUMN: PHYSICAL SPECS */}
+             <div className="space-y-5">
+                <div className="flex items-center gap-2 mb-2">
+                   <div className="w-1 h-3 bg-zinc-700 rounded-full" />
+                   <h4 className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.2em]">Ficha Técnica</h4>
+                </div>
+
+                {/* HP CARD */}
+                <div className="bg-white/5 border border-white/5 rounded-2xl p-3 flex items-center justify-between group hover:border-brand-primary/30 transition-colors">
+                   <div className="flex flex-col">
+                      <span className="text-[7px] font-black text-white/30 uppercase tracking-tighter">Potência</span>
+                      <span className="text-sm font-display font-black italic text-white leading-none">{vehicle.hp || '--'} <span className="text-brand-primary text-[8px] lowercase">cv</span></span>
+                   </div>
+                   <Zap className="w-4 h-4 text-brand-primary/40 group-hover:text-brand-primary transition-colors" />
+                </div>
+
+                {/* WEIGHT CARD */}
+                <div className="bg-white/5 border border-white/5 rounded-2xl p-3 flex items-center justify-between group hover:border-zinc-400/30 transition-colors">
+                   <div className="flex flex-col">
+                      <span className="text-[7px] font-black text-white/30 uppercase tracking-tighter">Peso Total</span>
+                      <span className="text-sm font-display font-black italic text-white leading-none">{vehicle.weight || '--'} <span className="text-zinc-500 text-[8px] lowercase">kg</span></span>
+                   </div>
+                   <Weight className="w-4 h-4 text-zinc-700 group-hover:text-white transition-colors" />
+                </div>
+
+                {/* ENGINE CARD */}
+                <div className="bg-white/5 border border-white/5 rounded-2xl p-3 flex flex-col justify-center group hover:border-blue-400/30 transition-colors">
+                   <span className="text-[7px] font-black text-white/30 uppercase tracking-tighter mb-1">Modelo Motor</span>
+                   <span className="text-[10px] font-black italic text-white uppercase italic tracking-tighter truncate">{vehicle.engine || 'STOCK ENGINE'}</span>
+                </div>
+             </div>
+          </div>
+
+          <button 
+            onClick={handleShareVehicle}
+            className="w-full h-14 bg-gradient-to-r from-brand-primary to-red-600 text-white rounded-2xl font-black italic uppercase text-xs tracking-[0.2em] shadow-[0_10px_30px_rgba(185,28,28,0.3)] active:scale-[0.98] transition-all flex items-center justify-center gap-3 group"
+          >
+            <Share2Icon className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+            COMPARTILHAR GARAGEM
+          </button>
         </div>
       </main>
     </div>
