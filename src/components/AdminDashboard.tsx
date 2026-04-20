@@ -274,6 +274,17 @@ export function AdminDashboard({
     }
   };
 
+  const handleAddCoins = async (targetUser: UserProfile, amount: number) => {
+    try {
+      const userRef = doc(db, 'users', targetUser.uid);
+      const newBalance = (targetUser.dfCoins || 0) + amount;
+      await setDoc(userRef, { dfCoins: newBalance }, { merge: true });
+      setUsers(prev => prev.map(u => u.uid === targetUser.uid ? { ...u, dfCoins: newBalance } : u));
+    } catch (error) {
+      console.error("Error adding coins:", error);
+    }
+  };
+
   const handleSavePowerRef = async () => {
     if (!refFormData.carName || !refFormData.weight) return;
     setSaveLoading(true);
@@ -962,19 +973,27 @@ export function AdminDashboard({
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-white truncate leading-tight">{u.displayName || 'Piloto DragFire'}</p>
-                        <p className="text-[9px] text-zinc-500 uppercase font-black tracking-widest mt-1 opacity-50">UID: {u.uid.slice(0, 10)}...</p>
+                        <p className="text-[9px] text-zinc-500 uppercase font-black tracking-widest mt-1 opacity-50">UID: {u.uid.slice(0, 10)}... • 🪙 {u.dfCoins || 0} DC</p>
                       </div>
                     </div>
-                    <button 
-                      onClick={() => togglePremium(u)}
-                      className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 ${
-                        u.isPremium 
-                          ? 'bg-yellow-500 text-zinc-950 shadow-lg shadow-yellow-500/20' 
-                          : 'bg-zinc-800 text-zinc-500 border border-white/5 hover:text-white'
-                      }`}
-                    >
-                      {u.isPremium ? 'Premium OK' : 'Ativar Premium'}
-                    </button>
+                    <div className="flex flex-col gap-2">
+                      <button 
+                        onClick={() => togglePremium(u)}
+                        className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 ${
+                          u.isPremium 
+                            ? 'bg-yellow-500 text-zinc-950 shadow-lg shadow-yellow-500/20' 
+                            : 'bg-zinc-800 text-zinc-500 border border-white/5 hover:text-white'
+                        }`}
+                      >
+                        {u.isPremium ? 'Premium OK' : 'Ativar Premium'}
+                      </button>
+                      <button 
+                        onClick={() => handleAddCoins(u, 1000)}
+                        className="px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 bg-brand-primary/20 text-brand-primary border border-brand-primary/30 hover:bg-brand-primary hover:text-white"
+                      >
+                        + 1000 DC
+                      </button>
+                    </div>
                   </motion.div>
                 ))
               ) : searchTerm.length > 0 ? (

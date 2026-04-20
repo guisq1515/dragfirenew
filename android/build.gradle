@@ -33,7 +33,7 @@ subprojects {
             force 'androidx.core:core-ktx:1.15.0'
             force 'androidx.appcompat:appcompat:1.7.0'
             
-            eachDependency { DependencyResolveDetails details ->
+            eachDependency { details ->
                 if (details.requested.group == 'androidx.lifecycle') {
                     details.useVersion '2.8.7'
                 }
@@ -46,14 +46,10 @@ subprojects {
     afterEvaluate { project ->
         if (project.hasProperty('android')) {
             project.android {
-                compileSdk = 36
+                compileSdk = rootProject.ext.compileSdkVersion
                 if (project.name == 'app') {
                     defaultConfig {
-                        targetSdk = 34
-                    }
-                } else {
-                    defaultConfig {
-                        targetSdk = 35
+                        targetSdk = rootProject.ext.targetSdkVersion
                     }
                 }
                 compileOptions {

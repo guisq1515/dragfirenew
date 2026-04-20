@@ -1,4 +1,4 @@
-export type RunMode = 'speed' | 'distance' | 'free' | 'custom' | 'trip';
+export type RunMode = 'speed' | 'distance' | 'free' | 'custom' | 'trip' | 'duel';
 
 export interface RunConfig {
   mode: RunMode;
@@ -94,6 +94,15 @@ export interface UserProfile {
     showGarage?: boolean;
     showRankings?: boolean;
   };
+  unlockedThemes?: string[];
+  activeThemeId?: string;
+  dfCoins?: number;
+  uiPreference?: 'classic' | 'elite';
+  activeBadgeId?: string | null;
+  unlockedBadges?: string[];
+  activeNeonColor?: string | null;
+  unlockedNeonColors?: string[];
+  hasNeon?: boolean;
 }
 
 export interface Vehicle {
@@ -113,6 +122,8 @@ export interface Vehicle {
   hp?: number;          // CV
   stage?: string;       // Stage 1, 2, 3, etc.
   maxSpeed?: number;    // KM/H
+  best0to100?: number;
+  best201m?: number;
   mods?: string;        // Text list of modifications
   observations?: string;
   engine?: string;
@@ -221,4 +232,13 @@ export interface Activity {
     time?: string;
   };
   timestamp: number;
+}
+
+export interface UserAlbum {
+  id: string;
+  uid: string;
+  name: string;
+  coverPhotoURL?: string;
+  photos: string[];
+  createdAt: number;
 }

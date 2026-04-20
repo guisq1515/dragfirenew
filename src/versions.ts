@@ -1,3 +1,3 @@
-export const APP_VERSION = 'v1.9.5-ELITE';
-export const APP_DATE = '2026-04-18';
-export const VERSION_NOTES = 'Elite Database Expansion, AI spec-fetching for motorcycles, and critical "weight" crash fixes.';
+export const APP_VERSION = 'v1.9.17-ELITE-STABLE';
+export const APP_DATE = '2026-04-20';
+export const VERSION_NOTES = 'Novos Temas (Racing/Moto), Ferramenta de moedas p/ Admin, e correções na Câmera.';

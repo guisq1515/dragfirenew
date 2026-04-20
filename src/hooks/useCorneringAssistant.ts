@@ -44,9 +44,9 @@ export function useCorneringAssistant(
   }, [externalDestination]);
 
   // Default values for look-ahead
-  const baseDist = config?.baseDist ?? 500;
-  const speedFactor = config?.speedFactor ?? 5;
-  const maxDist = config?.maxDist ?? 1500;
+  const baseDist = config?.baseDist ?? 800; // Aumentado de 500
+  const speedFactor = config?.speedFactor ?? 8; // Aumentado de 5
+  const maxDist = config?.maxDist ?? 2000; // Aumentado de 1500
 
   // Dynamic distance calculation
   const lookAheadDistance = Math.min(maxDist, baseDist + (speedKmh * speedFactor));
@@ -70,14 +70,15 @@ export function useCorneringAssistant(
       return;
     }
 
-    // Default Scanner: Check if we moved enough to warrant a new fetch (e.g., > 100m)
+    // Default Scanner: Check if we moved enough to warrant a check (50m)
+    // Thanks to TopologicalRegion cache, this is now computationally free if inside the region.
     const shouldFetch = !lastFetchRef.current || 
-      curveService.haversineDistance(lat, lng, lastFetchRef.current.lat, lastFetchRef.current.lng) > 100;
+      curveService.haversineDistance(lat, lng, lastFetchRef.current.lat, lastFetchRef.current.lng) > 50;
 
     if (shouldFetch) {
       const updateGeometry = async () => {
         setIsLoading(true);
-        const { nodes, roadName } = await curveService.fetchRoadGeometry(lat, lng, 1000); // 1km radius
+        const { nodes, roadName } = await curveService.getRoadGeometry(lat, lng);
         setUpcomingNodes(nodes);
         setCurrentRoadName(roadName);
         setIsRouteMode(false);
@@ -90,7 +91,7 @@ export function useCorneringAssistant(
 
   // 2. Perform Curve Analysis
   useEffect(() => {
-    if (!upcomingNodes.length || lat === null || lng === null || heading === null) {
+    if (!upcomingNodes.length || lat === null || lng === null) {
       setNextCurve(null);
       return;
     }

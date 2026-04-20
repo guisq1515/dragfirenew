@@ -248,6 +248,14 @@ export function usePerformanceTimer(telemetryConfig?: TelemetryConfig) {
           gLongRef.current = (ly || 0) / 9.81;
           gLatRef.current = (lx || 0) / 9.81;
           
+          const currentTotalG = Math.abs(currentAccelMag / 9.81);
+          if (isRunningRef.current) {
+            setGForce(currentTotalG);
+            if (currentTotalG > maxGRef.current) {
+              maxGRef.current = currentTotalG;
+            }
+          }
+          
           if (isReadyRef.current && !isRunningRef.current && configRef.current) {
             const totalG = Math.sqrt((x || 0)**2 + (y || 0)**2 + (z || 0)**2) / 9.81;
             const isStandingStart = configRef.current.startSpeed === 0 || configRef.current.startSpeed === undefined;
@@ -305,6 +313,12 @@ export function usePerformanceTimer(telemetryConfig?: TelemetryConfig) {
                     
                     const newSpeed = prev + dampenedDeltaV;
                     
+                    // Update G-Force in every loop tick for higher resolution
+                    setGForce(currentTotalG);
+                    if (currentTotalG > maxGRef.current) {
+                      maxGRef.current = currentTotalG;
+                    }
+
                     // DRIFT GUARD: Prevent deviating more than 5km/h from GPS ground truth
                     const maxAllowed = lastGpsSpeedRef.current + 5;
                     const minAllowed = Math.max(0, lastGpsSpeedRef.current - 5);

@@ -119,22 +119,38 @@ import {
   Bell,
   Eye,
   LogOut,
-  Settings2
+  Settings2,
+  Palette
 } from 'lucide-react';
 import { PerformanceChart } from './components/PerformanceChart';
 import { TripAnalysis } from './components/TripAnalysis';
+import { ProfileLibrary } from './components/ProfileLibrary';
 import { FuelCalculator } from './components/FuelCalculator';
 import { editCarImage, fetchVehicleSpecs } from './services/geminiService';
 import { AIPhotoEditor } from './components/AIPhotoEditor';
 import { GasStations } from './components/GasStations';
 import { AntigravityImporter } from './components/AntigravityImporter';
 import { AdminDashboard } from './components/AdminDashboard';
+import { getThemeById, PROFILE_THEMES, BADGES, NEON_COLORS } from './constants/themes';
+import { ThemeStoreModal } from './components/ThemeStoreModal';
+
 import { APP_VERSION } from './versions';
 import { useCorneringAssistant } from './hooks/useCorneringAssistant';
 import { CorneringAssistantHUD } from './components/CorneringAssistantHUD';
 import { MiniCorneringWidget } from './components/MiniCorneringWidget';
 import { powerService } from './services/powerService';
 import { KeepAwake } from '@capgo/capacitor-keep-awake';
+
+interface RunPreset {
+  id: string;
+  label: string;
+  mode: 'speed' | 'distance' | 'free' | 'trip' | 'duel';
+  type?: 'standing' | 'rolling' | 'trip' | 'duel';
+  target: number;
+  startSpeed?: number;
+  icon?: any;
+  color?: string;
+}
 
 // Helper to convert Base64 to Uint8Array for stable Capacitor uploads
 const base64ToUint8Array = (base64String: string): Uint8Array => {
@@ -418,7 +434,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 const TERMS_VERSION = '1.0.0';
 const ADMIN_EMAILS = ['guisq1515@gmail.com'];
 
-type Screen = 'home' | 'timer' | 'challenge' | 'duel-result' | 'settings' | 'login' | 'terms' | 'vehicle-settings' | 'profile-settings' | 'regional-ranking' | 'history' | 'gps-guide' | 'custom-setup' | 'trip-view' | 'fuel-calculator' | 'public-profile' | 'feed' | 'search' | 'ai-editor' | 'fuel-stations' | 'anp-import' | 'admin-dashboard' | 'cornering-assistant' | 'vehicle-catalog';
+type Screen = 'home' | 'timer' | 'challenge' | 'duel-result' | 'settings' | 'login' | 'terms' | 'vehicle-settings' | 'profile-settings' | 'theme-store' | 'regional-ranking' | 'history' | 'gps-guide' | 'custom-setup' | 'trip-view' | 'fuel-calculator' | 'public-profile' | 'feed' | 'search' | 'ai-editor' | 'fuel-stations' | 'anp-import' | 'admin-dashboard' | 'cornering-assistant' | 'vehicle-catalog';
 
 function GPSGuide({ onBack }: { onBack: () => void }) {
   const tips = [
@@ -1238,13 +1254,17 @@ function PublicProfile({
   currentUserId,
   onBack,
   onEditVehicles,
-  onViewVehicle
+  onViewVehicle,
+  onOpenStore,
+  isAdmin
 }: { 
   uid: string, 
   currentUserId: string | undefined,
   onBack: () => void,
   onEditVehicles?: () => void,
-  onViewVehicle?: (v: Vehicle) => void
+  onViewVehicle?: (v: Vehicle) => void,
+  onOpenStore?: () => void,
+  isAdmin: boolean
 }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -1252,6 +1272,9 @@ function PublicProfile({
   const [isFollowing, setIsFollowing] = useState(false);
   const [isRequested, setIsRequested] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [activeProfileTab, setActiveProfileTab] = useState<'garage' | 'runs' | 'library'>('garage');
+
+  const theme = getThemeById(profile?.activeThemeId);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -1370,22 +1393,43 @@ function PublicProfile({
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-zinc-950 overflow-y-auto pb-32">
+    <div className={`flex-1 flex flex-col ${theme.backgroundClass} overflow-y-auto pb-32 relative`}>
+      {/* Neon Borders of the Pilot */}
+      {profile.activeNeonColor && (
+        <div className="fixed inset-0 pointer-events-none z-50">
+           <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: profile.activeNeonColor, boxShadow: `0 0 20px ${profile.activeNeonColor}` }} />
+           <div className="absolute right-0 top-0 bottom-0 w-1" style={{ backgroundColor: profile.activeNeonColor, boxShadow: `0 0 20px ${profile.activeNeonColor}` }} />
+        </div>
+      )}
+
       {/* Header */}
-      <div className="relative h-48 bg-zinc-900 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 to-transparent z-10" />
+      <div className={`relative h-48 ${theme.headerClass} overflow-hidden`}>
+        {theme.bannerUrl && (
+          <img src={theme.bannerUrl} className="absolute inset-0 w-full h-full object-cover opacity-60" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent z-10" />
         <button 
           onClick={onBack}
           className="absolute top-6 left-6 z-20 p-2 bg-black/40 backdrop-blur-md rounded-xl text-white"
         >
           <ChevronLeft className="w-5 h-5" />
         </button>
-        <button 
-          onClick={handleShare}
-          className="absolute top-6 right-6 z-20 p-2 bg-black/40 backdrop-blur-md rounded-xl text-white"
-        >
-          <Share2Icon className="w-5 h-5" />
-        </button>
+        <div className="absolute top-6 right-6 z-20 flex gap-2 items-center">
+          {currentUserId === uid && onOpenStore && (
+            <button 
+              onClick={onOpenStore}
+              className="p-2 bg-black/40 backdrop-blur-md rounded-xl text-brand-primary hover:text-white transition-colors"
+            >
+              <Palette className="w-5 h-5" />
+            </button>
+          )}
+          <button 
+            onClick={handleShare}
+            className="p-2 bg-black/40 backdrop-blur-md rounded-xl text-white hover:text-brand-primary transition-colors"
+          >
+            <Share2Icon className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       {/* Profile Info */}
@@ -1401,11 +1445,21 @@ function PublicProfile({
                 </div>
               )}
             </div>
-            {profile.isPremium && (
-              <div className="absolute -bottom-2 -right-2 bg-brand-primary text-white p-1.5 rounded-lg shadow-lg">
+            </div>
+            {/* Badge System: Zap for ADMIN, Brand Badge for Users */}
+            {(uid === currentUserId && isAdmin) ? (
+              <div className={`absolute -bottom-2 -right-2 ${theme.accentBg} text-white p-1.5 rounded-lg shadow-lg z-30`}>
                 <Zap className="w-4 h-4 fill-current" />
               </div>
-            )}
+            ) : profile.activeBadgeId ? (
+              <div className="absolute -bottom-2 -right-2 w-8 h-8 rounded-lg bg-black border border-white/10 shadow-2xl flex items-center justify-center z-30 p-1">
+                <img src={BADGES.find(b => b.id === profile.activeBadgeId)?.imageUrl} className="w-full h-full object-contain" />
+              </div>
+            ) : profile.isPremium ? (
+               <div className={`absolute -bottom-2 -right-2 ${theme.accentBg} text-white p-1 rounded-lg shadow-lg z-30`}>
+                 <CheckCircle2 className="w-3 h-3 fill-current" />
+               </div>
+            ) : null}
           </div>
           
           {currentUserId !== uid && (
@@ -1439,7 +1493,7 @@ function PublicProfile({
               {profile.displayName || 'Piloto Anônimo'}
             </h2>
             {profile.handle && (
-              <p className="w-full text-xs text-brand-primary font-black italic tracking-widest mt-1 uppercase">#{profile.handle}</p>
+              <p className={`w-full text-xs ${theme.accentText} font-black italic tracking-widest mt-1 uppercase`}>#{profile.handle}</p>
             )}
             {profile.isVerified && (
               <CheckCircle2 className="w-5 h-5 text-blue-400 fill-blue-400/10" />
@@ -1472,6 +1526,28 @@ function PublicProfile({
           </div>
         </div>
 
+        {/* Tab Navigation */}
+        <div className="flex bg-zinc-900 rounded-xl overflow-hidden p-1 border border-white/5 shadow-lg">
+          <button 
+            onClick={() => setActiveProfileTab('garage')}
+            className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all rounded-lg flex justify-center items-center gap-1.5 ${activeProfileTab === 'garage' ? 'bg-brand-primary text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}
+          >
+            <Car className="w-4 h-4" /> Garagem
+          </button>
+          <button 
+            onClick={() => setActiveProfileTab('runs')}
+            className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all rounded-lg flex justify-center items-center gap-1.5 ${activeProfileTab === 'runs' ? 'bg-brand-primary text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}
+          >
+            <History className="w-4 h-4" /> Tempos
+          </button>
+          <button 
+            onClick={() => setActiveProfileTab('library')}
+            className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all rounded-lg flex justify-center items-center gap-1.5 ${activeProfileTab === 'library' ? 'bg-brand-primary text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}
+          >
+            <ImageIcon className="w-4 h-4" /> Álbuns
+          </button>
+        </div>
+
         {/* Vehicles & Runs (Privacy Check) */}
         {((profile.privacySettings?.isPrivate || profile.isPrivate) && !isFollowing && currentUserId !== uid) ? (
           <div className="flex flex-col items-center justify-center py-12 px-6 text-center space-y-4 bg-zinc-900/30 rounded-3xl border border-white/5">
@@ -1485,10 +1561,10 @@ function PublicProfile({
           </div>
         ) : (
           <>
-            {/* Vehicles */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
+            {activeProfileTab === 'garage' && (
+              <div className="space-y-4 pb-12">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
                   <Car className="w-4 h-4 text-brand-primary" />
                   Garagem
                 </h3>
@@ -1528,11 +1604,12 @@ function PublicProfile({
                 ))}
               </div>
             </div>
+          )}
 
-            {/* Best Runs */}
-            <div className="space-y-4 pb-12">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
+            {activeProfileTab === 'runs' && (
+              <div className="space-y-4 pb-12">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
                   <History className="w-4 h-4 text-brand-primary" />
                   Últimos Tempos
                 </h3>
@@ -1558,12 +1635,20 @@ function PublicProfile({
                 {runs.length === 0 && (
                   <p className="text-center py-8 text-zinc-600 text-[10px] font-bold uppercase">Nenhuma puxada registrada</p>
                 )}
+                </div>
               </div>
-            </div>
+            )}
+
+            {activeProfileTab === 'library' && (
+              <ProfileLibrary 
+                uid={uid} 
+                currentUserId={currentUserId} 
+                profile={profile} 
+              />
+            )}
           </>
         )}
       </div>
-    </div>
   );
 }
 function RegionalRanking({ 
@@ -1732,6 +1817,248 @@ function RegionalRanking({
     </div>
   );
 }
+
+function RegionalRankingElite({ 
+  userLocation, 
+  onBack,
+  onViewProfile
+}: { 
+  userLocation: { latitude: number, longitude: number } | null, 
+  onBack: () => void,
+  onViewProfile: (uid: string) => void
+}) {
+  const [rankings, setRankings] = useState<RankingEntry[]>([]);
+  const [filter, setFilter] = useState<'regional' | 'regional-100' | 'general'>('regional');
+  const [category, setCategory] = useState<'0-100' | '201m'>('0-100');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'car' | 'motorcycle'>('all');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    const mode = category === '201m' ? 'distance' : 'speed';
+    const target = category === '201m' ? 201 : 100;
+
+    const q = query(
+      collection(db, 'rankings'), 
+      where('mode', '==', mode),
+      where('target', '==', target),
+      orderBy('time', 'asc'), 
+      limit(100)
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RankingEntry));
+      setRankings(data);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error fetching rankings:", error);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [category]);
+
+  const filteredRankings = useMemo(() => {
+    let result = rankings;
+    if (typeFilter !== 'all') {
+      result = result.filter(entry => entry.vehicleType === typeFilter);
+    }
+    if (filter !== 'general' && userLocation) {
+      const maxDist = filter === 'regional-100' ? 100000 : 20000;
+      result = result.filter(entry => {
+        const dist = calculateDistance(
+          { latitude: userLocation.latitude, longitude: userLocation.longitude },
+          { latitude: entry.latitude, longitude: entry.longitude }
+        );
+        return dist <= maxDist;
+      });
+    }
+    return result;
+  }, [rankings, filter, typeFilter, userLocation]);
+
+  const top3 = filteredRankings.slice(0, 3);
+  const others = filteredRankings.slice(3);
+
+  return (
+    <div className="flex-1 flex flex-col overflow-y-auto pb-32 relative bg-[#0a0a0a]">
+       {/* Carbon Fiber Realistic Background */}
+       <div className="absolute inset-0 opacity-[0.07] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ffffff 1px, transparent 0)', backgroundSize: '4px 4px' }} />
+       
+       <div className="p-6 space-y-8 relative z-10">
+          <header className="flex items-center justify-between">
+            <button onClick={onBack} className="p-3 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 text-white active:scale-95 transition-all">
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+            <div className="text-right">
+              <h2 className="text-3xl font-display font-black italic text-white leading-none tracking-tighter">ELITE <span className="text-brand-primary underline decoration-2">RANK</span></h2>
+              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.3em] mt-1">Temporada 2026</p>
+            </div>
+          </header>
+
+          {/* Luxury Filter Toggle */}
+          <div className="flex flex-col gap-4">
+            <div className="flex p-1.5 bg-white/5 backdrop-blur-md rounded-[24px] border border-white/5">
+               {['0-100', '201m'].map((cat) => (
+                  <button 
+                    key={cat}
+                    onClick={() => setCategory(cat as any)}
+                    className={`flex-1 py-3 text-[9px] font-black uppercase tracking-widest rounded-[18px] transition-all duration-500 ${category === cat ? 'bg-brand-primary text-white shadow-[0_5px_15px_rgba(239,68,68,0.3)] scale-[1.02]' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                    {cat === '0-100' ? '0-100 KM/H' : '201 METROS'}
+                  </button>
+               ))}
+            </div>
+
+            <div className="flex gap-2">
+               {['regional', 'regional-100', 'general'].map((f) => (
+                  <button 
+                    key={f}
+                    onClick={() => setFilter(f as any)}
+                    className={`flex-1 py-2 text-[8px] font-black uppercase tracking-widest rounded-xl border transition-all ${filter === f ? 'bg-white/10 border-white/30 text-white' : 'bg-transparent border-white/5 text-zinc-700'}`}
+                  >
+                    {f === 'regional' ? '20 KM' : f === 'regional-100' ? '100 KM' : 'GLOBAL'}
+                  </button>
+               ))}
+            </div>
+          </div>
+
+          {/* Podium Section */}
+          {!loading && top3.length > 0 && (
+            <div className="flex items-end justify-center gap-2 pt-6 h-64">
+                {/* 2nd Place */}
+                {top3[1] && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex-1 flex flex-col items-center gap-2"
+                    onClick={() => onViewProfile(top3[1].uid)}
+                  >
+                    <div className="relative">
+                      <div className="w-16 h-16 rounded-3xl border-2 border-zinc-400 p-1 bg-zinc-900 group shadow-lg">
+                         <img src={top3[1].userPhoto || 'https://via.placeholder.com/150'} className="w-full h-full object-cover rounded-2xl" />
+                      </div>
+                      <div className="absolute -bottom-2 -right-2 w-6 h-6 bg-zinc-400 rounded-full flex items-center justify-center text-[10px] font-black text-zinc-900 border-2 border-zinc-900">2</div>
+                    </div>
+                    <div className="text-center pt-2">
+                       <p className="text-[10px] font-black text-white italic truncate max-w-[80px] leading-tight">{top3[1].userName}</p>
+                       <p className="text-xl font-display font-black italic text-zinc-400">{top3[1].time.toFixed(2)}s</p>
+                    </div>
+                    <div className="w-full h-24 bg-zinc-800/40 border-t border-zinc-700/50 rounded-t-2xl" />
+                  </motion.div>
+                )}
+
+                {/* 1st Place */}
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="flex-1 flex flex-col items-center gap-2 -mb-4 z-10"
+                  onClick={() => onViewProfile(top3[0].uid)}
+                >
+                  <div className="relative">
+                    <div className="absolute -top-6 left-1/2 -translate-x-1/2">
+                       <Trophy className="w-8 h-8 text-yellow-500 drop-shadow-[0_0_10px_rgba(234,179,8,0.5)] fill-current" />
+                    </div>
+                    <div className="w-20 h-20 rounded-3xl border-4 border-yellow-500 p-1 bg-gradient-to-br from-yellow-500/20 to-transparent shadow-[0_0_30px_rgba(234,179,8,0.2)]">
+                       <img src={top3[0].userPhoto || 'https://via.placeholder.com/150'} className="w-full h-full object-cover rounded-2xl" />
+                    </div>
+                    <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center text-xs font-black text-zinc-900 border-4 border-zinc-900">1</div>
+                  </div>
+                  <div className="text-center pt-2">
+                     <p className="text-[12px] font-black text-white italic truncate max-w-[100px] leading-tight">{top3[0].userName}</p>
+                     <p className="text-2xl font-display font-black italic text-yellow-500 glow-yellow">{top3[0].time.toFixed(2)}s</p>
+                  </div>
+                  <div className="w-full h-32 bg-gradient-to-t from-zinc-800/60 to-zinc-800/80 border-t-2 border-yellow-500/50 rounded-t-3xl shadow-[0_-10px_30px_rgba(234,179,8,0.1)]" />
+                </motion.div>
+
+                {/* 3rd Place */}
+                {top3[2] && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex-1 flex flex-col items-center gap-2"
+                    onClick={() => onViewProfile(top3[2].uid)}
+                  >
+                    <div className="relative">
+                      <div className="w-16 h-16 rounded-3xl border-2 border-orange-700/50 p-1 bg-zinc-900">
+                         <img src={top3[2].userPhoto || 'https://via.placeholder.com/150'} className="w-full h-full object-cover rounded-2xl" />
+                      </div>
+                      <div className="absolute -bottom-2 -right-2 w-6 h-6 bg-orange-700 rounded-full flex items-center justify-center text-[10px] font-black text-white border-2 border-zinc-900">3</div>
+                    </div>
+                    <div className="text-center pt-2">
+                       <p className="text-[10px] font-black text-white italic truncate max-w-[80px] leading-tight">{top3[2].userName}</p>
+                       <p className="text-xl font-display font-black italic text-orange-600">{top3[2].time.toFixed(2)}s</p>
+                    </div>
+                    <div className="w-full h-20 bg-zinc-800/40 border-t border-zinc-700/50 rounded-t-2xl" />
+                  </motion.div>
+                )}
+            </div>
+          )}
+
+          {/* List Section with Luxury Design */}
+          <div className="space-y-4">
+             {loading ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                   <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
+                   <p className="text-[10px] text-zinc-600 font-black uppercase tracking-[0.4em]">Sincronizando Satélites</p>
+                </div>
+             ) : others.length === 0 && top3.length === 0 ? (
+               <div className="text-center py-20 bg-white/5 rounded-[40px] border border-white/5">
+                 <Trophy className="w-8 h-8 text-zinc-800 mx-auto mb-3" />
+                 <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">Pista Vazia</p>
+               </div>
+             ) : (
+                others.map((entry, index) => {
+                   const pos = index + 4;
+                   return (
+                      <motion.div 
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        key={entry.id}
+                        onClick={() => onViewProfile(entry.uid)}
+                        className="group relative bg-[#121212]/50 backdrop-blur-xl border border-white/5 rounded-[28px] p-4 flex items-center gap-4 hover:bg-white/5 transition-all active:scale-[0.98]"
+                      >
+                         <div className="w-8 flex flex-col items-center">
+                            <span className="text-zinc-600 font-display font-black italic text-xs">#{pos}</span>
+                         </div>
+                         <div className="w-12 h-12 rounded-2xl overflow-hidden border border-white/10 group-hover:border-brand-primary/50 transition-colors bg-zinc-950">
+                            {entry.userPhoto ? (
+                              <img src={entry.userPhoto} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <User className="w-5 h-5 text-zinc-800 m-auto mt-3.5" />
+                            )}
+                         </div>
+                         <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                               <h4 className="text-xs font-black text-white uppercase italic truncate">{entry.userName}</h4>
+                               {entry.vehicleType === 'motorcycle' && <Navigation className="w-2.5 h-2.5 text-brand-secondary -rotate-90" />}
+                            </div>
+                            <p className="text-[8px] text-zinc-500 font-black tracking-widest uppercase truncate">{entry.vehicleName}</p>
+                         </div>
+                         <div className="text-right">
+                             <p className="text-lg font-display font-black text-white italic group-hover:text-brand-primary transition-colors">{entry.time.toFixed(2)}s</p>
+                             <div className="flex items-center gap-1 justify-end opacity-50">
+                                <span className="text-[8px] font-black text-zinc-500">{Math.round(entry.maxSpeed)} KM/H</span>
+                             </div>
+                         </div>
+                         {/* Subtle Shadow Glow */}
+                         <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-transparent via-brand-primary/5 to-transparent rounded-full" />
+                      </motion.div>
+                   )
+                })
+             )}
+          </div>
+
+          <div className="p-4 rounded-3xl bg-brand-primary/5 border border-brand-primary/20 flex gap-3">
+             <ShieldCheck className="w-5 h-5 text-brand-primary shrink-0" />
+             <div>
+                <p className="text-[10px] font-black text-brand-primary uppercase mb-1">Nota de Aferição</p>
+                <p className="text-[9px] text-zinc-400 font-bold leading-relaxed italic">Somente puxadas em terreno nivelado ou aclive ascendente são homologadas pela liga Elite DragFire.</p>
+             </div>
+          </div>
+       </div>
+    </div>
+  );
+}
+
 
 function ProfileSettings({ 
   user, 
@@ -2101,7 +2428,9 @@ function SettingsMenu({
   gpsSource,
   onToggleGpsSource,
   onRefreshGps,
-  isAdmin
+  isAdmin,
+  uiPreference,
+  onToggleUiPreference
 }: { 
   user: FirebaseUser | null, 
   isGuest: boolean, 
@@ -2113,7 +2442,9 @@ function SettingsMenu({
   gpsSource: 'internal' | 'external',
   onToggleGpsSource: () => void,
   onRefreshGps: () => void,
-  isAdmin?: boolean
+  isAdmin?: boolean,
+  uiPreference?: 'classic' | 'elite',
+  onToggleUiPreference: () => void
 }) {
   return (
     <div className="flex-1 flex flex-col p-6 pb-32 space-y-6 overflow-y-auto bg-zinc-950">
@@ -2530,6 +2861,7 @@ function VehicleSettings({
     stockWeight: 0,
     catalogLayout: 'overlay'
   };
+  const STAGES_LIST = ['Stock', 'Stage 1', 'Stage 2', 'Stage 3', 'Stage Max'];
   const [formData, setFormData] = useState<Vehicle>(editingVehicle || baseVehicle);
   
   // Update formData if editingVehicle changes (important if component stays mounted)
@@ -2564,20 +2896,32 @@ function VehicleSettings({
       setUploadStatus('[S1] Abrindo Galeria...');
       
       const photo = await Camera.getPhoto({
-        quality: 50,
+        quality: 90,
         allowEditing: false,
-        resultType: CameraResultType.DataUrl, 
+        resultType: CameraResultType.Uri, 
         source: CameraSource.Photos,
-        width: 600,
-        height: 600
+        width: 1280,
+        height: 1280
       });
 
-      if (!photo.dataUrl) throw new Error('Câmera não retornou dados.');
+      if (!photo.webPath) throw new Error('Câmera não retornou a imagem.');
       
-      setUploadStatus('[S2] Processando...');
-      // Storage-Free Logic: Just use the Base64 Data URL directly
-      setFormData({ ...formData, photoURL: photo.dataUrl });
+      setUploadStatus('[S2] Preparando Foto...');
+      const fileName = `main_${Date.now()}.jpg`;
+      const path = `vehicles/${auth.currentUser.uid}/${formData.id || 'new'}/${fileName}`;
+      const storageRef = ref(storage, path);
       
+      setUploadProgress(10);
+      const response = await fetch(photo.webPath);
+      const blob = await response.blob();
+      
+      setUploadProgress(40);
+      setUploadStatus('[S3] Enviando para Nuvem...');
+      
+      await uploadBytes(storageRef, blob);
+      const downloadURL = await getDownloadURL(storageRef);
+
+      setFormData({ ...formData, photoURL: downloadURL });
       setUploadStatus('Sucesso!');
     } catch (error: any) {
       console.error('Photo Error:', error);
@@ -2598,41 +2942,47 @@ function VehicleSettings({
 
     try {
       setUploadStatus('[S1] Abrindo Galeria...');
-      let dataUrlResult = '';
-
-      if (Capacitor.isNativePlatform() && !e) {
-        const photo = await Camera.getPhoto({
-          quality: 40,
-          allowEditing: false,
-          resultType: CameraResultType.DataUrl,
-          source: CameraSource.Photos,
-          width: 600,
-          height: 600
-        });
-        dataUrlResult = photo.dataUrl || '';
-      } else if (e) {
-          const file = e.target.files?.[0];
-          if (file) {
-            const reader = new FileReader();
-            dataUrlResult = await new Promise((resolve) => {
-              reader.onload = () => resolve(reader.result as string);
-              reader.readAsDataURL(file);
-            });
-          }
-      }
-
-      if (!dataUrlResult) throw new Error('Câmera não retornou dados.');
-      
-      setUploadStatus('[S2] Processando...');
       const currentPhotos = formData.photoURLs || [];
-      if (currentPhotos.length >= 3) {
-        alert('Limite de 3 fotos extras atingido.');
+      if (currentPhotos.length >= 6) {
+        alert('Limite de 6 fotos extras atingido.');
         return;
       }
 
+      const fileName = `extra_${Date.now()}.jpg`;
+      const path = `vehicles/${auth.currentUser.uid}/${formData.id || 'new'}/${fileName}`;
+      const storageRef = ref(storage, path);
+      let payloadBlob: Blob | null = null;
+
+      if (Capacitor.isNativePlatform() && !e) {
+        const photo = await Camera.getPhoto({
+          quality: 90,
+          allowEditing: false,
+          resultType: CameraResultType.Uri,
+          source: CameraSource.Photos,
+          width: 1280,
+          height: 1280
+        });
+        
+        if (!photo.webPath) throw new Error('Câmera não retornou imagem nativa.');
+        setUploadProgress(10);
+        const response = await fetch(photo.webPath);
+        payloadBlob = await response.blob();
+      } else if (e) {
+        const file = e.target.files?.[0];
+        if (file) payloadBlob = file;
+      }
+
+      if (!payloadBlob) throw new Error('Nenhuma imagem processada.');
+      
+      setUploadStatus('[S2] Enviando Foto Extra...');
+      setUploadProgress(40);
+      
+      await uploadBytes(storageRef, payloadBlob);
+      const downloadURL = await getDownloadURL(storageRef);
+
       setFormData({
         ...formData,
-        photoURLs: [...currentPhotos, dataUrlResult]
+        photoURLs: [...currentPhotos, downloadURL]
       });
 
       setUploadStatus('Sucesso!');
@@ -2642,6 +2992,7 @@ function VehicleSettings({
     } finally {
       clearTimeout(timeout);
       setIsUploading(false);
+      setUploadProgress(0);
       setUploadStatus('');
     }
   };
@@ -3027,13 +3378,13 @@ function VehicleSettings({
 
                 <div className="space-y-1.5">
                   <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest px-1">Nível de Preparação (STAGE)</label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {['Stock', 'Stage 1', 'Stage 2', 'Stage 3'].map((stage) => (
+                  <div className="grid grid-cols-3 gap-2">
+                    {STAGES_LIST.map((stage) => (
                       <button
                         key={stage}
                         type="button"
                         onClick={() => setFormData({...formData, stage})}
-                        className={`py-2 px-1 rounded-lg text-[8px] font-black uppercase tracking-widest border transition-all ${formData.stage === stage ? 'bg-brand-primary border-brand-primary text-white' : 'bg-zinc-950 border-white/5 text-zinc-600'}`}
+                        className={`py-2 px-1 rounded-lg text-[8px] font-black uppercase tracking-widest border transition-all ${formData.stage === stage ? (stage === 'Stage Max' ? 'bg-gradient-to-r from-yellow-400 to-yellow-600 border-yellow-500 text-black shadow-lg shadow-yellow-500/20' : 'bg-brand-primary border-brand-primary text-white') : 'bg-zinc-950 border-white/5 text-zinc-600'}`}
                       >
                         {stage}
                       </button>
@@ -3100,8 +3451,8 @@ function VehicleSettings({
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Marca</label>
             <select 
-              value={formData.brand}
-              onChange={e => setFormData({ ...formData, brand: e.target.value, model: '', engine: '' })}
+              value={brands.includes(formData.brand) ? formData.brand : (formData.brand ? 'Outra' : '')}
+              onChange={e => setFormData({ ...formData, brand: e.target.value === 'Outra' ? ' ' : e.target.value, model: '', engine: '' })}
               className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-white focus:outline-none focus:border-brand-primary/50 transition-colors"
               required
             >
@@ -3109,11 +3460,12 @@ function VehicleSettings({
               {brands.map(b => <option key={b} value={b}>{b}</option>)}
               <option value="Outra">Outra (Digitar)</option>
             </select>
-            {formData.brand === 'Outra' && (
+            {(!brands.includes(formData.brand) && formData.brand !== '') && (
               <input 
                 type="text"
                 placeholder="Nome da Marca"
-                onChange={e => setFormData({ ...formData, brand: e.target.value })}
+                value={formData.brand === ' ' ? '' : formData.brand}
+                onChange={e => setFormData({ ...formData, brand: e.target.value || ' ' })}
                 className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 mt-2 text-white focus:border-brand-primary/50"
               />
             )}
@@ -3122,8 +3474,8 @@ function VehicleSettings({
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Modelo</label>
             <select 
-              value={formData.model}
-              onChange={e => setFormData({ ...formData, model: e.target.value, engine: '' })}
+              value={models.includes(formData.model) ? formData.model : (formData.model ? 'Outro' : '')}
+              onChange={e => setFormData({ ...formData, model: e.target.value === 'Outro' ? ' ' : e.target.value, engine: '' })}
               className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-white focus:outline-none focus:border-brand-primary/50 transition-colors"
               required
               disabled={!formData.brand}
@@ -3132,11 +3484,12 @@ function VehicleSettings({
               {models.map(m => <option key={m} value={m}>{m}</option>)}
               <option value="Outro">Outro (Digitar)</option>
             </select>
-            {formData.model === 'Outro' && (
+            {(!models.includes(formData.model) && formData.model !== '') && (
               <input 
                 type="text"
                 placeholder="Nome do Modelo"
-                onChange={e => setFormData({ ...formData, model: e.target.value })}
+                value={formData.model === ' ' ? '' : formData.model}
+                onChange={e => setFormData({ ...formData, model: e.target.value || ' ' })}
                 className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 mt-2 text-white focus:border-brand-primary/50"
               />
             )}
@@ -3148,8 +3501,8 @@ function VehicleSettings({
               </label>
               <div className="relative group">
                 <select 
-                  value={formData.engine}
-                  onChange={e => setFormData({ ...formData, engine: e.target.value })}
+                  value={specs.includes(formData.engine) ? formData.engine : (formData.engine ? 'Custom' : '')}
+                  onChange={e => setFormData({ ...formData, engine: e.target.value === 'Custom' ? ' ' : e.target.value })}
                   className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-white focus:outline-none focus:border-brand-primary/50 transition-colors"
                   disabled={!formData.model}
                 >
@@ -3157,11 +3510,12 @@ function VehicleSettings({
                   {specs.map(s => <option key={s} value={s}>{s}</option>)}
                   <option value="Custom">Outra / Customizada</option>
                 </select>
-                {formData.engine === 'Custom' && (
+                {(!specs.includes(formData.engine) && formData.engine !== '') && (
                   <input 
                     type="text"
-                  placeholder={formData.type === 'car' ? "Ex: 2.0 Turbo Manual 180cv" : "Ex: Edição Especial / Remap"}
-                  onChange={e => setFormData({ ...formData, engine: e.target.value })}
+                    placeholder={formData.type === 'car' ? "Ex: 2.0 Turbo Manual 180cv" : "Ex: Edição Especial / Remap"}
+                    value={formData.engine === ' ' ? '' : formData.engine}
+                    onChange={e => setFormData({ ...formData, engine: e.target.value || ' ' })}
                     className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 mt-2 text-white focus:border-brand-primary/50"
                   />
                 )}
@@ -3720,6 +4074,920 @@ function CustomSetup({ onBack, onStart, config, setConfig }: {
   );
 }
 
+interface TimerProps {
+  user: FirebaseUser | null;
+  isGuest: boolean;
+  userProfile: UserProfile | null;
+  activeConfig: RunPreset | null;
+  isRunning: boolean;
+  isWaiting: boolean;
+  isReady: boolean;
+  lastResult: RunResult | null;
+  activeChallenge: Challenge | null;
+  currentSpeed: number;
+  elapsedTime: number;
+  distance: number;
+  progress: number;
+  gForce: number;
+  gpsStatus: 'idle' | 'searching' | 'active' | 'error';
+  accuracy: number | null;
+  vehicles: Vehicle[];
+  runVehicleId: string;
+  isQuickSwitchOpen: boolean;
+  useRollout: boolean;
+  error: string | null;
+  setIsQuickSwitchOpen: (open: boolean) => void;
+  setRunVehicleId: (id: string) => void;
+  setUseRollout: (use: boolean) => void;
+  reset: () => void;
+  handleBack: () => void;
+  handleStart: () => void;
+  manualStart: () => void;
+  manualStop: () => void;
+  handleDuel: () => void;
+  requestPermission: () => void;
+  setScreen: (screen: Screen) => void;
+  handleAcceptChallenge: (c: Challenge) => void;
+}
+
+function TimerClassic(props: TimerProps) {
+  const {
+    user, isGuest, userProfile, activeConfig, isRunning, isWaiting, isReady,
+    lastResult, activeChallenge, currentSpeed, elapsedTime, distance, progress,
+    gForce, gpsStatus, accuracy, vehicles, runVehicleId, isQuickSwitchOpen,
+    useRollout, error, setIsQuickSwitchOpen, setRunVehicleId, setUseRollout,
+    reset, handleBack, handleStart, manualStart, manualStop, handleDuel,
+    requestPermission, setScreen, handleAcceptChallenge
+  } = props;
+
+  return (
+    <motion.div 
+      key="timer-classic"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="flex-1 flex flex-col overflow-hidden"
+    >
+      {/* Timer Header */}
+      <header className="p-3 flex items-center justify-between border-b border-white/5 bg-zinc-900/50 backdrop-blur-md z-10">
+        <div className="flex items-center gap-1.5 flex-1 overflow-hidden">
+          <button 
+            onClick={handleBack}
+            className="p-1.5 hover:bg-white/5 rounded-full transition-colors flex items-center gap-1.5 text-zinc-400 hover:text-white shrink-0"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          
+          <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em] ml-2">Performance Test</span>
+        </div>
+        
+        <div className="flex flex-col items-center">
+          <span className="text-[9px] font-black text-brand-primary uppercase tracking-widest leading-none mb-0.5">{activeConfig?.label}</span>
+          <GPSIndicator accuracy={accuracy} onRequest={requestPermission} />
+        </div>
+
+        <button className="p-1.5 hover:bg-white/5 rounded-full transition-colors">
+          <SettingsIcon className="w-4 h-4 text-zinc-400" />
+        </button>
+      </header>
+
+      <div className="bg-zinc-900/80 backdrop-blur-sm border-b border-white/5 px-4 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${gpsStatus === 'active' ? 'bg-green-500 animate-pulse' : gpsStatus === 'searching' ? 'bg-yellow-500 animate-bounce' : 'bg-red-500'}`} />
+          <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">
+            GPS: {gpsStatus === 'active' ? 'Sinal Ativo' : gpsStatus === 'searching' ? 'Buscando...' : 'Erro'}
+            {accuracy && ` (${accuracy.toFixed(1)}m)`}
+          </span>
+        </div>
+        <button 
+          onClick={() => {
+            reset();
+            requestPermission();
+          }}
+          className="text-[9px] font-black uppercase tracking-widest text-brand-primary hover:text-white transition-colors flex items-center gap-1"
+        >
+          <RotateCcw className="w-3 h-3" />
+          Reiniciar GPS
+        </button>
+      </div>
+
+      <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-20">
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 p-2 rounded-lg flex items-center gap-2 text-red-400 text-[10px] max-w-md mx-auto">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <p>{error}</p>
+          </div>
+        )}
+
+        {(!accuracy || accuracy > 20) && !lastResult && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-brand-primary/10 border border-brand-primary/20 p-3 rounded-xl flex items-start gap-3 max-w-md mx-auto"
+          >
+            <Info className="w-4 h-4 text-brand-primary shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-white text-[10px] font-black uppercase tracking-widest">Dica de Sinal</p>
+              <p className="text-zinc-400 text-[10px] leading-relaxed">
+                Para resultados precisos, evite ficar sob árvores ou coberturas metálicas. Procure um local com céu aberto.
+              </p>
+            </div>
+          </motion.div>
+        )}
+
+        {!lastResult && (
+          <div className="relative aspect-square w-full max-w-[280px] mx-auto flex flex-col items-center justify-center">
+            <div className="absolute inset-0 border-[12px] border-zinc-900 rounded-full" />
+            <motion.div 
+              className="absolute inset-0 border-[12px] border-brand-primary rounded-full border-t-transparent border-l-transparent"
+              animate={{ rotate: (currentSpeed / 260) * 270 - 135 }}
+              transition={{ type: 'spring', damping: 15 }}
+            />
+            
+            {!isGuest && (
+              <div 
+                className="absolute -top-4 -left-4 z-20 group"
+                style={{ transform: 'translate(10%, 10%)' }}
+              >
+                <button 
+                  onClick={() => !isRunning && setIsQuickSwitchOpen(true)}
+                  className={`flex items-center gap-2 p-2 rounded-2xl border transition-all ${runVehicleId === 'anonimo' ? 'bg-zinc-900/40 border-white/10' : 'bg-brand-primary/10 border-brand-primary/30'} backdrop-blur-md active:scale-95`}
+                  disabled={isRunning && currentSpeed > 5}
+                >
+                  <div className="w-8 h-8 rounded-xl bg-zinc-950 flex items-center justify-center overflow-hidden border border-white/5">
+                    {(() => {
+                      const v = vehicles.find(veh => veh.id === runVehicleId);
+                      if (v?.photoURL) return <img src={v.photoURL} className="w-full h-full object-cover" />;
+                      if (v?.type === 'motorcycle') return <Navigation className="w-4 h-4 text-zinc-600 -rotate-90" />;
+                      return <Car className="w-4 h-4 text-zinc-600" />;
+                    })()}
+                  </div>
+                  <div className="text-left pr-2">
+                    <p className="text-[7px] font-black text-brand-primary uppercase tracking-widest leading-none mb-0.5">Veículo</p>
+                    <p className="text-[9px] font-black text-white uppercase italic tracking-tighter truncate max-w-[80px]">
+                      {vehicles.find(v => v.id === runVehicleId)?.nickname || 'Anônimo'}
+                    </p>
+                  </div>
+                  <ChevronDown className={`w-3 h-3 text-zinc-600 transition-transform ${isQuickSwitchOpen ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+            )}
+
+            <div className="text-center z-10">
+              <motion.div 
+                className={`block text-8xl font-display font-black italic tracking-tighter speed-text leading-none ${isRunning ? 'text-brand-primary drop-shadow-[0_0_20px_rgba(239,68,68,0.6)]' : ''}`}
+                animate={{ scale: isRunning ? 1.05 : 1 }}
+              >
+                <SmoothCounter value={currentSpeed} />
+              </motion.div>
+              <span className="text-zinc-500 font-bold uppercase tracking-widest text-sm">km/h</span>
+              {isRunning && (
+                <div className="mt-2 flex items-center justify-center gap-1">
+                  <ActivityIcon className="w-3 h-3 text-brand-accent" />
+                  <span className="text-brand-accent font-mono font-bold text-sm tracking-tighter">{gForce.toFixed(2)}G</span>
+                </div>
+              )}
+            </div>
+
+            <div className="absolute bottom-10 flex gap-8 text-zinc-400 font-mono">
+              <div className="text-center">
+                <span className="block text-zinc-600 text-[9px] uppercase font-bold mb-0.5">Tempo</span>
+                <span className="text-white text-lg font-bold leading-none">{elapsedTime.toFixed(2)}s</span>
+              </div>
+              <div className="text-center">
+                <span className="block text-zinc-600 text-[9px] uppercase font-bold mb-0.5">Distância</span>
+                <span className="text-white text-lg font-bold leading-none">
+                  {distance > 1000 ? `${(distance / 1000).toFixed(2)}k` : `${Math.round(distance)}m`}
+                </span>
+              </div>
+            </div>
+
+            {((activeConfig?.mode === 'free' || activeConfig?.mode === 'trip') && isRunning) && (
+              <button
+                onClick={manualStop}
+                className={`absolute -bottom-20 left-1/2 -translate-x-1/2 w-full max-w-[200px] py-3 ${activeConfig?.mode === 'trip' ? 'bg-blue-600' : 'bg-red-500'} text-white font-black uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all`}
+              >
+                <RotateCcw className="w-5 h-5" />
+                {activeConfig?.mode === 'trip' ? 'ENCERRAR VIAGEM' : 'FINALIZAR'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {(isRunning || isWaiting) && activeConfig?.mode !== 'free' && (
+          <div className="max-w-[320px] mx-auto w-full space-y-2 mt-8">
+            <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-zinc-400">
+              <span>{activeConfig?.mode === 'speed' ? `Alcançando ${activeConfig.target} km/h` : `Percorrendo ${activeConfig?.target}m`}</span>
+              <span className="text-brand-accent">{Math.round(progress)}%</span>
+            </div>
+            <div className="h-3 bg-zinc-900 rounded-full overflow-hidden border border-white/10 p-0.5">
+              <motion.div 
+                className="h-full bg-brand-accent rounded-full shadow-[0_0_15px_rgba(0,242,255,0.4)]"
+                initial={{ width: 0 }}
+                animate={{ width: `${progress}%` }}
+                transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="max-w-md mx-auto">
+          <AnimatePresence mode="wait">
+            {isWaiting && (
+              <motion.div 
+                key="waiting"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="text-center p-6 glass-panel rounded-2xl border-brand-secondary/30"
+              >
+                <div className={`inline-flex items-center justify-center w-12 h-12 rounded-full mb-3 transition-all duration-500 ${isReady ? 'bg-brand-secondary shadow-[0_0_20px_rgba(34,197,94,0.5)]' : 'bg-brand-secondary/20 animate-pulse'}`}>
+                  {activeConfig?.id === '100-200' ? (
+                    <Flag className={`w-6 h-6 ${isReady ? 'text-white' : 'text-brand-secondary'} fill-current`} />
+                  ) : (
+                    <Play className={`w-6 h-6 ${isReady ? 'text-white' : 'text-brand-secondary'} fill-current`} />
+                  )}
+                </div>
+                <h3 className={`text-lg font-bold uppercase tracking-wider mb-1 transition-colors duration-500 ${isReady ? 'text-brand-secondary' : 'text-zinc-500'}`}>
+                  {activeConfig?.mode === 'free'
+                    ? 'MODO LIVRE - PRONTO'
+                    : activeConfig?.mode === 'trip'
+                      ? 'MODO VIAGEM - PRONTO'
+                      : activeConfig?.id === '100-200' 
+                        ? (isReady ? 'PRONTO PARA ACELERAR' : 'ACELERE ATÉ 100KM/H')
+                        : (isReady ? 'SINAL VERDE: ARRANQUE!' : 'PARE O VEÍCULO')}
+                </h3>
+                <p className="text-zinc-500 text-[10px] font-medium mb-4">
+                  {activeConfig?.mode === 'free'
+                    ? 'Inicie a puxada manualmente quando desejar.'
+                    : activeConfig?.mode === 'trip'
+                      ? 'Inicie a viagem para monitorar sua performance.'
+                      : activeConfig?.id === '100-200' 
+                        ? `Aguardando atingir ${activeConfig.startSpeed} km/h...` 
+                        : (isReady ? 'O cronômetro iniciará ao detectar movimento.' : 'O teste só começa com o carro totalmente parado.')}
+                </p>
+
+                {(activeConfig?.mode === 'free' || activeConfig?.mode === 'trip') && (
+                  <button
+                    onClick={manualStart}
+                    className={`w-full py-4 ${activeConfig?.mode === 'trip' ? 'bg-blue-600' : 'bg-brand-primary'} text-zinc-950 font-black uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all`}
+                  >
+                    <Play className="w-6 h-6 fill-current" />
+                    {activeConfig?.mode === 'trip' ? 'INICIAR VIAGEM' : 'INICIAR PUXADA'}
+                  </button>
+                )}
+
+                <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white/5 rounded-xl border border-white/10 w-fit mx-auto">
+                  <ActivityIcon className="w-3 h-3 text-brand-primary" />
+                  <span className="text-[9px] font-black uppercase text-zinc-400 tracking-wider">Sensor IMU Ativo - Launch Trigger</span>
+                </div>
+
+                {!isReady && currentSpeed > 5 && activeConfig?.id !== '100-200' && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="mt-4 p-2 bg-red-500/20 border border-red-500/40 rounded-xl flex items-center gap-2"
+                  >
+                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                    <p className="text-[10px] text-red-200 font-bold uppercase text-left">
+                      Movimento detectado! Pare totalmente para iniciar.
+                    </p>
+                  </motion.div>
+                )}
+              </motion.div>
+            )}
+
+            {lastResult && (
+              <motion.div 
+                key="result"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="glass-panel rounded-2xl p-5 border-brand-accent/30 overflow-hidden relative"
+              >
+                <div className="absolute top-0 right-0 p-4 opacity-5">
+                  <Flag className="w-16 h-16 text-brand-accent" />
+                </div>
+                
+                <h3 className="text-brand-accent font-black uppercase tracking-tighter text-xl italic mb-4">RESULTADO</h3>
+                
+                {vehicles.find(v => v.id === runVehicleId) && (
+                  <div className="mb-4 p-3 bg-brand-accent/5 border border-brand-accent/20 rounded-xl flex items-center gap-3">
+                    <div className="w-10 h-10 bg-brand-accent/10 rounded-lg flex items-center justify-center overflow-hidden">
+                      {(() => {
+                        const v = vehicles.find(veh => veh.id === runVehicleId);
+                        if (v?.photoURL) return <img src={v.photoURL} className="w-full h-full object-cover" referrerPolicy="no-referrer" />;
+                        return v?.type === 'car' ? <Car className="w-5 h-5 text-brand-accent" /> : <Navigation className="w-5 h-5 text-brand-accent -rotate-90" />;
+                      })()}
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest leading-none mb-1">Veículo Utilizado</p>
+                      <p className="text-sm font-bold text-white leading-none">
+                        {vehicles.find(v => v.id === runVehicleId)?.nickname} 
+                        <span className="text-zinc-500 font-medium text-[10px] uppercase ml-1">
+                          {vehicles.find(v => v.id === runVehicleId)?.brand} {vehicles.find(v => v.id === runVehicleId)?.model}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-0.5">
+                    <span className="text-zinc-500 text-[9px] uppercase font-bold">Tempo Final</span>
+                    <p className="text-4xl font-display font-black text-white italic leading-none">{lastResult.time.toFixed(2)}s</p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-zinc-500 text-[9px] uppercase font-bold">Velo. Máxima</span>
+                    <p className="text-4xl font-display font-black text-white italic leading-none">{Math.round(lastResult.maxSpeed)} <span className="text-xs">km/h</span></p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div className="bg-zinc-900/50 p-4 rounded-2xl border border-white/5 space-y-3">
+                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block border-b border-white/5 pb-2">
+                      {lastResult.config.mode === 'free' ? 'Resumo da Puxada' : 'Intervalos'}
+                    </span>
+                    <div className="space-y-2">
+                      {lastResult.config.mode === 'free' ? (
+                        <>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase">Distância Total</span>
+                            <span className="text-sm font-display font-black text-white italic">{Math.round(lastResult.distance)}m</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase">Velo. Média</span>
+                            <span className="text-sm font-display font-black text-white italic">{Math.round(lastResult.avgSpeed)} km/h</span>
+                          </div>
+                        </>
+                      ) : lastResult.config.isCustom ? (
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase">
+                            {lastResult.config.mode === 'speed' ? `${lastResult.config.startSpeed}-${lastResult.config.target} km/h` : `${lastResult.config.target}m`}
+                          </span>
+                          <span className="text-sm font-display font-black text-white italic">{lastResult.time.toFixed(2)}s</span>
+                        </div>
+                      ) : (
+                        <>
+                          {calculateIntervals(lastResult.path, [20, 40, 60, 80, 100]).map(interval => (
+                            <div key={interval.target} className="flex justify-between items-center">
+                              <span className="text-[10px] font-bold text-zinc-400 uppercase">0-{interval.target} km/h</span>
+                              <span className="text-sm font-display font-black text-white italic">{interval.time.toFixed(2)}s</span>
+                            </div>
+                          ))}
+                          {lastResult.config.mode === 'distance' && calculateDistanceIntervals(lastResult.path, [201, 402]).map(interval => (
+                            <div key={interval.target} className="flex justify-between items-center">
+                              <span className="text-[10px] font-bold text-zinc-400 uppercase">0-{interval.target}m</span>
+                              <span className="text-sm font-display font-black text-white italic">{interval.time.toFixed(2)}s</span>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="bg-zinc-900/50 p-4 rounded-2xl border border-white/5 space-y-4">
+                    <div className="space-y-1">
+                      <span className="text-zinc-500 text-[9px] uppercase font-bold block">Inclinação (Slope)</span>
+                      <div className="flex items-center gap-2">
+                        <p className={`text-xl font-display font-black italic leading-none ${lastResult.isValidSlope ? 'text-white' : 'text-red-500'}`}>
+                          {lastResult.slope?.toFixed(1)}%
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-zinc-500 text-[9px] uppercase font-bold block">G-Force Peak</span>
+                      <p className="text-xl font-display font-black text-white italic leading-none">{lastResult.maxG?.toFixed(2)}G</p>
+                    </div>
+                  </div>
+                </div>
+
+                <PerformanceChart 
+                  result={lastResult} 
+                  opponentResult={activeChallenge?.result} 
+                  isPremium={userProfile?.isPremium} 
+                />
+
+                <RunMap result={lastResult} />
+
+                <div className="flex flex-col gap-2 mt-5">
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={reset}
+                      className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      REPETIR
+                    </button>
+                    <button 
+                      className="px-4 py-3 bg-brand-accent/10 hover:bg-brand-accent/20 text-brand-accent rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors border border-brand-accent/20"
+                    >
+                      <Share2Icon className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {lastResult.config.mode !== 'free' && !lastResult.config.isCustom && (
+                    <button 
+                      onClick={handleDuel}
+                      className="w-full py-4 bg-brand-primary hover:bg-red-500 rounded-xl font-display font-black text-lg italic tracking-tight flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 transition-all active:scale-95"
+                    >
+                      <Swords className="w-5 h-5" />
+                      DUELAR COM AMIGO
+                    </button>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
+            {!isRunning && !isWaiting && !lastResult && (
+              <motion.div 
+                key="setup"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="bg-zinc-900/50 p-6 rounded-2xl border border-white/5 text-center"
+              >
+                <div className="mb-4 flex flex-col items-center">
+                  <div className="w-10 h-10 bg-brand-primary/10 rounded-full flex items-center justify-center mb-2">
+                    <Info className="w-5 h-5 text-brand-primary" />
+                  </div>
+                  <h4 className="font-bold text-zinc-400 uppercase text-[10px] tracking-widest mb-1">Atenção</h4>
+                  <p className="text-zinc-500 text-[10px] font-medium">O teste de arrancada só inicia com o veículo parado.</p>
+                </div>
+
+                {activeConfig?.type === 'standing' && (
+                  <div className="mb-6 flex items-center justify-between p-3 bg-zinc-950/50 rounded-xl border border-white/5">
+                    <div className="flex flex-col items-start">
+                      <span className="text-[10px] font-black text-white uppercase tracking-widest">1-Foot Rollout</span>
+                    </div>
+                    <button 
+                      onClick={() => setUseRollout(!useRollout)}
+                      className={`w-10 h-5 rounded-full transition-colors relative ${useRollout ? 'bg-brand-primary' : 'bg-zinc-800'}`}
+                    >
+                      <motion.div 
+                        className="absolute top-1 left-1 w-3 h-3 bg-white rounded-full shadow-sm"
+                        animate={{ x: useRollout ? 20 : 0 }}
+                      />
+                    </button>
+                  </div>
+                )}
+
+                <button 
+                  onClick={handleStart}
+                  className="w-full py-4 bg-brand-primary hover:bg-red-500 rounded-xl font-display font-black text-lg italic tracking-tight flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 transition-all active:scale-95"
+                >
+                  <Timer className="w-5 h-5" />
+                  INICIAR
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </main>
+
+      {/* Quick Switch Modal Overlay */}
+      <AnimatePresence>
+        {isQuickSwitchOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-xl flex items-end justify-center p-4"
+            onClick={() => setIsQuickSwitchOpen(false)}
+          >
+            <motion.div 
+              initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+              className="w-full max-w-md bg-zinc-900 border-t border-white/10 rounded-t-[40px] p-8 space-y-6 overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-display font-black italic text-white uppercase tracking-tight">Vincular Veículo</h3>
+                </div>
+                <button onClick={() => setIsQuickSwitchOpen(false)} className="p-2 bg-white/5 rounded-xl text-zinc-400">
+                  <ChevronDown className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+                <button onClick={() => { setRunVehicleId('anonimo'); setIsQuickSwitchOpen(false); }} className={`flex flex-col gap-2 p-3 rounded-[32px] border transition-all ${runVehicleId === 'anonimo' ? 'bg-zinc-800 border-brand-primary' : 'bg-zinc-950/50 border-white/5'}`}>
+                  <div className="aspect-[4/3] w-full rounded-2xl bg-zinc-900 flex flex-col items-center justify-center border border-white/5 gap-1">
+                    <EyeOff className="w-5 h-5 text-zinc-600" />
+                    <span className="text-[7px] text-zinc-700 font-black uppercase tracking-widest">Ghost Mode</span>
+                  </div>
+                  <div className="text-center px-1">
+                    <p className="text-[10px] font-black text-white uppercase italic">Anônimo</p>
+                  </div>
+                </button>
+                {vehicles.map(v => (
+                  <button key={v.id} onClick={() => { setRunVehicleId(v.id || ''); setIsQuickSwitchOpen(false); }} className={`flex flex-col gap-2 p-3 rounded-[32px] border transition-all ${runVehicleId === v.id ? 'bg-zinc-800 border-brand-primary shadow-lg shadow-red-600/20' : 'bg-zinc-950/50 border-white/5'}`}>
+                    <div className="aspect-[4/3] w-full rounded-2xl bg-zinc-900 flex items-center justify-center overflow-hidden border border-white/5">
+                      {v.photoURL ? <img src={v.photoURL} alt={v.nickname} className="w-full h-full object-cover" /> : (v.type === 'car' ? <Car className="w-6 h-6 text-zinc-700" /> : <Navigation className="w-6 h-6 -rotate-90 text-zinc-700" />)}
+                    </div>
+                    <div className="text-center px-1">
+                      <p className="text-[10px] font-black text-white uppercase italic truncate w-full">{v.nickname}</p>
+                      <p className="text-[7px] text-zinc-500 font-black uppercase tracking-widest truncate w-full">{v.brand} {v.model}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+function TimerElite(props: TimerProps) {
+  const {
+    user, isGuest, userProfile, activeConfig, isRunning, isWaiting, isReady,
+    lastResult, activeChallenge, currentSpeed, elapsedTime, distance, progress,
+    gForce, gpsStatus, accuracy, vehicles, runVehicleId, isQuickSwitchOpen,
+    useRollout, error, setIsQuickSwitchOpen, setRunVehicleId, setUseRollout,
+    reset, handleBack, handleStart, manualStart, manualStop, handleDuel,
+    requestPermission, setScreen, handleAcceptChallenge
+  } = props;
+
+  return (
+    <motion.div 
+      key="timer-elite"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="flex-1 flex flex-col bg-[#050505] relative overflow-hidden"
+    >
+      {/* Real Racing Texture Background */}
+      <div className="absolute inset-0 opacity-[0.1] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ffffff 0.5px, transparent 0)', backgroundSize: '3px 3px' }} />
+      <div className="absolute inset-0 bg-gradient-to-b from-brand-primary/5 via-transparent to-transparent pointer-events-none" />
+
+      {/* Elite Header */}
+      <header className="p-6 flex items-center justify-between z-20 relative">
+        <button onClick={handleBack} className="p-3 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 text-white shadow-xl active:scale-95 transition-all">
+          <ChevronLeft className="w-6 h-6" />
+        </button>
+        
+        <div className="flex flex-col items-end">
+           <h2 className="text-3xl font-display font-black italic tracking-tighter leading-none">
+             <span className="text-white">DRAG</span>
+             <span className="text-red-600">FIRE</span>
+           </h2>
+           <div className="flex items-center gap-2 mt-1">
+              <span className="text-[8px] font-black text-zinc-500 uppercase tracking-[0.3em]">{activeConfig?.label}</span>
+              <div className={`w-1.5 h-1.5 rounded-full ${gpsStatus === 'active' ? 'bg-cyan-400 glow-cyan animate-pulse' : 'bg-zinc-700'}`} />
+           </div>
+        </div>
+      </header>
+
+      <main className="flex-1 flex flex-col p-6 z-10 relative">
+        {error && (
+          <div className="mb-4 bg-red-500/20 border-l-4 border-red-500 p-4 rounded-r-xl flex items-center gap-3 backdrop-blur-md">
+            <AlertTriangle className="w-5 h-5 text-red-500" />
+            <p className="text-[10px] font-black uppercase text-red-200">{error}</p>
+          </div>
+        )}
+
+        {/* Dynamic Speedometer Layout */}
+        {!lastResult ? (
+          <div className="flex-1 flex flex-col items-center justify-start pt-12 py-6 relative">
+             <div className="relative w-full flex flex-col items-center justify-center mb-10 px-4">
+                {/* Modern Arch Speedometer (Porsche/Audi Style) - EXPANDED TO FULL WIDTH */}
+                <svg className="absolute inset-0 w-full h-[120%] transform -top-10" viewBox="0 0 100 80">
+                  <defs>
+                    <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" stopColor="#3b82f6" />
+                      <stop offset="50%" stopColor="#ef4444" />
+                      <stop offset="100%" stopColor="#ef4444" />
+                    </linearGradient>
+                  </defs>
+                  
+                  {/* Background Arch (Track) */}
+                  <path 
+                    d="M 15 65 A 40 40 0 1 1 85 65" 
+                    className="stroke-zinc-900 fill-none" 
+                    strokeWidth="4" 
+                    strokeLinecap="round"
+                    strokeDasharray="1 3"
+                  />
+                  
+                  {/* Progress Arch - THICKER AND LARGER */}
+                  <motion.path 
+                    d="M 15 65 A 40 40 0 1 1 85 65" 
+                    className="fill-none" 
+                    stroke="url(#gaugeGradient)"
+                    strokeWidth="8" 
+                    strokeLinecap="round"
+                    strokeDasharray="150"
+                    strokeDashoffset={150 - (Math.min(currentSpeed, 260) / 260) * 150}
+                    initial={{ strokeDashoffset: 150 }}
+                    animate={{ strokeDashoffset: 150 - (Math.min(currentSpeed, 260) / 260) * 150 }}
+                  />
+
+                  {/* Sharp Ticks */}
+                  {[...Array(11)].map((_, i) => {
+                    const angle = -215 + i * 25;
+                    const x1 = 50 + 36 * Math.cos(angle * Math.PI / 180);
+                    const y1 = 45 + 36 * Math.sin(angle * Math.PI / 180);
+                    const x2 = 50 + 44 * Math.cos(angle * Math.PI / 180);
+                    const y2 = 45 + 44 * Math.sin(angle * Math.PI / 180);
+                    return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} className="stroke-zinc-800" strokeWidth="0.5" />;
+                  })}
+                </svg>
+
+                {/* Digital Speed View */}
+                <div className="flex flex-col items-center justify-center z-10 pt-4">
+                   <div className="flex flex-col items-center">
+                      <motion.span 
+                        className={`text-[130px] font-display font-black italic tracking-tighter leading-none ${isRunning ? 'text-white' : 'text-zinc-700'}`}
+                        animate={{ scale: isRunning ? [1, 1.01, 1] : 1 }}
+                        transition={{ repeat: Infinity, duration: 2 }}
+                      >
+                         <SmoothCounter value={currentSpeed} />
+                      </motion.span>
+                      <div className="flex flex-col items-center gap-1 -mt-2">
+                         <span className="text-[14px] font-black text-zinc-500 uppercase tracking-[0.6em] italic">KM/H</span>
+                         {isRunning && (
+                            <div className="px-3 py-1 bg-red-600 border border-red-500 rounded italic text-[14px] font-black text-white shadow-[0_0_20px_rgba(239,68,68,0.5)]">
+                               {gForce.toFixed(2)}G
+                            </div>
+                         )}
+                      </div>
+                   </div>
+                </div>
+
+                {/* Progress Elite Bar - FIXED BELOW SPEEDOMETER */}
+                {(isRunning || isWaiting) && activeConfig?.mode !== 'free' && (
+                  <div className="w-full max-w-[280px] mt-8 z-20">
+                      <div className="flex justify-between items-end mb-2">
+                        <span className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em]">{activeConfig?.label}</span>
+                        <span className="text-xl font-display font-black text-white italic">{Math.round(progress)}%</span>
+                      </div>
+                      <div className="h-2 bg-zinc-900 rounded-full overflow-hidden border border-white/5">
+                        <motion.div 
+                          className="h-full bg-brand-primary shadow-[0_0_15px_rgba(239,68,68,0.8)]"
+                          animate={{ width: `${progress}%` }}
+                        />
+                      </div>
+                  </div>
+                )}
+
+                {/* Floating Vehicle Info - Far Left */}
+                <div className="absolute -top-10 left-0 flex items-center gap-4 bg-zinc-900/40 backdrop-blur-md px-4 py-2 rounded-3xl border border-white/5">
+                   <button 
+                     onClick={() => !isRunning && setIsQuickSwitchOpen(true)}
+                     className="w-14 h-14 rounded-2xl bg-zinc-950 border border-white/10 p-0.5 flex items-center justify-center overflow-hidden active:scale-95 transition-all shadow-xl"
+                   >
+                     {(() => {
+                        const v = vehicles.find(veh => veh.id === runVehicleId);
+                        if (v?.photoURL) return <img src={v.photoURL} className="w-full h-full object-cover rounded-xl" />;
+                        return v?.type === 'car' ? <Car className="w-6 h-6 text-zinc-600" /> : <Navigation className="w-6 h-6 text-zinc-600 -rotate-90" />;
+                     })()}
+                   </button>
+                   <div className="flex flex-col">
+                      <span className="text-[12px] font-black text-white italic uppercase tracking-tighter">
+                        {vehicles.find(v => v.id === runVehicleId)?.nickname || 'Piloto'}
+                      </span>
+                      <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest leading-none">
+                        {vehicles.find(v => v.id === runVehicleId)?.brand} {vehicles.find(v => v.id === runVehicleId)?.model}
+                      </span>
+                   </div>
+                </div>
+
+                {/* Accuracy Widget - Center Top */}
+                <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-full max-w-[140px] z-30">
+                   <div className="px-3 py-2 bg-zinc-900/80 backdrop-blur-2xl border border-white/10 rounded-2xl flex items-center justify-center gap-3 shadow-2xl">
+                      <div className={`p-1.5 rounded-lg ${gpsStatus === 'active' ? 'bg-cyan-500/20 text-cyan-400 glow-cyan' : 'bg-zinc-800 text-zinc-600'}`}>
+                         <Signal className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="text-center">
+                         <span className="text-[7px] font-black text-zinc-600 uppercase tracking-widest block">Precisão</span>
+                         <span className={`text-[10px] font-black italic tracking-tighter ${gpsStatus === 'active' ? 'text-white' : 'text-zinc-600'}`}>
+                           {accuracy ? `${accuracy.toFixed(1)}m` : '---'}
+                         </span>
+                      </div>
+                   </div>
+                </div>
+
+                {/* Time Widget - Repositioned to Right */}
+                <div className="absolute top-0 right-0 flex flex-col gap-3">
+                   <div className="p-4 px-6 bg-zinc-900/50 backdrop-blur-md border border-white/5 rounded-[32px] flex flex-col items-end shadow-lg">
+                      <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-1">Time Elapsed</span>
+                      <span className="text-3xl font-display font-black text-white italic leading-none">{elapsedTime.toFixed(2)}<span className="text-[10px] ml-0.5">s</span></span>
+                   </div>
+                </div>
+             </div>
+{/* Stop Button in Racing Aesthetic */}
+             {((activeConfig?.mode === 'free' || activeConfig?.mode === 'trip') && isRunning) && (
+               <motion.button
+                 initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
+                 onClick={manualStop}
+                 className="mt-12 px-12 py-5 bg-gradient-to-r from-red-600 to-red-800 text-white font-black italic uppercase tracking-[0.2em] rounded-full shadow-[0_15px_40px_rgba(185,28,28,0.4)] border-t border-white/20 active:scale-95 transition-all text-xs"
+               >
+                 ABORTAR PROVA
+               </motion.button>
+             )}
+          </div>
+        ) : (
+          /* Racing Results Screen (Elite) - RESTRUCTURED & SCROLLABLE */
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            className="flex-1 overflow-y-auto racing-scroll px-2 pb-32"
+          >
+             <div className="relative p-6 rounded-[40px] bg-gradient-to-br from-brand-primary/15 via-zinc-900/60 to-zinc-950 border border-white/5 overflow-hidden mb-6">
+                <div className="absolute -top-10 -right-10 w-40 h-40 bg-brand-primary/10 rounded-full blur-[80px]" />
+                
+                <header className="flex justify-between items-start mb-10">
+                   <div>
+                      <h3 className="text-3xl font-display font-black italic text-white leading-none tracking-tighter uppercase">STAGE <span className="text-brand-primary">HOMOLOGADO</span></h3>
+                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.4em] mt-2 italic">Aferição Validada via Satélite</p>
+                   </div>
+                   <div className="bg-white/5 p-3 rounded-2xl border border-white/10">
+                      <Flag className="w-6 h-6 text-brand-primary" />
+                   </div>
+                </header>
+
+                {/* Main Metrics Card - No Overlap */}
+                <div className="space-y-8 mb-10 px-2">
+                   <div className="flex flex-col gap-2">
+                      <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Cronômetro Final</span>
+                      <p className="text-7xl font-display font-black text-white italic leading-none drop-shadow-2xl">
+                        {lastResult.time.toFixed(2)}<span className="text-2xl ml-1">S</span>
+                      </p>
+                   </div>
+                   <div className="flex flex-col gap-2 border-t border-white/5 pt-6">
+                      <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Velocidade Máxima (Real)</span>
+                      <p className="text-5xl font-display font-black text-brand-accent italic leading-none underline decoration-brand-accent/30">
+                        {Math.round(lastResult.maxSpeed)} <span className="text-xl ml-1">KM/H</span>
+                      </p>
+                   </div>
+                </div>
+
+                {/* Top Partials Card - Featured in first view */}
+                <div className="p-5 bg-white/5 rounded-3xl border border-white/5 space-y-4">
+                   <div className="flex items-center gap-2">
+                      <Trophy className="w-3.5 h-3.5 text-yellow-500" />
+                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] block">Top Parciais (Intervalos)</span>
+                   </div>
+                   <div className="grid grid-cols-1 gap-3">
+                      {calculateIntervals(lastResult.path, [20, 60, 100, 160]).map(interval => (
+                        <div key={interval.target} className="flex justify-between items-center py-2 border-b border-white/5 last:border-0 group">
+                          <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">0-{interval.target} KM/H</span>
+                          <span className="text-xl font-display font-black text-white italic group-hover:text-brand-primary transition-colors">{interval.time.toFixed(2)}s</span>
+                        </div>
+                      ))}
+                   </div>
+                </div>
+             </div>
+
+             {/* Part 2: Performance Chart - Dedicated Section */}
+             <div className="space-y-4 mb-6">
+                <div className="flex items-center gap-2 px-2">
+                   <div className="w-1 h-3 bg-brand-primary rounded-full" />
+                   <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">Curva de Aceleração G / Velocitometria</h4>
+                </div>
+                <div className="h-56 rounded-[32px] overflow-hidden border border-white/5 bg-zinc-900/30 p-2">
+                   <PerformanceChart result={lastResult} opponentResult={activeChallenge?.result} isPremium={userProfile?.isPremium} />
+                </div>
+             </div>
+
+             {/* Part 3: Secondary Telemetry */}
+             <div className="grid grid-cols-2 gap-3 mb-6">
+                <div className="p-5 bg-zinc-900 border border-white/5 rounded-[32px] space-y-3">
+                   <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block border-b border-white/5 pb-2">Telemetria G</span>
+                   <div className="space-y-4 pt-2">
+                      <div>
+                         <span className="text-[9px] text-zinc-500 uppercase font-black">Max Traction</span>
+                         <p className="text-2xl font-display font-black text-cyan-400 italic leading-none mt-1">{lastResult.maxG?.toFixed(2)}<span className="text-sm ml-0.5">G</span></p>
+                      </div>
+                   </div>
+                </div>
+                <div className="p-5 bg-zinc-900 border border-white/5 rounded-[32px] space-y-3">
+                   <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block border-b border-white/5 pb-2">Ambiente</span>
+                   <div className="space-y-4 pt-2">
+                      <div>
+                         <span className="text-[9px] text-zinc-500 uppercase font-black">Dens. Altitude</span>
+                         <p className="text-2xl font-display font-black text-white italic leading-none mt-1">{lastResult.da || 0} <span className="text-sm ml-0.5">ft</span></p>
+                      </div>
+                   </div>
+                </div>
+             </div>
+
+          </motion.div>
+        )}
+
+        {/* Start Logic (Elite) */}
+        {!isRunning && !lastResult && (
+           <div className="w-full space-y-4">
+              <AnimatePresence mode="wait">
+                 {isWaiting ? (
+                   <motion.div 
+                     key="elite-waiting"
+                     initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                     className={`p-6 rounded-[32px] border flex flex-col items-center gap-4 text-center backdrop-blur-xl ${isReady ? 'bg-cyan-500/10 border-cyan-500/40 shadow-[0_0_40px_rgba(6,182,212,0.1)]' : 'bg-red-500/10 border-red-500/40 shadow-[0_0_40px_rgba(239,68,68,0.1)]'}`}
+                   >
+                     <div className={`w-16 h-16 rounded-full flex items-center justify-center ${isReady ? 'bg-cyan-500 text-white glow-cyan' : 'bg-red-500 text-white glow-red animate-pulse'}`}>
+                        {isReady ? <Play className="w-8 h-8 fill-current" /> : <Clock className="w-8 h-8" />}
+                     </div>
+                     <div>
+                        <h4 className={`text-xl font-display font-black italic uppercase tracking-tighter ${isReady ? 'text-cyan-400' : 'text-red-500'}`}>
+                           {isReady ? 'PRONTO PARA PARTIDA' : 'SISTEMA EM ESPERA'}
+                        </h4>
+                        <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-1">
+                           {isReady ? 'O sensor detectará o primeiro movimento.' : 'Aguardando o veículo parar totalmente...'}
+                        </p>
+                     </div>
+                     
+                     {(activeConfig?.mode === 'free' || activeConfig?.mode === 'trip') && (
+                       <button onClick={manualStart} className="w-full py-4 bg-white text-black font-black uppercase italic rounded-2xl">LARGAR AGORA</button>
+                     )}
+                   </motion.div>
+                 ) : (
+                   <motion.div 
+                     key="elite-setup"
+                     className="p-8 bg-white/5 backdrop-blur-xl border border-white/5 rounded-[40px] text-center space-y-6"
+                   >
+                     <div className="space-y-1">
+                        <h3 className="text-xl font-display font-black text-white italic uppercase tracking-tighter">PRONTO?</h3>
+                        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.3em]">Configure e Aqueça os Pneus</p>
+                     </div>
+                     
+                     {activeConfig?.type === 'standing' && (
+                        <div className="flex items-center justify-between p-4 bg-zinc-950/50 rounded-2xl border border-white/5">
+                           <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Rollout Control (30cm)</span>
+                           <button 
+                             onClick={() => setUseRollout(!useRollout)}
+                             className={`w-12 h-6 rounded-full relative transition-colors ${useRollout ? 'bg-brand-primary glow-red' : 'bg-zinc-800'}`}
+                           >
+                             <motion.div animate={{ x: useRollout ? 24 : 0 }} className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full" />
+                           </button>
+                        </div>
+                     )}
+
+                     <button 
+                       onClick={handleStart}
+                       className="w-full py-5 bg-brand-primary text-white font-display font-black text-2xl italic tracking-widest uppercase rounded-[28px] shadow-[0_15px_40px_rgba(239,68,68,0.4)] active:scale-95 transition-all"
+                     >
+                       INICIAR AFERIÇÃO
+                     </button>
+                   </motion.div>
+                 )}
+              </AnimatePresence>
+           </div>
+        )}
+      </main>
+
+      {/* Quick Switch Modal (Elite Style) */}
+      <AnimatePresence>
+        {isQuickSwitchOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-2xl flex items-end justify-center p-4 overflow-hidden"
+            onClick={() => setIsQuickSwitchOpen(false)}
+          >
+             {/* Background glow in modal */}
+            <div className="absolute top-0 w-full h-1 bg-brand-primary glow-red" />
+
+            <motion.div 
+              initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
+              className="w-full max-w-md bg-[#0a0a0a] border-t border-white/5 rounded-t-[50px] p-10 space-y-8"
+              onClick={e => e.stopPropagation()}
+            >
+              <header className="flex justify-between items-center border-b border-white/5 pb-6">
+                <div>
+                   <h3 className="text-2xl font-display font-black italic text-white uppercase tracking-tighter">GARAGEM <span className="text-brand-primary">ELITE</span></h3>
+                   <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.3em] mt-1">Selecionar Veículo para Prova</p>
+                </div>
+                <button onClick={() => setIsQuickSwitchOpen(false)} className="p-3 bg-white/5 rounded-2xl text-zinc-500 hover:text-white transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
+              </header>
+
+              <div className="grid grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto pr-2 racing-scroll">
+                <button onClick={() => { setRunVehicleId('anonimo'); setIsQuickSwitchOpen(false); }} className={`flex flex-col gap-3 p-4 rounded-[32px] border transition-all ${runVehicleId === 'anonimo' ? 'bg-white/5 border-brand-primary shadow-[0_0_20px_rgba(239,68,68,0.1)]' : 'bg-zinc-950 shadow-none border-white/5'}`}>
+                  <div className="aspect-square w-full rounded-2xl bg-zinc-900 flex flex-col items-center justify-center border border-white/5 gap-2">
+                    <EyeOff className="w-8 h-8 text-zinc-700" />
+                    <span className="text-[8px] text-zinc-700 font-black uppercase tracking-[0.2em]">Ghost Mode</span>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] font-black text-white uppercase italic tracking-tighter">Anônimo</p>
+                  </div>
+                </button>
+                {vehicles.map(v => (
+                  <button key={v.id} onClick={() => { setRunVehicleId(v.id || ''); setIsQuickSwitchOpen(false); }} className={`flex flex-col gap-3 p-4 rounded-[32px] border transition-all ${runVehicleId === v.id ? 'bg-white/5 border-brand-primary shadow-[0_0_20px_rgba(239,68,68,0.1)]' : 'bg-zinc-950 border-white/5 shadow-none'}`}>
+                    <div className="aspect-square w-full rounded-2xl bg-zinc-900 overflow-hidden border border-white/5">
+                      {v.photoURL ? <img src={v.photoURL} className="w-full h-full object-cover" /> : (v.type === 'car' ? <Car className="w-10 h-10 text-zinc-800 m-auto mt-4" /> : <Navigation className="w-10 h-10 text-zinc-800 -rotate-90 m-auto mt-4" />)}
+                    </div>
+                    <div className="text-center space-y-0.5">
+                      <p className="text-[10px] font-black text-white uppercase italic truncate">{v.nickname}</p>
+                      <p className="text-[8px] text-zinc-500 font-black uppercase tracking-widest truncate">{v.brand}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+
+
 export default function App() {
   const [telemetryConfig, setTelemetryConfig] = useState<TelemetryConfig>({
     motionSensitivity: 1.4,
@@ -3819,7 +5087,7 @@ export default function App() {
     };
   }, []);
   const [selectedProfileUid, setSelectedProfileUid] = useState<string | null>(null);
-  const [activeConfig, setActiveConfig] = useState<typeof PRESETS[0] | null>(null);
+  const [activeConfig, setActiveConfig] = useState<RunPreset | null>(null);
   const [customConfig, setCustomConfig] = useState<{
     type: 'speed' | 'distance';
     startSpeed: number;
@@ -4083,23 +5351,7 @@ export default function App() {
     }
   };
 
-  const [showPrecisionHint, setShowPrecisionHint] = useState(false);
-  useEffect(() => {
-    if (screen === 'timer' && !isRunning && !lastResult) {
-      setShowPrecisionHint(true);
-      const timer = setTimeout(() => setShowPrecisionHint(false), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [screen, isRunning, lastResult]);
-
-  const handleUpdateProfile = async (data: { 
-    displayName?: string, 
-    photoURL?: string, 
-    isPremium?: boolean, 
-    bio?: string,
-    instagram?: string,
-    isPrivate?: boolean
-  }) => {
+  const handleUpdateProfile = async (data: Partial<UserProfile>) => {
     if (!user) return;
     try {
       await setDoc(doc(db, 'users', user.uid), data, { merge: true });
@@ -4113,6 +5365,15 @@ export default function App() {
       handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
     }
   };
+
+  const [showPrecisionHint, setShowPrecisionHint] = useState(false);
+  useEffect(() => {
+    if (screen === 'timer' && !isRunning && !lastResult) {
+      setShowPrecisionHint(true);
+      const timer = setTimeout(() => setShowPrecisionHint(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [screen, isRunning, lastResult]);
 
   const handleGuestLogin = () => {
     setIsGuest(true);
@@ -4392,10 +5653,28 @@ export default function App() {
               vehicleName: selectedVehicle ? `${selectedVehicle.nickname} (${selectedVehicle.model})` : 'Piloto Anônimo',
               estimatedPowerCV
             };
-            await addDoc(collection(db, 'runs'), runData);
-            lastSavedRunIdRef.current = lastResult.id;
-            
-            logActivity('new_run', {
+             await addDoc(collection(db, 'runs'), runData);
+             lastSavedRunIdRef.current = lastResult.id;
+             
+             // --- AUTO RECORD UPDATE (PB Sync) ---
+             if (selectedVehicle && selectedVehicle.id) {
+               const vRef = doc(db, 'vehicles', selectedVehicle.id);
+               const isStandard0to100 = lastResult.config.mode === 'speed' && lastResult.config.target === 100;
+               const isStandard201m = lastResult.config.mode === 'distance' && lastResult.config.target === 201;
+
+               if (isStandard0to100) {
+                 if (!selectedVehicle.best0to100 || lastResult.time < selectedVehicle.best0to100) {
+                   await setDoc(vRef, { best0to100: lastResult.time }, { merge: true });
+                 }
+               }
+               if (isStandard201m) {
+                 if (!selectedVehicle.best201m || lastResult.time < selectedVehicle.best201m) {
+                   await setDoc(vRef, { best201m: lastResult.time }, { merge: true });
+                 }
+               }
+             }
+
+             logActivity('new_run', {
               runId: lastResult.id,
               vehicleId: vehicle?.id,
               vehicleName: vehicle?.nickname,
@@ -4463,7 +5742,7 @@ export default function App() {
     }
   }, [lastResult, user, isGuest, userProfile?.isPremium, vehicle]);
 
-  const handleSelectPreset = (preset: typeof PRESETS[0]) => {
+  const handleSelectPreset = (preset: RunPreset) => {
     setActiveConfig(preset);
     
     if (preset.id === 'custom') {
@@ -4709,6 +5988,11 @@ export default function App() {
               onToggleGpsSource={() => setGpsSource(prev => prev === 'internal' ? 'external' : 'internal')}
               onRefreshGps={refreshGPS}
               isAdmin={user?.email ? ADMIN_EMAILS.includes(user.email) : false}
+              uiPreference={userProfile?.uiPreference || 'elite'}
+              onToggleUiPreference={() => {
+                const newPref = (userProfile?.uiPreference || 'elite') === 'elite' ? 'classic' : 'elite';
+                handleUpdateProfile({ uiPreference: newPref });
+              }}
             />
           </motion.div>
         ) : screen === 'vehicle-settings' ? (
@@ -4756,14 +6040,25 @@ export default function App() {
             exit={{ opacity: 0, x: 20 }}
             className="flex-1 flex flex-col overflow-hidden"
           >
-            <RegionalRanking 
-              userLocation={lastPosition} 
-              onBack={() => setScreen('home')} 
-              onViewProfile={(uid) => {
-                setSelectedProfileUid(uid);
-                setScreen('public-profile');
-              }}
-            />
+            {(userProfile?.uiPreference === 'elite' || !userProfile?.uiPreference) ? (
+              <RegionalRankingElite 
+                userLocation={lastPosition} 
+                onBack={() => setScreen('home')} 
+                onViewProfile={(uid) => {
+                  setSelectedProfileUid(uid);
+                  setScreen('public-profile');
+                }}
+              />
+            ) : (
+              <RegionalRanking 
+                userLocation={lastPosition} 
+                onBack={() => setScreen('home')} 
+                onViewProfile={(uid) => {
+                  setSelectedProfileUid(uid);
+                  setScreen('public-profile');
+                }}
+              />
+            )}
           </motion.div>
         ) : screen === 'search' ? (
           <motion.div
@@ -4802,12 +6097,14 @@ export default function App() {
             <PublicProfile 
               uid={selectedProfileUid || ''} 
               currentUserId={user?.uid}
-              onBack={() => setScreen('regional-ranking')} 
+              onBack={() => setScreen(history.length > 0 ? 'history' : 'home')} 
               onEditVehicles={() => setScreen('vehicle-settings')}
+              onOpenStore={() => setScreen('theme-store')}
               onViewVehicle={(v) => {
                 setCatalogVehicle(v);
                 setScreen('vehicle-catalog');
               }}
+              isAdmin={isAdmin}
             />
           </motion.div>
         ) : screen === 'vehicle-catalog' && catalogVehicle ? (
@@ -4828,6 +6125,14 @@ export default function App() {
               }}
             />
           </motion.div>
+        ) : screen === 'theme-store' && userProfile ? (
+          <ThemeStoreModal 
+            profile={userProfile}
+            onClose={() => setScreen('settings')}
+            onUpdate={(data) => {
+              if (userProfile) setUserProfile({ ...userProfile, ...data });
+            }}
+          />
         ) : screen === 'history' ? (
           <motion.div
             key="history"
@@ -5323,552 +6628,136 @@ export default function App() {
               onBack={() => setScreen('settings')} 
               onStartLiveCalibration={(data) => {
                 setCalibrationMode(data);
-                // Set preset for 201m
-                setActiveConfig({ mode: 'distance', target: 201 });
                 setScreen('timer');
               }}
             />
           </motion.div>
-        ) : (
-          <motion.div 
-            key="timer"
+         ) : screen === 'search' ? (
+          <motion.div
+            key="search"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
             className="flex-1 flex flex-col overflow-hidden"
           >
-            {/* Timer Header */}
-            <header className="p-3 flex items-center justify-between border-b border-white/5 bg-zinc-900/50 backdrop-blur-md z-10">
-              <div className="flex items-center gap-1.5 flex-1 overflow-hidden">
-                <button 
-                  onClick={handleBack}
-                  className="p-1.5 hover:bg-white/5 rounded-full transition-colors flex items-center gap-1.5 text-zinc-400 hover:text-white shrink-0"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                
-                {/* Header Title */}
-                <span className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em] ml-2">Performance Test</span>
-              </div>
-              
-              <div className="flex flex-col items-center">
-                <span className="text-[9px] font-black text-brand-primary uppercase tracking-widest leading-none mb-0.5">{activeConfig?.label}</span>
-                <GPSIndicator accuracy={accuracy} onRequest={requestPermission} />
-              </div>
-
-              <button className="p-1.5 hover:bg-white/5 rounded-full transition-colors">
-                <SettingsIcon className="w-4 h-4 text-zinc-400" />
-              </button>
-            </header>
-
-            {/* GPS Status Bar */}
-            <div className="bg-zinc-900/80 backdrop-blur-sm border-b border-white/5 px-4 py-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${gpsStatus === 'active' ? 'bg-green-500 animate-pulse' : gpsStatus === 'searching' ? 'bg-yellow-500 animate-bounce' : 'bg-red-500'}`} />
-                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500">
-                  GPS: {gpsStatus === 'active' ? 'Sinal Ativo' : gpsStatus === 'searching' ? 'Buscando...' : 'Erro'}
-                  {accuracy && ` (${accuracy.toFixed(1)}m)`}
-                </span>
-              </div>
-              <button 
-                onClick={() => {
-                  reset();
-                  requestPermission();
-                }}
-                className="text-[9px] font-black uppercase tracking-widest text-brand-primary hover:text-white transition-colors flex items-center gap-1"
-              >
-                <RotateCcw className="w-3 h-3" />
-                Reiniciar GPS
-              </button>
-            </div>
-
-            {/* Timer Content */}
-            <main className="flex-1 overflow-y-auto p-4 space-y-4 pb-20">
-              {error && (
-                <div className="bg-red-500/10 border border-red-500/20 p-2 rounded-lg flex items-center gap-2 text-red-400 text-[10px] max-w-md mx-auto">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  <p>{error}</p>
-                </div>
-              )}
-
-              {(!accuracy || accuracy > 20) && !lastResult && (
-                <motion.div 
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-brand-primary/10 border border-brand-primary/20 p-3 rounded-xl flex items-start gap-3 max-w-md mx-auto"
-                >
-                  <Info className="w-4 h-4 text-brand-primary shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="text-white text-[10px] font-black uppercase tracking-widest">Dica de Sinal</p>
-                    <p className="text-zinc-400 text-[10px] leading-relaxed">
-                      Para resultados precisos, evite ficar sob árvores ou coberturas metálicas. Procure um local com céu aberto.
-                    </p>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Speedometer */}
-              {!lastResult && (
-                <div className="relative aspect-square w-full max-w-[280px] mx-auto flex flex-col items-center justify-center">
-                  {/* Speedometer Gauges */}
-                  <div className="absolute inset-0 border-[12px] border-zinc-900 rounded-full" />
-                  <motion.div 
-                    className="absolute inset-0 border-[12px] border-brand-primary rounded-full border-t-transparent border-l-transparent"
-                    animate={{ rotate: (currentSpeed / 260) * 270 - 135 }}
-                    transition={{ type: 'spring', damping: 15 }}
-                  />
-                  
-                  {/* Floating Vehicle Badge (Top Left of Speedo) */}
-                  {!isGuest && (
-                    <div 
-                      className="absolute -top-4 -left-4 z-20 group"
-                      style={{ transform: 'translate(10%, 10%)' }}
-                    >
-                      <button 
-                        onClick={() => !isRunning && setIsQuickSwitchOpen(true)}
-                        className={`flex items-center gap-2 p-2 rounded-2xl border transition-all ${runVehicleId === 'anonimo' ? 'bg-zinc-900/40 border-white/10' : 'bg-brand-primary/10 border-brand-primary/30'} backdrop-blur-md active:scale-95`}
-                        disabled={isRunning && currentSpeed > 5}
-                      >
-                        <div className="w-8 h-8 rounded-xl bg-zinc-950 flex items-center justify-center overflow-hidden border border-white/5">
-                          {(() => {
-                            const v = vehicles.find(veh => veh.id === runVehicleId);
-                            if (v?.photoURL) return <img src={v.photoURL} className="w-full h-full object-cover" />;
-                            if (v?.type === 'motorcycle') return <Navigation className="w-4 h-4 text-zinc-600 -rotate-90" />;
-                            return <Car className="w-4 h-4 text-zinc-600" />;
-                          })()}
-                        </div>
-                        <div className="text-left pr-2">
-                          <p className="text-[7px] font-black text-brand-primary uppercase tracking-widest leading-none mb-0.5">Veículo</p>
-                          <p className="text-[9px] font-black text-white uppercase italic tracking-tighter truncate max-w-[80px]">
-                            {vehicles.find(v => v.id === runVehicleId)?.nickname || 'Anônimo'}
-                          </p>
-                        </div>
-                        <ChevronDown className={`w-3 h-3 text-zinc-600 transition-transform ${isQuickSwitchOpen ? 'rotate-180' : ''}`} />
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="text-center z-10">
-                    <motion.div 
-                      className={`block text-8xl font-display font-black italic tracking-tighter speed-text leading-none ${isRunning ? 'text-brand-primary drop-shadow-[0_0_20px_rgba(239,68,68,0.6)]' : ''}`}
-                      animate={{ scale: isRunning ? 1.05 : 1 }}
-                    >
-                      <SmoothCounter value={currentSpeed} />
-                    </motion.div>
-                    <span className="text-zinc-500 font-bold uppercase tracking-widest text-sm">km/h</span>
-                    {isRunning && (
-                      <div className="mt-2 flex items-center justify-center gap-1">
-                        <ActivityIcon className="w-3 h-3 text-brand-accent" />
-                        <span className="text-brand-accent font-mono font-bold text-sm tracking-tighter">{gForce.toFixed(2)}G</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="absolute bottom-10 flex gap-8 text-zinc-400 font-mono">
-                    <div className="text-center">
-                      <span className="block text-zinc-600 text-[9px] uppercase font-bold mb-0.5">Tempo</span>
-                      <span className="text-white text-lg font-bold leading-none">{elapsedTime.toFixed(2)}s</span>
-                    </div>
-                    <div className="text-center">
-                      <span className="block text-zinc-600 text-[9px] uppercase font-bold mb-0.5">Distância</span>
-                      <span className="text-white text-lg font-bold leading-none">
-                        {distance > 1000 ? `${(distance / 1000).toFixed(2)}k` : `${Math.round(distance)}m`}
-                      </span>
-                    </div>
-                  </div>
-
-                  {((activeConfig?.mode === 'free' || activeConfig?.mode === 'trip') && isRunning) && (
-                    <button
-                      onClick={manualStop}
-                      className={`absolute -bottom-20 left-1/2 -translate-x-1/2 w-full max-w-[200px] py-3 ${activeConfig?.mode === 'trip' ? 'bg-blue-600' : 'bg-red-500'} text-white font-black uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all`}
-                    >
-                      <RotateCcw className="w-5 h-5" />
-                      {activeConfig?.mode === 'trip' ? 'ENCERRAR VIAGEM' : 'FINALIZAR'}
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Progress Bar */}
-              {(isRunning || isWaiting) && activeConfig?.mode !== 'free' && (
-                <div className="max-w-[320px] mx-auto w-full space-y-2 mt-8">
-                  <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-zinc-400">
-                    <span>{activeConfig?.mode === 'speed' ? `Alcançando ${activeConfig.target} km/h` : `Percorrendo ${activeConfig?.target}m`}</span>
-                    <span className="text-brand-accent">{Math.round(progress)}%</span>
-                  </div>
-                  <div className="h-3 bg-zinc-900 rounded-full overflow-hidden border border-white/10 p-0.5">
-                    <motion.div 
-                      className="h-full bg-brand-accent rounded-full shadow-[0_0_15px_rgba(0,242,255,0.4)]"
-                      initial={{ width: 0 }}
-                      animate={{ width: `${progress}%` }}
-                      transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Status/Results */}
-              <div className="max-w-md mx-auto">
-                <AnimatePresence mode="wait">
-                  {isWaiting && (
-                    <motion.div 
-                      key="waiting"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="text-center p-6 glass-panel rounded-2xl border-brand-secondary/30"
-                    >
-                      <div className={`inline-flex items-center justify-center w-12 h-12 rounded-full mb-3 transition-all duration-500 ${isReady ? 'bg-brand-secondary shadow-[0_0_20px_rgba(34,197,94,0.5)]' : 'bg-brand-secondary/20 animate-pulse'}`}>
-                        {activeConfig?.id === '100-200' ? (
-                          <Flag className={`w-6 h-6 ${isReady ? 'text-white' : 'text-brand-secondary'} fill-current`} />
-                        ) : (
-                          <Play className={`w-6 h-6 ${isReady ? 'text-white' : 'text-brand-secondary'} fill-current`} />
-                        )}
-                      </div>
-                      <h3 className={`text-lg font-bold uppercase tracking-wider mb-1 transition-colors duration-500 ${isReady ? 'text-brand-secondary' : 'text-zinc-500'}`}>
-                        {activeConfig?.mode === 'free'
-                          ? 'MODO LIVRE - PRONTO'
-                          : activeConfig?.mode === 'trip'
-                            ? 'MODO VIAGEM - PRONTO'
-                            : activeConfig?.id === '100-200' 
-                              ? (isReady ? 'PRONTO PARA ACELERAR' : 'ACELERE ATÉ 100KM/H')
-                              : (isReady ? 'SINAL VERDE: ARRANQUE!' : 'PARE O VEÍCULO')}
-                      </h3>
-                      <p className="text-zinc-500 text-[10px] font-medium mb-4">
-                        {activeConfig?.mode === 'free'
-                          ? 'Inicie a puxada manualmente quando desejar.'
-                          : activeConfig?.mode === 'trip'
-                            ? 'Inicie a viagem para monitorar sua performance.'
-                            : activeConfig?.id === '100-200' 
-                              ? `Aguardando atingir ${activeConfig.startSpeed} km/h...` 
-                              : (isReady ? 'O cronômetro iniciará ao detectar movimento.' : 'O teste só começa com o carro totalmente parado.')}
-                      </p>
-
-                      {(activeConfig?.mode === 'free' || activeConfig?.mode === 'trip') && (
-                        <button
-                          onClick={manualStart}
-                          className={`w-full py-4 ${activeConfig?.mode === 'trip' ? 'bg-blue-600' : 'bg-brand-primary'} text-zinc-950 font-black uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all`}
-                        >
-                          <Play className="w-6 h-6 fill-current" />
-                          {activeConfig?.mode === 'trip' ? 'INICIAR VIAGEM' : 'INICIAR PUXADA'}
-                        </button>
-                      )}
-
-                      <div className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white/5 rounded-xl border border-white/10 w-fit mx-auto">
-                        <ActivityIcon className="w-3 h-3 text-brand-primary" />
-                        <span className="text-[9px] font-black uppercase text-zinc-400 tracking-wider">Sensor IMU Ativo - Launch Trigger</span>
-                      </div>
-
-                      {!isReady && currentSpeed > 5 && activeConfig?.id !== '100-200' && (
-                        <motion.div 
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          className="mt-4 p-2 bg-red-500/20 border border-red-500/40 rounded-xl flex items-center gap-2"
-                        >
-                          <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                          <p className="text-[10px] text-red-200 font-bold uppercase text-left">
-                            Movimento detectado! Pare totalmente para iniciar.
-                          </p>
-                        </motion.div>
-                      )}
-                    </motion.div>
-                  )}
-
-                  {lastResult && (
-                    <motion.div 
-                      key="result"
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      className="glass-panel rounded-2xl p-5 border-brand-accent/30 overflow-hidden relative"
-                    >
-                      <div className="absolute top-0 right-0 p-4 opacity-5">
-                        <Flag className="w-16 h-16 text-brand-accent" />
-                      </div>
-                      
-                      <h3 className="text-brand-accent font-black uppercase tracking-tighter text-xl italic mb-4">RESULTADO</h3>
-                      
-                      {vehicle && (
-                        <div className="mb-4 p-3 bg-brand-accent/5 border border-brand-accent/20 rounded-xl flex items-center gap-3">
-                          <div className="w-10 h-10 bg-brand-accent/10 rounded-lg flex items-center justify-center overflow-hidden">
-                            {vehicle.photoURL ? (
-                              <img src={vehicle.photoURL} alt={vehicle.nickname} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                            ) : (
-                              vehicle.type === 'car' ? <Car className="w-5 h-5 text-brand-accent" /> : <Navigation className="w-5 h-5 text-brand-accent -rotate-90" />
-                            )}
-                          </div>
-                          <div>
-                            <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest leading-none mb-1">Veículo Utilizado</p>
-                            <p className="text-sm font-bold text-white leading-none">{vehicle.nickname} <span className="text-zinc-500 font-medium text-[10px] uppercase ml-1">{vehicle.brand} {vehicle.model}</span></p>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-0.5">
-                          <span className="text-zinc-500 text-[9px] uppercase font-bold">Tempo Final</span>
-                          <p className="text-4xl font-display font-black text-white italic leading-none">{lastResult.time.toFixed(2)}s</p>
-                        </div>
-                        <div className="space-y-0.5">
-                          <span className="text-zinc-500 text-[9px] uppercase font-bold">Velo. Máxima</span>
-                          <p className="text-4xl font-display font-black text-white italic leading-none">{Math.round(lastResult.maxSpeed)} <span className="text-xs">km/h</span></p>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-zinc-900/50 p-4 rounded-2xl border border-white/5 space-y-3">
-                          <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block border-b border-white/5 pb-2">
-                            {lastResult.config.mode === 'free' ? 'Resumo da Puxada' : 'Intervalos'}
-                          </span>
-                          <div className="space-y-2">
-                            {lastResult.config.mode === 'free' ? (
-                              <>
-                                <div className="flex justify-between items-center">
-                                  <span className="text-[10px] font-bold text-zinc-400 uppercase">Distância Total</span>
-                                  <span className="text-sm font-display font-black text-white italic">{Math.round(lastResult.distance)}m</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                  <span className="text-[10px] font-bold text-zinc-400 uppercase">Velo. Média</span>
-                                  <span className="text-sm font-display font-black text-white italic">{Math.round(lastResult.avgSpeed)} km/h</span>
-                                </div>
-                              </>
-                            ) : lastResult.config.isCustom ? (
-                              <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-bold text-zinc-400 uppercase">
-                                  {lastResult.config.mode === 'speed' ? `${lastResult.config.startSpeed}-${lastResult.config.target} km/h` : `${lastResult.config.target}m`}
-                                </span>
-                                <span className="text-sm font-display font-black text-white italic">{lastResult.time.toFixed(2)}s</span>
-                              </div>
-                            ) : (
-                              <>
-                                {calculateIntervals(lastResult.path, [20, 40, 60, 80, 100]).map(interval => (
-                                  <div key={interval.target} className="flex justify-between items-center">
-                                    <span className="text-[10px] font-bold text-zinc-400 uppercase">0-{interval.target} km/h</span>
-                                    <span className="text-sm font-display font-black text-white italic">{interval.time.toFixed(2)}s</span>
-                                  </div>
-                                ))}
-                                {lastResult.config.mode === 'distance' && calculateDistanceIntervals(lastResult.path, [201, 402]).map(interval => (
-                                  <div key={interval.target} className="flex justify-between items-center">
-                                    <span className="text-[10px] font-bold text-zinc-400 uppercase">0-{interval.target}m</span>
-                                    <span className="text-sm font-display font-black text-white italic">{interval.time.toFixed(2)}s</span>
-                                  </div>
-                                ))}
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        
-                        <div className="bg-zinc-900/50 p-4 rounded-2xl border border-white/5 space-y-4">
-                          <div className="space-y-1">
-                            <span className="text-zinc-500 text-[9px] uppercase font-bold block">Inclinação (Slope)</span>
-                            <div className="flex items-center gap-2">
-                              <p className={`text-xl font-display font-black italic leading-none ${lastResult.isValidSlope ? 'text-white' : 'text-red-500'}`}>
-                                {lastResult.slope?.toFixed(1)}%
-                              </p>
-                              {lastResult.isValidSlope ? (
-                                <div className="px-1.5 py-0.5 bg-green-500/10 rounded text-[8px] font-black text-green-500 uppercase tracking-tighter">Válido</div>
-                              ) : (
-                                <div className="px-1.5 py-0.5 bg-red-500/10 rounded text-[8px] font-black text-red-500 uppercase tracking-tighter">Inválido</div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-zinc-500 text-[9px] uppercase font-bold block">Density Altitude</span>
-                            <p className="text-xl font-display font-black text-white italic leading-none">
-                              {lastResult.da !== undefined ? `${lastResult.da} ft` : '---'}
-                            </p>
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-zinc-500 text-[9px] uppercase font-bold block">Precisão GPS</span>
-                            <div className="flex items-center gap-2">
-                              <p className="text-xl font-display font-black text-white italic leading-none">
-                                {lastResult.avgAccuracy ? `${lastResult.avgAccuracy.toFixed(1)}m` : 'N/A'}
-                              </p>
-                              {lastResult.avgAccuracy && lastResult.avgAccuracy < 5 ? (
-                                <div className="px-1.5 py-0.5 bg-blue-500/10 rounded text-[8px] font-black text-blue-500 uppercase tracking-tighter flex items-center gap-1">
-                                  <Signal className="w-2 h-2" />
-                                  Alta Precisão
-                                </div>
-                              ) : lastResult.avgAccuracy && lastResult.avgAccuracy < 10 ? (
-                                <div className="px-1.5 py-0.5 bg-yellow-500/10 rounded text-[8px] font-black text-yellow-500 uppercase tracking-tighter">Média</div>
-                              ) : (
-                                <div className="px-1.5 py-0.5 bg-red-500/10 rounded text-[8px] font-black text-red-500 uppercase tracking-tighter">Baixa</div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-zinc-500 text-[9px] uppercase font-bold block">Pico de G-Force</span>
-                            <p className="text-xl font-display font-black text-white italic leading-none">{lastResult.maxG?.toFixed(2)}G</p>
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-zinc-500 text-[9px] uppercase font-bold block">Distância Total</span>
-                            <p className="text-xl font-display font-black text-white italic leading-none">{Math.round(lastResult.distance)}m</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <PerformanceChart 
-                        result={lastResult} 
-                        opponentResult={activeChallenge?.result} 
-                        isPremium={userProfile?.isPremium} 
-                      />
-
-                      <RunMap result={lastResult} />
-
-                      <div className="flex flex-col gap-2 mt-5">
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={reset}
-                            className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors"
-                          >
-                            <RotateCcw className="w-4 h-4" />
-                            REPETIR
-                          </button>
-                          <button 
-                            className="px-4 py-3 bg-brand-accent/10 hover:bg-brand-accent/20 text-brand-accent rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors border border-brand-accent/20"
-                          >
-                            <Share2Icon className="w-4 h-4" />
-                          </button>
-                        </div>
-                        {lastResult.config.mode !== 'free' && !lastResult.config.isCustom && (
-                          <button 
-                            onClick={handleDuel}
-                            className="w-full py-4 bg-brand-primary hover:bg-red-500 rounded-xl font-display font-black text-lg italic tracking-tight flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 transition-all active:scale-95"
-                          >
-                            <Swords className="w-5 h-5" />
-                            DUELAR COM AMIGO
-                          </button>
-                        )}
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {!isRunning && !isWaiting && !lastResult && (
-                    <motion.div 
-                      key="setup"
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="bg-zinc-900/50 p-6 rounded-2xl border border-white/5 text-center"
-                    >
-                      <div className="mb-4 flex flex-col items-center">
-                        <div className="w-10 h-10 bg-brand-primary/10 rounded-full flex items-center justify-center mb-2">
-                          <Info className="w-5 h-5 text-brand-primary" />
-                        </div>
-                        <h4 className="font-bold text-zinc-400 uppercase text-[10px] tracking-widest mb-1">Atenção</h4>
-                        <p className="text-zinc-500 text-[10px] font-medium">O teste de arrancada só inicia com o veículo parado.</p>
-                      </div>
-
-                      {activeConfig?.type === 'standing' && (
-                        <div className="mb-6 flex items-center justify-between p-3 bg-zinc-950/50 rounded-xl border border-white/5">
-                          <div className="flex flex-col items-start">
-                            <span className="text-[10px] font-black text-white uppercase tracking-widest">1-Foot Rollout</span>
-                            <span className="text-[9px] text-zinc-500 font-medium">Padrão Dragstrip (30cm)</span>
-                          </div>
-                          <button 
-                            onClick={() => setUseRollout(!useRollout)}
-                            className={`w-10 h-5 rounded-full transition-colors relative ${useRollout ? 'bg-brand-primary' : 'bg-zinc-800'}`}
-                          >
-                            <motion.div 
-                              className="absolute top-1 left-1 w-3 h-3 bg-white rounded-full shadow-sm"
-                              animate={{ x: useRollout ? 20 : 0 }}
-                              transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                            />
-                          </button>
-                        </div>
-                      )}
-
-
-                      <button 
-                        onClick={handleStart}
-                        className="w-full py-4 bg-brand-primary hover:bg-red-500 rounded-xl font-display font-black text-lg italic tracking-tight flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 transition-all active:scale-95"
-                      >
-                        <Timer className="w-5 h-5" />
-                        INICIAR
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-                
-                {/* Quick Vehicle Switch Modal */}
-                <AnimatePresence>
-                  {isQuickSwitchOpen && (
-                    <motion.div 
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-xl flex items-end justify-center p-4"
-                      onClick={() => setIsQuickSwitchOpen(false)}
-                    >
-                      <motion.div 
-                        initial={{ y: "100%" }}
-                        animate={{ y: 0 }}
-                        exit={{ y: "100%" }}
-                        className="w-full max-w-md bg-zinc-900 border-t border-white/10 rounded-t-[40px] p-8 space-y-6 overflow-hidden"
-                        onClick={e => e.stopPropagation()}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="text-xl font-display font-black italic text-white uppercase tracking-tight">Vincular Veículo</h3>
-                            <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Apenas para este teste</p>
-                          </div>
-                          <button 
-                            onClick={() => setIsQuickSwitchOpen(false)}
-                            className="p-2 bg-white/5 rounded-xl text-zinc-400"
-                          >
-                            <ChevronDown className="w-5 h-5 transition-transform group-hover:translate-y-0.5" />
-                          </button>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
-                          {/* Anonymous Option */}
-                          <button
-                            onClick={() => {
-                              setRunVehicleId('anonimo');
-                              setIsQuickSwitchOpen(false);
-                            }}
-                            className={`flex flex-col gap-2 p-3 rounded-[32px] border transition-all ${runVehicleId === 'anonimo' ? 'bg-zinc-800 border-brand-primary shadow-lg shadow-red-600/20' : 'bg-zinc-950/50 border-white/5'}`}
-                          >
-                            <div className="aspect-[4/3] w-full rounded-2xl bg-zinc-900 flex flex-col items-center justify-center border border-white/5 gap-1">
-                              <EyeOff className="w-5 h-5 text-zinc-600" />
-                              <span className="text-[7px] text-zinc-700 font-black uppercase tracking-widest">Ghost Mode</span>
-                            </div>
-                            <div className="text-center px-1">
-                              <p className="text-[10px] font-black text-white uppercase italic">Sem Veículo</p>
-                              <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-tight">Anônimo</p>
-                            </div>
-                          </button>
-
-                          {/* Vehicle List */}
-                          {vehicles.map(v => (
-                            <button
-                              key={v.id}
-                              onClick={() => {
-                                setRunVehicleId(v.id);
-                                setIsQuickSwitchOpen(false);
-                              }}
-                              className={`flex flex-col gap-2 p-3 rounded-[32px] border transition-all ${runVehicleId === v.id ? 'bg-zinc-800 border-brand-primary shadow-lg shadow-red-600/20' : 'bg-zinc-950/50 border-white/5'}`}
-                            >
-                              <div className="aspect-[4/3] w-full rounded-2xl bg-zinc-900 flex items-center justify-center overflow-hidden border border-white/5">
-                                {v.photoURL ? (
-                                  <img src={v.photoURL} alt={v.nickname} className="w-full h-full object-cover" />
-                                ) : (
-                                  v.type === 'car' ? <Car className="w-6 h-6 text-zinc-700" /> : <Navigation className="w-6 h-6 -rotate-90 text-zinc-700" />
-                                )}
-                              </div>
-                              <div className="text-center px-1">
-                                <p className="text-[10px] font-black text-white uppercase italic truncate w-full">{v.nickname}</p>
-                                <p className="text-[7px] text-zinc-500 font-black uppercase tracking-widest truncate w-full">{v.brand} {v.model}</p>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      </motion.div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </main>
+            <UserSearch 
+              onBack={() => setScreen('home')} 
+              onViewProfile={(uid) => {
+                setSelectedProfileUid(uid);
+                setScreen('public-profile');
+              }} 
+            />
           </motion.div>
-        )}
+        ) : screen === 'public-profile' ? (
+          <motion.div
+            key="public-profile"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="flex-1 flex flex-col overflow-hidden"
+          >
+            <PublicProfileDetail 
+              uid={selectedProfileUid || user?.uid || ''} 
+              currentUserId={user?.uid}
+              onBack={() => setScreen('home')} 
+              onUpdateProfile={handleUpdateProfile}
+              onEditVehicle={(v) => {
+                setCatalogVehicle(v);
+                setScreen('vehicle-catalog');
+              }}
+              isAdmin={isAdmin}
+            />
+          </motion.div>
+        ) : screen === 'feed' ? (
+          <motion.div
+            key="feed"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="flex-1 flex flex-col overflow-hidden"
+          >
+            <div className="flex-1 flex items-center justify-center text-zinc-600 uppercase font-black text-[10px] tracking-widest bg-zinc-950">
+               Em breve: Feed Global
+            </div>
+          </motion.div>
+        ) : screen === 'timer' ? (
+
+           <>
+            {(userProfile?.uiPreference === 'elite' || !userProfile?.uiPreference) ? (
+              <TimerElite 
+                user={user}
+                isGuest={isGuest}
+                userProfile={userProfile}
+                activeConfig={activeConfig}
+                isRunning={isRunning}
+                isWaiting={isWaiting}
+                isReady={isReady}
+                lastResult={lastResult}
+                activeChallenge={activeChallenge}
+                currentSpeed={currentSpeed}
+                elapsedTime={elapsedTime}
+                distance={distance}
+                progress={progress}
+                gForce={gForce}
+                gpsStatus={gpsStatus}
+                accuracy={accuracy}
+                vehicles={vehicles}
+                runVehicleId={runVehicleId}
+                isQuickSwitchOpen={isQuickSwitchOpen}
+                useRollout={useRollout}
+                error={error}
+                setIsQuickSwitchOpen={setIsQuickSwitchOpen}
+                setRunVehicleId={setRunVehicleId}
+                setUseRollout={setUseRollout}
+                reset={reset}
+                handleBack={handleBack}
+                handleStart={handleStart}
+                manualStart={manualStart}
+                manualStop={manualStop}
+                handleDuel={handleDuel}
+                requestPermission={requestPermission}
+                setScreen={setScreen}
+                handleAcceptChallenge={handleAcceptChallenge}
+              />
+            ) : (
+              <TimerClassic 
+                user={user}
+                isGuest={isGuest}
+                userProfile={userProfile}
+                activeConfig={activeConfig}
+                isRunning={isRunning}
+                isWaiting={isWaiting}
+                isReady={isReady}
+                lastResult={lastResult}
+                activeChallenge={activeChallenge}
+                currentSpeed={currentSpeed}
+                elapsedTime={elapsedTime}
+                distance={distance}
+                progress={progress}
+                gForce={gForce}
+                gpsStatus={gpsStatus}
+                accuracy={accuracy}
+                vehicles={vehicles}
+                runVehicleId={runVehicleId}
+                isQuickSwitchOpen={isQuickSwitchOpen}
+                useRollout={useRollout}
+                error={error}
+                setIsQuickSwitchOpen={setIsQuickSwitchOpen}
+                setRunVehicleId={setRunVehicleId}
+                setUseRollout={setUseRollout}
+                reset={reset}
+                handleBack={handleBack}
+                handleStart={handleStart}
+                manualStart={manualStart}
+                manualStop={manualStop}
+                handleDuel={handleDuel}
+                requestPermission={requestPermission}
+                setScreen={setScreen}
+                handleAcceptChallenge={handleAcceptChallenge}
+              />
+            )}
+           </>
+        ) : null}
       </AnimatePresence>
 
     {(user || isGuest) && screen !== 'login' && screen !== 'terms' && screen !== 'timer' && screen !== 'custom-setup' && screen !== 'vehicle-catalog' && !isRunning && (
@@ -6023,15 +6912,294 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  </ErrorBoundary>
-);
+      </div>
+    </ErrorBoundary>
+  );
 }
+
+function UserSearch({ onBack, onViewProfile }: { onBack: () => void, onViewProfile: (uid: string) => void }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [usersList, setUsersList] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const handleSearch = async () => {
+    if (!searchTerm.trim()) return;
+    setLoading(true);
+    try {
+      const q = query(
+        collection(db, 'users'),
+        where('displayName', '>=', searchTerm),
+        where('displayName', '<=', searchTerm + '\uf8ff'),
+        limit(20)
+      );
+      const snapshot = await getDocs(q);
+      setUsersList(snapshot.docs.map(doc => doc.data() as UserProfile));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex-1 flex flex-col bg-zinc-950">
+      <header className="p-4 flex items-center justify-between border-b border-white/5 bg-zinc-900/50">
+        <button onClick={onBack} className="p-2 hover:bg-white/5 rounded-full"><ChevronLeft className="w-5 h-5" /></button>
+        <h1 className="text-xs font-black uppercase tracking-widest text-brand-primary">Buscar Pilotos</h1>
+        <div className="w-9" />
+      </header>
+
+      <div className="p-4 overflow-y-auto">
+        <div className="relative mb-6">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500" />
+          <input 
+            type="text" 
+            placeholder="Nome do piloto..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSearch()}
+            className="w-full bg-zinc-900/50 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white focus:border-brand-primary outline-none transition-all"
+          />
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-10"><div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" /></div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3">
+            {usersList.map(u => (
+              <button 
+                key={u.uid}
+                onClick={() => onViewProfile(u.uid)}
+                className="w-full bg-zinc-900/40 border border-white/5 p-4 rounded-2xl flex items-center justify-between group active:scale-[0.98] transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-zinc-800 rounded-2xl overflow-hidden border border-white/10 shadow-lg">
+                    {u.photoURL ? <img src={u.photoURL} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center font-black text-xl">{u.displayName?.[0]}</div>}
+                  </div>
+                  <div className="text-left">
+                    <p className="text-base font-bold text-white">{u.displayName}</p>
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{u.isPremium ? 'Piloto Elite' : 'Piloto'}</p>
+                  </div>
+                </div>
+                <div className="p-2 bg-white/5 rounded-xl group-hover:bg-brand-primary transition-colors">
+                  <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-white" />
+                </div>
+              </button>
+            ))}
+            {searchTerm && usersList.length === 0 && !loading && (
+              <p className="text-center py-12 text-zinc-600 text-sm">Nenhum piloto encontrado.</p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PublicProfileDetail({ uid, currentUserId, onBack, onUpdateProfile, onEditVehicle, isAdmin }: { uid: string, currentUserId: string | undefined, onBack: () => void, onUpdateProfile: (data: any) => void, onEditVehicle: (v: Vehicle) => void, isAdmin: boolean }) {
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [showThemeStore, setShowThemeStore] = useState(false);
+
+  const fetchProfile = async () => {
+    setLoading(true);
+    try {
+      const docRef = doc(db, 'users', uid);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setProfile(docSnap.data() as UserProfile);
+        
+        // Fetch vehicles
+        const vQuery = query(collection(db, 'vehicles'), where('uid', '==', uid));
+        const vSnap = await getDocs(vQuery);
+        setVehicles(vSnap.docs.map(d => ({ id: d.id, ...d.data() } as Vehicle)));
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProfile();
+  }, [uid]);
+
+  if (loading) return <div className="flex-1 flex items-center justify-center bg-zinc-950"><div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" /></div>;
+  if (!profile) return <div className="flex-1 flex flex-col items-center justify-center bg-zinc-950 text-zinc-500 p-8 text-center"><p>Ops! Perfil não encontrado.</p><button onClick={onBack} className="mt-4 text-brand-primary font-bold uppercase tracking-widest text-[10px]">Voltar</button></div>;
+
+  const theme = getThemeById(profile.activeThemeId || 'default');
+  const isOwner = uid === currentUserId;
+
+  return (
+    <div className={`flex-1 flex flex-col overflow-y-auto hide-scrollbar ${theme.backgroundClass} relative`}>
+      {/* Neon Borders of the Pilot */}
+      {profile.activeNeonColor && (
+        <div className="fixed inset-0 pointer-events-none z-50">
+           <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: profile.activeNeonColor, boxShadow: `0 0 20px ${profile.activeNeonColor}` }} />
+           <div className="absolute right-0 top-0 bottom-0 w-1" style={{ backgroundColor: profile.activeNeonColor, boxShadow: `0 0 20px ${profile.activeNeonColor}` }} />
+        </div>
+      )}
+
+      {/* Dynamic Header */}
+      <div className={`relative pt-12 pb-10 px-6 border-b-2 ${theme.borderClass} ${theme.headerClass} overflow-hidden shadow-2xl`}>
+         {theme.bannerUrl && (
+           <img src={theme.bannerUrl} className="absolute inset-0 w-full h-full object-cover opacity-50" />
+         )}
+         {/* Animated BG Accent */}
+         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 blur-[80px] rounded-full pointer-events-none -translate-y-1/2 translate-x-1/3" />
+         
+         <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-20">
+            <button onClick={onBack} className="p-2.5 bg-black/40 backdrop-blur-md rounded-xl text-white/50 hover:text-white transition-all"><ChevronLeft className="w-6 h-6" /></button>
+            <div className="flex items-center gap-2">
+               {isOwner && (
+                 <button 
+                  onClick={() => setShowThemeStore(true)}
+                  className="p-3 bg-brand-primary/20 border border-brand-primary/30 rounded-2xl text-brand-primary hover:bg-brand-primary hover:text-white transition-all shadow-[0_10px_25px_rgba(239,68,68,0.3)] active:scale-95"
+                 >
+                    <Palette className="w-6 h-6" />
+                 </button>
+               )}
+            </div>
+         </div>
+
+         <div className="flex flex-col items-center mt-6 text-center">
+            <div className={`w-32 h-32 rounded-[40px] p-1.5 border-4 ${theme.borderClass} mb-6 relative shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden scale-100 active:scale-105 transition-transform duration-500`}>
+               <div className="w-full h-full rounded-[36px] overflow-hidden">
+                 {profile.photoURL ? (
+                   <img src={profile.photoURL} alt="" className="w-full h-full object-cover" />
+                 ) : (
+                   <div className="w-full h-full bg-zinc-800 flex items-center justify-center text-4xl font-black">{profile.displayName?.[0]}</div>
+                 )}
+               </div>
+               
+               {/* Badge System: Zap for ADMIN, Brand Badge for Users */}
+               {(uid === currentUserId && isAdmin) ? (
+                 <div className="absolute -bottom-1 -right-1 bg-brand-primary p-2 rounded-2xl border-4 border-zinc-950 shadow-xl z-30">
+                    <Zap className="w-5 h-5 text-white fill-current" />
+                 </div>
+               ) : profile.activeBadgeId ? (
+                 <div className="absolute -bottom-1 -right-1 w-10 h-10 rounded-2xl bg-black border-4 border-zinc-950 shadow-2xl flex items-center justify-center z-30 p-1.5">
+                   <img src={BADGES.find(b => b.id === profile.activeBadgeId)?.imageUrl} className="w-full h-full object-contain" />
+                 </div>
+               ) : profile.isPremium ? (
+                 <div className="absolute -bottom-1 -right-1 bg-brand-primary p-2 rounded-2xl border-4 border-zinc-950 shadow-xl z-30">
+                    <Sparkles className="w-5 h-5 text-white" />
+                 </div>
+               ) : null}
+            </div>
+
+            <h2 className="text-3xl font-display font-black italic text-white uppercase tracking-tighter drop-shadow-xl">{profile.displayName}</h2>
+            <div className="flex items-center gap-3 mt-3 bg-black/30 px-4 py-1.5 rounded-full backdrop-blur-md border border-white/5">
+               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">{profile.isPremium ? 'Piloto Elite' : 'Piloto Enthusiasta'}</span>
+               {profile.isPremium && <div className="h-1 w-1 bg-brand-primary rounded-full shadow-[0_0_8px_#ef4444]" />}
+               {profile.isPremium && <span className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-primary">Verified</span>}
+            </div>
+         </div>
+      </div>
+         {/* Stats Grid */}
+         <div className="grid grid-cols-3 gap-4">
+            {[ 
+              { label: 'Veículos', value: vehicles.length, icon: Car, color: 'text-blue-500' },
+              { label: 'DFCores', value: (profile.dfCoins || 0).toLocaleString(), icon: Trophy, color: 'text-yellow-500' },
+              { label: 'Atividade', value: 'High', icon: ActivityIcon, color: 'text-brand-primary' }
+            ].map((stat, i) => (
+              <div key={i} className="bg-zinc-900/50 backdrop-blur-xl border border-white/5 p-5 rounded-[32px] flex flex-col items-center gap-2 shadow-xl shadow-black/20 group hover:border-white/10 transition-colors">
+                 <div className={`p-2 rounded-xl bg-white/5 ${stat.color} opacity-40 group-hover:opacity-100 transition-opacity`}>
+                    <stat.icon className="w-4 h-4" />
+                 </div>
+                 <span className="text-xl font-display font-black italic text-white leading-none tracking-tight">{stat.value}</span>
+                 <span className="text-[8px] font-black uppercase text-zinc-500 tracking-[0.2em]">{stat.label}</span>
+              </div>
+            ))}
+         </div>
+
+         {/* Garage Section */}
+         <section>
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-4 bg-brand-primary rounded-full" />
+                <h3 className="text-[11px] font-black uppercase tracking-[0.4em] text-white/50 italic">Personal Garage</h3>
+              </div>
+              <span className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest">{vehicles.length} slots</span>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-4">
+               {vehicles.map(v => (
+                 <button 
+                  key={v.id} 
+                  onClick={() => onEditVehicle(v)}
+                  className="w-full bg-zinc-900/60 backdrop-blur-xl border border-white/5 p-5 rounded-[32px] flex items-center justify-between group active:scale-[0.98] transition-all hover:bg-zinc-900 shadow-xl"
+                 >
+                    <div className="flex items-center gap-5">
+                       <div className="w-16 h-12 bg-black rounded-2xl border border-white/5 flex items-center justify-center overflow-hidden shadow-inner group-hover:border-brand-primary/30 transition-colors">
+                          <img src={v.photoURL} alt="" className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700" />
+                       </div>
+                       <div className="text-left">
+                          <h4 className="text-base font-black italic text-white uppercase tracking-tight group-hover:text-brand-primary transition-colors leading-none mb-1.5">{v.nickname || v.model}</h4>
+                          <div className="flex items-center gap-1.5">
+                             <BrandIcon brand={v.brand} className="w-4 h-4 grayscale opacity-40 group-hover:grayscale-0 group-hover:opacity-100" />
+                             <span className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">{v.brand}</span>
+                          </div>
+                       </div>
+                    </div>
+                    <div className="h-10 w-10 flex items-center justify-center bg-white/5 rounded-2xl group-hover:bg-brand-primary transition-colors">
+                       <ChevronRight className="w-5 h-5 text-zinc-700 group-hover:text-white" />
+                    </div>
+                 </button>
+               ))}
+
+               {isOwner && (
+                 <button 
+                  onClick={() => alert('Dica: Configure seus veículos no menu de configurações!')}
+                  className="w-full py-10 bg-zinc-900/20 border-2 border-dashed border-zinc-800 rounded-[32px] flex flex-col items-center justify-center gap-3 text-zinc-700 hover:text-white hover:border-zinc-500 transition-all group"
+                 >
+                    <div className="p-3 bg-zinc-800 rounded-2xl group-hover:bg-zinc-700 transition-colors">
+                       <Plus className="w-6 h-6" />
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-[0.2em] italic">Manage Garage</span>
+                 </button>
+               )}
+            </div>
+         </section>
+
+         {/* Albums Section */}
+         <section className="pb-10">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-2 h-4 bg-brand-accent rounded-full" />
+              <h3 className="text-[11px] font-black uppercase tracking-[0.4em] text-white/50 italic">Pilot Highlights</h3>
+            </div>
+            <ProfileLibrary uid={uid} currentUserId={currentUserId} profile={profile} />
+         </section>
+
+      <AnimatePresence>
+        {showThemeStore && (
+          <ThemeStoreModal 
+            profile={profile} 
+            onClose={() => setShowThemeStore(false)} 
+            onUpdate={(data) => {
+              setProfile(prev => prev ? ({ ...prev, ...data }) : null);
+              onUpdateProfile(data);
+            }} 
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 
 function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle: Vehicle, onBack: () => void, isOwnCar: boolean, onEditVehicle: (v: Vehicle) => void }) {
   const [runs, setRuns] = useState<RunResult[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'stats' | 'photos' | 'results'>('stats');
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  
+  const allPhotos = Array.from(new Set([
+    vehicle.photoURL,
+    ...(vehicle.photoURLs || [])
+  ])).filter(Boolean) as string[];
 
   useEffect(() => {
     const fetchRuns = async () => {
@@ -6054,9 +7222,14 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle:
     fetchRuns();
   }, [vehicle.id]);
 
-  const best0to100 = runs.filter(r => r.config.mode === 'speed' && r.config.target === 100).sort((a,b) => a.time - b.time)[0];
+  const validatedRuns = runs.filter(r => r.isValidSlope);
+  
+  // Use persistent best records from vehicle doc, fallback to latest 10 runs
+  const best0to100Time = vehicle.best0to100 || validatedRuns.filter(r => r.config.mode === 'speed' && r.config.target === 100).sort((a,b) => a.time - b.time)[0]?.time;
+  const best201mTime = vehicle.best201m || validatedRuns.filter(r => r.config.mode === 'distance' && r.config.target === 201).sort((a,b) => a.time - b.time)[0]?.time;
+  
   const maxSpeed = Math.max(...runs.map(r => r.maxSpeed), 0);
-  const accelScore = best0to100 ? Math.max(10, 100 - (best0to100.time * 5)) : 0;
+  const accelScore = best0to100Time ? Math.max(10, 100 - (best0to100Time * 5)) : 0;
   const speedScore = maxSpeed ? Math.min(100, (maxSpeed / 300) * 100) : 0;
   const handlingScore = Math.min(100, (runs[0]?.maxG || 0.8) * 80);
 
@@ -6088,7 +7261,9 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle:
           <ChevronLeft className="w-5 h-5" />
         </button>
         <div className="flex items-center gap-2">
-           <DragFireLogo size="small" />
+           <h2 className="font-display font-black italic text-xl tracking-tighter leading-none whitespace-nowrap">
+             DRAG<span className="text-brand-primary">FIRE</span>
+           </h2>
            {isOwnCar && (
              <button 
                onClick={() => onEditVehicle?.(vehicle)}
@@ -6111,45 +7286,86 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle:
             animate={{ scale: 1, opacity: 1 }}
             className={`w-full relative aspect-[4/3] max-h-[400px] rounded-[40px] overflow-hidden shadow-[0_40px_100px_rgba(0,0,0,0.8)] border border-white/10 group bg-zinc-900 ${vehicle.catalogLayout === 'classic' ? 'mb-4' : ''}`}
           >
-             <img 
-               src={vehicle.photoURL || 'https://images.unsplash.com/photo-1542281286-9e0a16bb7366?q=80&w=1200'} 
-               className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" 
-               referrerPolicy="no-referrer"
-             />
+             <div className="relative w-full h-full">
+               <AnimatePresence mode="wait">
+                 <motion.img
+                   key={currentPhotoIndex}
+                   src={allPhotos[currentPhotoIndex] || 'https://images.unsplash.com/photo-1542281286-9e0a16bb7366?q=80&w=1200'}
+                   initial={{ opacity: 0 }}
+                   animate={{ opacity: 1 }}
+                   exit={{ opacity: 0 }}
+                   transition={{ duration: 0.4 }}
+                   className="w-full h-full object-cover transition-transform duration-1000"
+                   referrerPolicy="no-referrer"
+                 />
+               </AnimatePresence>
+               
+               {allPhotos.length > 1 && (
+                 <>
+                   {/* Navigation Arrows */}
+                   <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-between px-4 z-40 pointer-events-none">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setCurrentPhotoIndex(prev => (prev - 1 + allPhotos.length) % allPhotos.length); }}
+                        className="p-2 bg-black/30 backdrop-blur-md border border-white/10 rounded-full text-white/50 hover:text-white hover:bg-black/50 transition-all pointer-events-auto active:scale-90"
+                      >
+                         <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setCurrentPhotoIndex(prev => (prev + 1) % allPhotos.length); }}
+                        className="p-2 bg-black/30 backdrop-blur-md border border-white/10 rounded-full text-white/50 hover:text-white hover:bg-black/50 transition-all pointer-events-auto active:scale-90"
+                      >
+                         <ChevronRight className="w-4 h-4" />
+                      </button>
+                   </div>
+
+                   {/* Indicators (Dots) */}
+                   <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 z-40">
+                      {allPhotos.map((_, idx) => (
+                         <div 
+                           key={idx}
+                           className={`h-1 rounded-full transition-all duration-300 ${idx === currentPhotoIndex ? 'w-4 bg-brand-primary' : 'w-1.5 bg-white/20'}`}
+                         />
+                      ))}
+                   </div>
+                 </>
+               )}
+             </div>
              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
              
              {/* Premium Header Bar (Overlay mode) */}
              {(vehicle.catalogLayout === 'overlay' || !vehicle.catalogLayout) && (
                <div className="absolute top-4 left-4 right-4 flex items-center justify-between pointer-events-auto">
                   <div className="flex items-center gap-3 bg-black/40 backdrop-blur-xl border border-white/10 px-4 py-2 rounded-2xl shadow-xl">
-                     <DragFireLogo size="small" />
+                     <h2 className="font-display font-black italic text-xs tracking-tighter leading-none whitespace-nowrap">
+                        DRAG<span className="text-brand-primary">FIRE</span>
+                     </h2>
                      <div className="h-4 w-[1px] bg-white/10" />
                      <div className="flex items-center gap-2">
-                         <BrandIcon brand={vehicle.brand} className="w-5 h-5" />
-                         <span className="text-[10px] font-black italic text-white uppercase tracking-tight">{vehicle.brand}</span>
+                        <BrandIcon brand={vehicle.brand} className="w-7 h-7 drop-shadow-md" />
+                        <div className="flex flex-col">
+                           <span className="text-xs font-black italic text-white uppercase tracking-tight leading-none">{vehicle.brand}</span>
+                           <span className="text-[5px] font-bold text-white/40 uppercase tracking-[0.2em] leading-none mt-1.5">{vehicle.nickname || vehicle.model}</span>
+                        </div>
                      </div>
                   </div>
 
                   <div className="flex items-center gap-2">
+
                      <button 
                        onClick={(e) => { e.stopPropagation(); handleShareVehicle(); }}
                        className="p-3 bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl text-white hover:bg-brand-primary transition-all active:scale-90 shadow-lg"
                      >
                        <Share2Icon className="w-4 h-4" />
                      </button>
-                     <div className="bg-brand-primary px-3 py-1.5 rounded-xl border border-white/10 flex items-center shadow-[0_0_15px_rgba(239,68,68,0.3)]">
-                        <span className="text-[9px] font-black italic text-zinc-950 uppercase tracking-widest whitespace-nowrap">ST_{vehicle.stage?.split(' ')[1] || 'S'}</span>
-                     </div>
                   </div>
                </div>
              )}
 
-             {/* Model Name Overlay (Left Aligned, Smaller) */}
-             {(vehicle.catalogLayout === 'overlay' || !vehicle.catalogLayout) && (
-               <div className="absolute bottom-6 left-6 right-6">
-                  <div className="flex flex-col items-start text-left">
-                     <h2 className="text-2xl font-display font-black italic text-white leading-none tracking-tighter uppercase drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)] mb-1">{vehicle.model}</h2>
-                     <span className="text-[9px] font-bold text-white/50 uppercase tracking-widest bg-black/40 backdrop-blur-sm px-2 py-0.5 rounded-md border border-white/5">{vehicle.nickname || 'Dragster'}</span>
+             {/* Stage Badge (Bottom Right Overlay) */}
+             {(vehicle.catalogLayout === 'overlay' || !vehicle.catalogLayout) && vehicle.stage?.toLowerCase() !== 'stock' && vehicle.stage?.toLowerCase() !== 'original' && (
+               <div className="absolute bottom-2 right-2 z-30">
+                  <div className="bg-brand-primary/90 backdrop-blur-md px-2 py-0.5 rounded-lg border border-white/10 flex items-center shadow-2xl">
+                     <span className="text-[7px] font-black italic text-zinc-950 uppercase tracking-widest whitespace-nowrap">STAGE {vehicle.stage?.split(' ')[1] || vehicle.stage}</span>
                   </div>
                </div>
              )}
@@ -6176,15 +7392,19 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle:
                      </div>
                   </div>
                </div>
-               <div className="text-right">
-                  <div className="px-2 py-1 bg-brand-primary text-zinc-950 rounded-lg text-[8px] font-black uppercase tracking-widest italic mb-2">Stage {vehicle.stage?.split(' ')[1] || 'S'}</div>
-                  <button 
-                    onClick={handleShareVehicle}
-                    className="p-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-zinc-500 transition-colors"
-                  >
-                    <Share2Icon className="w-3.5 h-3.5" />
-                  </button>
-               </div>
+                  <div className="text-right flex flex-col items-end">
+                     {vehicle.stage?.toLowerCase() !== 'stock' && vehicle.stage?.toLowerCase() !== 'original' && (
+                        <div className={`px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest italic mb-2 ${vehicle.stage === 'Stage Max' ? 'bg-gradient-to-r from-yellow-400 to-yellow-600 text-black' : 'bg-brand-primary text-zinc-950'}`}>
+                           {vehicle.stage === 'Stage Max' ? 'Stage Max' : `Stage ${vehicle.stage?.split(' ')[1] || vehicle.stage}`}
+                        </div>
+                     )}
+                     <button 
+                       onClick={handleShareVehicle}
+                       className="p-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-zinc-400 transition-colors"
+                     >
+                       <Share2Icon className="w-3.5 h-3.5" />
+                     </button>
+                  </div>
             </motion.div>
           )}
         </div>
@@ -6229,8 +7449,7 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle:
                    </div>
                 </div>
 
-                {/* FORCE G BAR */}
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 pb-2">
                    <div className="flex justify-between items-end">
                       <span className="text-[8px] font-black text-zinc-500 uppercase">Força G Acúm.</span>
                       <span className="text-xs font-display font-black italic text-white">{(runs[0]?.maxG || 0.85).toFixed(2)} <span className="text-blue-500 text-[8px] ml-0.5">G</span></span>
@@ -6241,6 +7460,40 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle:
                         animate={{ width: `${handlingScore}%` }}
                         className="h-full bg-blue-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.3)]"
                       />
+                   </div>
+                </div>
+
+                {/* BEST RECORDS SECTION */}
+                <div className="pt-2 border-t border-white/5 space-y-3">
+                   <div className="flex items-center gap-2 mb-1">
+                      <Trophy className="w-3 h-3 text-yellow-500/50" />
+                      <h4 className="text-[7px] font-black text-white/30 uppercase tracking-[0.2em]">Melhores Recordes</h4>
+                   </div>
+                   
+                   <div className="grid grid-cols-2 gap-2">
+                      {/* 0-100km/h Record */}
+                      <div className="bg-white/[0.02] border border-white/5 rounded-xl p-2.5 flex flex-col gap-1 transition-all hover:bg-white/[0.05]">
+                         <div className="flex items-center gap-1.5 opacity-40">
+                            <Gauge className="w-2.5 h-2.5 text-brand-primary" />
+                            <span className="text-[6px] font-black text-white uppercase tracking-wider">0-100 km/h</span>
+                         </div>
+                         <div className="flex items-baseline gap-1">
+                            <span className="text-sm font-display font-black italic text-white leading-none">{vehicle.best0to100 ? vehicle.best0to100.toFixed(2) : '--'}</span>
+                            <span className="text-[8px] font-black italic text-brand-primary uppercase">s</span>
+                         </div>
+                      </div>
+
+                      {/* 201m Record */}
+                      <div className="bg-white/[0.02] border border-white/5 rounded-xl p-2.5 flex flex-col gap-1 transition-all hover:bg-white/[0.05]">
+                         <div className="flex items-center gap-1.5 opacity-40">
+                            <Flag className="w-2.5 h-2.5 text-blue-500" />
+                            <span className="text-[6px] font-black text-white uppercase tracking-wider">201 metros</span>
+                         </div>
+                         <div className="flex items-baseline gap-1">
+                            <span className="text-sm font-display font-black italic text-white leading-none">{vehicle.best201m ? vehicle.best201m.toFixed(2) : '--'}</span>
+                            <span className="text-[8px] font-black italic text-blue-500 uppercase">s</span>
+                         </div>
+                      </div>
                    </div>
                 </div>
              </div>
