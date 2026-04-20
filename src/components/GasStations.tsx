@@ -80,7 +80,7 @@ const MOCK_STATIONS: GasStation[] = [
   }
 ];
 
-export function GasStations({ onBack }: { onBack: () => void }) {
+export function GasStations({ onBack, onCompleteMission }: { onBack: () => void; onCompleteMission?: (id: string) => void }) {
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterBy, setFilterBy] = useState<'price' | 'distance' | 'rating'>('distance');
@@ -376,6 +376,7 @@ export function GasStations({ onBack }: { onBack: () => void }) {
 
       // No need to close detail, just update UI
       setNewPrice('');
+      if (onCompleteMission) onCompleteMission('fuel_update');
     } catch (error) {
       console.error("Error updating price:", error);
     } finally {

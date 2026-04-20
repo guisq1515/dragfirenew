@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { doc, getDoc, query, collection, where, limit, getDocs, setDoc } from 'firebase/firestore';
+import { doc, getDoc, query, collection, where, limit, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { 
   ChevronLeft, 
@@ -18,11 +18,14 @@ import {
   Anchor,
   Plus,
   Trash2,
-  Navigation
+  Navigation,
+  LayoutDashboard,
+  Coins,
+  Settings as SettingsIcon,
+  Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, TelemetryConfig, SystemSettings, TelemetryProfile, PowerReference } from '../types';
-import { deleteDoc } from 'firebase/firestore';
 
 export function AdminDashboard({ 
   onBack,
@@ -70,6 +73,9 @@ export function AdminDashboard({
   const [profileNameInput, setProfileNameInput] = useState('');
   const [showNewProfileModal, setShowNewProfileModal] = useState(false);
   
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'settings' | 'power'>('overview');
+  const [coinAmount, setCoinAmount] = useState<Record<string, number>>({});
+
   // Power References state
   const [powerRefs, setPowerRefs] = useState<PowerReference[]>([]);
   const [showPowerForm, setShowPowerForm] = useState(false);
@@ -77,13 +83,14 @@ export function AdminDashboard({
     carName: '',
     weight: undefined,
     time: undefined,
-    distance: 201, // Default distance for calibration
+    distance: 201, 
     slope: 0,
     verifiedCV: undefined
   });
 
-  // Consider 15,000 requests per month as the absolute safe free-tier limit before any billing starts
-  const FREE_TIER_LIMIT = 15000;
+  const MONTHLY_CAP = 15000;
+  const SAFETY_MARGIN = 0.70;
+  const LOCK_THRESHOLD = MONTHLY_CAP * SAFETY_MARGIN;
 
   useEffect(() => {
     const fetchUsage = async () => {
@@ -123,7 +130,6 @@ export function AdminDashboard({
               setTelemetrySettings(data.profiles[data.activeProfileId]);
             }
           } else {
-            // Support legacy structure
             setTelemetrySettings(snapshot.data() as TelemetryConfig);
           }
         }
@@ -203,7 +209,6 @@ export function AdminDashboard({
     setSelectedProfileId(newId);
     setShowNewProfileModal(false);
     setProfileNameInput('');
-    // We don't activate it globally yet, just save it
     await updateGlobalSettings(updatedProfiles, activeProfileId);
   };
 
@@ -280,6 +285,7 @@ export function AdminDashboard({
       const newBalance = (targetUser.dfCoins || 0) + amount;
       await setDoc(userRef, { dfCoins: newBalance }, { merge: true });
       setUsers(prev => prev.map(u => u.uid === targetUser.uid ? { ...u, dfCoins: newBalance } : u));
+      alert(`Adicionado ${amount} DC para ${targetUser.displayName}`);
     } catch (error) {
       console.error("Error adding coins:", error);
     }
@@ -325,754 +331,338 @@ export function AdminDashboard({
   };
 
   const totalUsage = usageData ? usageData.places + usageData.geocode : 0;
-  
-  // Security Config (Matching googleMapsService.ts)
-  const MONTHLY_CAP = 15000;
-  const SAFETY_MARGIN = 0.70;
-  const LOCK_THRESHOLD = MONTHLY_CAP * SAFETY_MARGIN;
-
   const usagePercentage = Math.min((totalUsage / MONTHLY_CAP) * 100, 100);
   const lockPercentage = SAFETY_MARGIN * 100;
-  
   const isLocked = totalUsage >= LOCK_THRESHOLD;
-  const isDanger = usagePercentage >= (lockPercentage - 10); // Close to lock
-  const isWarning = usagePercentage >= 50;
+  const isDanger = usagePercentage >= (lockPercentage - 10);
 
   return (
-    <div className="flex-1 flex flex-col p-6 space-y-8 overflow-y-auto bg-zinc-950 pb-24">
-      <div className="flex items-center gap-4 bg-red-500/10 p-4 rounded-2xl border border-red-500/20">
-        <button onClick={onBack} className="p-2 bg-zinc-900 rounded-lg text-zinc-400 active:scale-90 transition-all">
-          <ChevronLeft className="w-5 h-5" />
-        </button>
-        <div>
-          <h2 className="text-xl font-display font-black italic text-white leading-none uppercase tracking-tighter">ADMIN DRAGFIRE</h2>
-          <p className="text-xs text-red-500 font-bold uppercase tracking-widest mt-1">Painel Gerencial</p>
+    <div className="flex-1 flex flex-col h-full bg-zinc-950 overflow-hidden">
+      {/* Admin Header */}
+      <div className="p-6 pb-2 space-y-6">
+        <div className="flex items-center justify-between bg-red-500/10 p-4 rounded-2xl border border-red-500/20">
+          <div className="flex items-center gap-4">
+            <button onClick={onBack} className="p-2 bg-zinc-900 rounded-lg text-zinc-400 active:scale-95 transition-all">
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <div>
+              <h2 className="text-xl font-display font-black italic text-white leading-none uppercase tracking-tighter">ADMIN DRAGFIRE</h2>
+              <p className="text-xs text-red-500 font-bold uppercase tracking-widest mt-1">Painel Gerencial</p>
+            </div>
+          </div>
+          <div className="px-3 py-1 bg-zinc-950 border border-white/5 rounded-full">
+            <span className="text-[8px] font-black text-zinc-500 uppercase tracking-[0.2em]">v.1.9.40-ELITE</span>
+          </div>
+        </div>
+
+        {/* Tab Navigation Segmented Control */}
+        <div className="flex bg-zinc-900/50 p-1 rounded-[22px] border border-white/5 backdrop-blur-md">
+          {[
+            { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
+            { id: 'users', label: 'Usuários', icon: Users },
+            { id: 'settings', label: 'Sensores', icon: SettingsIcon },
+            { id: 'power', label: 'Potência', icon: Gauge }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex-1 flex flex-col xs:flex-row items-center justify-center gap-1 xs:gap-2 py-3 rounded-[18px] transition-all duration-300 ${activeTab === tab.id ? 'bg-brand-primary text-white shadow-lg shadow-red-600/20' : 'text-zinc-500 hover:text-zinc-300'}`}
+            >
+              <tab.icon className="w-3.5 h-3.5" />
+              <span className="text-[7px] xs:text-[9px] font-black uppercase tracking-widest">{tab.label}</span>
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* API Monitoring Section */}
-      <div className="space-y-4">
-        <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
-          <Shield className="w-3 h-3 text-brand-primary" />
-          Monitoramento de API (Segurança & Custos)
-        </h3>
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-y-auto px-6 pb-24">
+        <AnimatePresence mode="wait">
+          {activeTab === 'overview' && (
+            <motion.div 
+              key="overview"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6 pt-2"
+            >
+              <div className="space-y-4">
+                <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
+                  <Shield className="w-3 h-3 text-brand-primary" />
+                  Monitoramento Global
+                </h3>
 
-        {apiLoading ? (
-          <div className="flex justify-center p-10">
-            <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : (
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`glass-panel p-6 rounded-3xl border flex flex-col gap-4 ${isLocked ? 'border-red-500 bg-red-500/10' : isDanger ? 'border-yellow-500/50 bg-yellow-500/5' : 'border-white/5'}`}
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest mb-1">
-                  Uso Mensal ({new Date().toLocaleDateString('pt-BR', { month: 'long' })})
-                </p>
-                <div className="flex items-baseline gap-1">
-                  <h4 className={`text-4xl font-display font-black italic leading-none ${isLocked ? 'text-red-500' : 'text-white'}`}>
-                    {totalUsage.toLocaleString()}
-                  </h4>
-                  <span className="text-xs text-zinc-500 font-bold uppercase">/ {MONTHLY_CAP.toLocaleString()} reqs</span>
-                </div>
-              </div>
-              <div className={`p-3 rounded-2xl border ${isLocked ? 'bg-red-500 border-red-400 text-white' : 'bg-zinc-950 border-white/5'}`}>
-                {isLocked ? (
-                  <Zap className="w-6 h-6 animate-pulse" />
-                ) : isDanger ? (
-                  <AlertTriangle className="w-6 h-6 text-yellow-500" />
+                {apiLoading ? (
+                  <div className="flex justify-center p-10">
+                    <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
+                  </div>
                 ) : (
-                  <CheckCircle2 className="w-6 h-6 text-green-500" />
-                )}
-              </div>
-            </div>
+                  <div className={`glass-panel p-6 rounded-3xl border flex flex-col gap-4 ${isLocked ? 'border-red-500 bg-red-500/10' : isDanger ? 'border-yellow-500/50 bg-yellow-500/5' : 'border-white/5'}`}>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest mb-1">Uso Mensal API</p>
+                        <div className="flex items-baseline gap-1">
+                          <h4 className={`text-4xl font-display font-black italic leading-none ${isLocked ? 'text-red-500' : 'text-white'}`}>
+                            {totalUsage.toLocaleString()}
+                          </h4>
+                          <span className="text-xs text-zinc-500 font-bold uppercase">/ {MONTHLY_CAP.toLocaleString()}</span>
+                        </div>
+                      </div>
+                      <div className={`p-3 rounded-2xl border ${isLocked ? 'bg-red-500 border-red-400 text-white' : 'bg-zinc-950 border-white/5'}`}>
+                        {isLocked ? <Zap className="w-6 h-6 animate-pulse" /> : isDanger ? <AlertTriangle className="w-6 h-6 text-yellow-500" /> : <CheckCircle2 className="w-6 h-6 text-green-500" />}
+                      </div>
+                    </div>
 
-            <div className="space-y-2">
-              <div className="flex justify-between text-[8px] font-black uppercase tracking-widest text-zinc-600 px-1">
-                <span>Progresso</span>
-                <span className="text-red-500 underline">Trava de Segurança: {LOCK_THRESHOLD.toLocaleString()} (70%)</span>
-              </div>
-              <div className="w-full h-3 bg-zinc-950 rounded-full overflow-hidden border border-white/5 relative">
-                {/* Safety Margin Indicator */}
-                <div 
-                  className="absolute top-0 bottom-0 w-0.5 bg-red-500/50 z-10" 
-                  style={{ left: `${lockPercentage}%` }}
-                />
-                
-                <motion.div 
-                  initial={{ width: 0 }}
-                  animate={{ width: `${usagePercentage}%` }}
-                  className={`h-full rounded-full transition-all duration-1000 ${
-                    isLocked ? 'bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.8)]' : 
-                    isDanger ? 'bg-yellow-500' : 
-                    'bg-green-500'
-                  }`}
-                />
-              </div>
-            </div>
+                    <div className="space-y-2">
+                       <div className="w-full h-2 bg-zinc-950 rounded-full overflow-hidden border border-white/5 relative">
+                        <div className="absolute top-0 bottom-0 w-0.5 bg-red-500/50 z-10" style={{ left: `${lockPercentage}%` }} />
+                        <motion.div initial={{ width: 0 }} animate={{ width: `${usagePercentage}%` }} className={`h-full rounded-full ${isLocked ? 'bg-red-600' : isDanger ? 'bg-yellow-500' : 'bg-green-500'}`} />
+                      </div>
+                      <p className="text-[8px] font-black uppercase text-zinc-600 text-right tracking-[0.1em]">Segurança em 70%</p>
+                    </div>
 
-            <div className="grid grid-cols-2 gap-3 mt-1">
-              <div className="bg-zinc-950/50 p-4 rounded-2xl border border-white/5">
-                <span className="text-[8px] uppercase font-black text-zinc-600 block mb-1 tracking-widest">Buscas (Places)</span>
-                <span className="text-lg font-bold text-white">{(usageData?.places || 0).toLocaleString()}</span>
-              </div>
-              <div className="bg-zinc-950/50 p-4 rounded-2xl border border-white/5">
-                <span className="text-[8px] uppercase font-black text-zinc-600 block mb-1 tracking-widest">Cidades (Geocode)</span>
-                <span className="text-lg font-bold text-white">{(usageData?.geocode || 0).toLocaleString()}</span>
-              </div>
-            </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-zinc-950/50 p-4 rounded-[24px] border border-white/5 text-center">
+                        <span className="text-[8px] uppercase font-black text-zinc-600 block mb-1">Places Search</span>
+                        <span className="text-xl font-bold text-white">{(usageData?.places || 0).toLocaleString()}</span>
+                      </div>
+                      <div className="bg-zinc-950/50 p-4 rounded-[24px] border border-white/5 text-center">
+                        <span className="text-[8px] uppercase font-black text-zinc-600 block mb-1">Geocoding</span>
+                        <span className="text-xl font-bold text-white">{(usageData?.geocode || 0).toLocaleString()}</span>
+                      </div>
+                    </div>
 
-            {isLocked ? (
-              <div className="mt-2 text-[9px] text-white font-black uppercase border border-red-500 bg-red-600 p-4 rounded-2xl flex gap-3 shadow-lg shadow-red-600/20">
-                <Zap className="w-4 h-4 shrink-0" />
-                SISTEMA BLOQUEADO: Limite de segurança de 70% atingido para evitar cobranças.
-              </div>
-            ) : isDanger && (
-              <div className="mt-2 text-[9px] text-yellow-500 font-bold uppercase border border-yellow-500/20 bg-yellow-500/10 p-4 rounded-2xl flex gap-3">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                CUIDADO: Próximo ao bloqueio automático de 70%.
-              </div>
-            )}
-
-            <p className="text-[8px] text-zinc-600 text-center uppercase font-bold tracking-tighter mt-1">
-              Limites Diários: Visitantes: 5 | Logados: 20 | Anti-Spam: 30s
-            </p>
-          </motion.div>
-        )}
-      </div>
-      {/* Telemetry Settings Section */}
-      <div className="space-y-4">
-        <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
-          <Activity className="w-3 h-3 text-brand-primary" />
-          Ajustes de Telemetria (Sensores)
-        </h3>
-
-        <div className="glass-panel p-6 rounded-3xl border border-white/5 bg-zinc-900/40 space-y-8">
-          {/* Profile Management Header */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                <RotateCw className="w-3 h-3 text-brand-primary" />
-                Perfil de Configuração
-              </label>
-              <button 
-                onClick={() => setShowNewProfileModal(true)}
-                className="flex items-center gap-1 px-3 py-1.5 bg-zinc-950 border border-white/5 rounded-lg text-zinc-400 hover:text-white transition-all active:scale-95"
-              >
-                <Plus className="w-3 h-3" />
-                <span className="text-[9px] font-bold uppercase">Novo Perfil</span>
-              </button>
-            </div>
-
-            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-              {(Object.values(profiles) as TelemetryProfile[]).map((profile) => (
-                <button
-                  key={profile.id}
-                  onClick={() => selectProfile(profile.id)}
-                  className={`flex-shrink-0 px-4 py-3 rounded-2xl border transition-all flex flex-col gap-1 min-w-[124px] ${
-                    selectedProfileId === profile.id 
-                      ? 'border-brand-primary bg-brand-primary/10' 
-                      : 'bg-zinc-950/50 border-white/5'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <span className={`text-[10px] font-black uppercase tracking-tight truncate max-w-[80px] ${selectedProfileId === profile.id ? 'text-white' : 'text-zinc-600'}`}>
-                      {profile.name}
-                    </span>
-                    {profile.isDefault && <ShieldCheck className={`w-3 h-3 ${selectedProfileId === profile.id ? 'text-white/50' : 'text-zinc-800'}`} />}
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    {activeProfileId === profile.id && (
-                      <span className="text-[7px] bg-green-500 text-zinc-950 px-1 rounded font-black uppercase italic">Ativo Global</span>
-                    )}
-                    {profile.isDefault && (
-                      <span className="text-[7px] border border-white/10 text-zinc-600 px-1 rounded font-bold uppercase tracking-tighter">Default</span>
+                    {isLocked && (
+                      <div className="mt-2 text-[9px] text-white font-black uppercase border border-red-500 bg-red-600 p-4 rounded-2xl flex gap-3 shadow-lg shadow-red-600/20">
+                        <Zap className="w-4 h-4 shrink-0" />
+                        SISTEMA BLOQUEADO: Limite atingido.
+                      </div>
                     )}
                   </div>
-                </button>
-              ))}
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <div className="flex gap-2">
-                <button 
-                  onClick={saveToCurrentProfile}
-                  disabled={saveLoading}
-                  className="flex-1 py-3 bg-zinc-950 border border-white/5 text-zinc-300 rounded-xl font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-zinc-900 transition-all hover:border-white/20"
-                >
-                  {saveLoading ? <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" /> : <Save className="w-3.5 h-3.5 text-zinc-500" />}
-                  Salvar no Perfil Selecionado
-                </button>
-                
-                {!profiles[selectedProfileId]?.isDefault && (
-                  <button 
-                    onClick={() => deleteProfile(selectedProfileId)}
-                    className="px-4 py-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl transition-all active:scale-95"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
                 )}
               </div>
+            </motion.div>
+          )}
 
-              {selectedProfileId !== activeProfileId && (
-                <button 
-                  onClick={activateProfile}
-                  disabled={saveLoading}
-                  className="w-full py-3 bg-brand-primary text-white rounded-xl font-black text-[9px] uppercase tracking-[0.2em] flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 active:scale-95 transition-all"
-                >
-                  <Zap className="w-3.5 h-3.5 fill-current" />
-                  Tornar Ativo para Todos os Clientes
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="h-px bg-white/5" />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                <Radio className="w-3 h-3 text-red-500" />
-                Limite de Largada (G-Force)
-              </label>
-              <div className="flex items-center gap-4">
-                <input 
-                  type="range" 
-                  min="1.0" 
-                  max="2.5" 
-                  step="0.05"
-                  value={telemetrySettings.motionSensitivity}
-                  onChange={(e) => setTelemetrySettings({...telemetrySettings, motionSensitivity: Number(e.target.value)})}
-                  className="flex-1 accent-brand-primary"
-                />
-                <span className="text-xl font-display font-black italic text-white w-12">{telemetrySettings.motionSensitivity.toFixed(2)}G</span>
-              </div>
-              <p className="text-[8px] text-zinc-600 font-medium">Recomendado: 1.40G. Menos que isso pode disparar com vibração do motor.</p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                <Gauge className="w-3 h-3 text-blue-500" />
-                Filtro de Ruído (m/s²)
-              </label>
-              <div className="flex items-center gap-4">
-                <input 
-                  type="range" 
-                  min="0.01" 
-                  max="0.5" 
-                  step="0.01"
-                  value={telemetrySettings.noiseFloor}
-                  onChange={(e) => setTelemetrySettings({...telemetrySettings, noiseFloor: Number(e.target.value)})}
-                  className="flex-1 accent-blue-500"
-                />
-                <span className="text-xl font-display font-black italic text-white w-12">{telemetrySettings.noiseFloor.toFixed(2)}</span>
-              </div>
-              <p className="text-[8px] text-zinc-600 font-medium">Ignora acelerações menores que isto. Padrão: 0.05.</p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                <Zap className="w-3 h-3 text-yellow-500" />
-                Cap de Aceleração (Max G)
-              </label>
-              <div className="flex items-center gap-4">
-                <input 
-                  type="range" 
-                  min="1.5" 
-                  max="5.0" 
-                  step="0.1"
-                  value={telemetrySettings.maxAccelG}
-                  onChange={(e) => setTelemetrySettings({...telemetrySettings, maxAccelG: Number(e.target.value)})}
-                  className="flex-1 accent-yellow-500"
-                />
-                <span className="text-xl font-display font-black italic text-white w-12">{telemetrySettings.maxAccelG.toFixed(1)}G</span>
-              </div>
-              <p className="text-[8px] text-zinc-600 font-medium">Limita a velocidade virtual para evitar erros. Road cars raramente passam de 2.0G.</p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                <Activity className="w-3 h-3 text-green-500" />
-                Confiança no GPS (%)
-              </label>
-              <div className="flex items-center gap-4">
-                <input 
-                  type="range" 
-                  min="0.5" 
-                  max="1.0" 
-                  step="0.05"
-                  value={telemetrySettings.fusionGpsWeight || 0.7}
-                  onChange={(e) => setTelemetrySettings({...telemetrySettings, fusionGpsWeight: Number(e.target.value)})}
-                  className="flex-1 accent-green-500"
-                />
-                <span className="text-xl font-display font-black italic text-white w-12">{((telemetrySettings.fusionGpsWeight || 0.95) * 100).toFixed(0)}%</span>
-              </div>
-              <p className="text-[8px] text-zinc-600 font-medium">Recomendado: 95% (v1.5.3). Estabiliza o velocímetro estilo "Waze".</p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                <Gauge className="w-3 h-3 text-orange-500" />
-                Ganho de Aceleração linear
-              </label>
-              <div className="flex items-center gap-4">
-                <input 
-                  type="range" 
-                  min="0.5" 
-                  max="2.0" 
-                  step="0.1"
-                  value={telemetrySettings.fusionAccelGain || 1.0}
-                  onChange={(e) => setTelemetrySettings({...telemetrySettings, fusionAccelGain: Number(e.target.value)})}
-                  className="flex-1 accent-orange-500"
-                />
-                <span className="text-xl font-display font-black italic text-white w-12">{(telemetrySettings.fusionAccelGain || 1.0).toFixed(1)}x</span>
-              </div>
-              <p className="text-[8px] text-zinc-600 font-medium">Multiplicador do ganho base de 20% (v1.5.3 Balanced).</p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                <RotateCw className="w-3 h-3 text-purple-500" />
-                Trava de Rotação (Giroscópio)
-              </label>
-              <div className="flex items-center gap-4">
-                <input 
-                  type="range" 
-                  min="20" 
-                  max="180" 
-                  step="5"
-                  value={telemetrySettings.rotationThreshold || 60}
-                  onChange={(e) => setTelemetrySettings({...telemetrySettings, rotationThreshold: Number(e.target.value)})}
-                  className="flex-1 accent-purple-500"
-                />
-                <span className="text-xl font-display font-black italic text-white w-12">{telemetrySettings.rotationThreshold || 60}°/s</span>
-              </div>
-              <p className="text-[8px] text-zinc-600 font-medium">Para de subir velocidade se o celular girar mais que isso por segundo.</p>
-            </div>
-
-            <div className="space-y-4">
-              <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                <Anchor className="w-3 h-3 text-brand-primary" />
-                Eixo de Montagem (Smart Lock)
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { id: 'auto', label: 'Inteligente' },
-                  { id: 'all', label: 'Todos Eixos' },
-                  { id: 'y', label: 'Vertical (Y)' },
-                  { id: 'x', label: 'Horizontal (X)' }
-                ].map((opt) => (
-                  <button
-                    key={opt.id}
-                    onClick={() => setTelemetrySettings({...telemetrySettings, mountingAxis: opt.id as any})}
-                    className={`py-3 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${telemetrySettings.mountingAxis === opt.id ? 'bg-brand-primary border-brand-primary text-white shadow-lg shadow-red-600/20' : 'bg-zinc-950/50 border-white/5 text-zinc-500 hover:text-zinc-400'}`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-[8px] text-zinc-600 font-medium">"Inteligente" trava o eixo de maior impacto na hora da arrancada.</p>
-            </div>
-
-            
-            <div className="pt-6 mt-6 border-t border-white/5 space-y-6">
-              <h4 className="text-[10px] font-black text-brand-primary uppercase tracking-[0.2em] flex items-center gap-2">
-                <Navigation className="w-3 h-3 -rotate-90" />
-                Auxiliar de Curva (AI Guide)
-              </h4>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                  Distância Base (m)
-                </label>
-                <div className="flex items-center gap-4">
-                  <input 
-                    type="range" 
-                    min="100" 
-                    max="1000" 
-                    step="50"
-                    value={telemetrySettings.lookAheadBaseDistance || 500}
-                    onChange={(e) => setTelemetrySettings({...telemetrySettings, lookAheadBaseDistance: Number(e.target.value)})}
-                    className="flex-1 accent-white"
-                  />
-                  <span className="text-xl font-display font-black italic text-white w-16">{telemetrySettings.lookAheadBaseDistance || 500}m</span>
-                </div>
-                <p className="text-[8px] text-zinc-600 font-medium">Distância mínima que o app "enxerga" para frente.</p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                  Fator de Velocidade
-                </label>
-                <div className="flex items-center gap-4">
-                  <input 
-                    type="range" 
-                    min="1" 
-                    max="20" 
-                    step="1"
-                    value={telemetrySettings.lookAheadSpeedFactor || 5}
-                    onChange={(e) => setTelemetrySettings({...telemetrySettings, lookAheadSpeedFactor: Number(e.target.value)})}
-                    className="flex-1 accent-white"
-                  />
-                  <span className="text-xl font-display font-black italic text-white w-16">{telemetrySettings.lookAheadSpeedFactor || 5}x</span>
-                </div>
-                <p className="text-[8px] text-zinc-600 font-medium">Multiplicador de alcance baseado na KM/H atual.</p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                  Teto de Distância (m)
-                </label>
-                <div className="flex items-center gap-4">
-                  <input 
-                    type="range" 
-                    min="1000" 
-                    max="3000" 
-                    step="100"
-                    value={telemetrySettings.lookAheadMaxDistance || 1500}
-                    onChange={(e) => setTelemetrySettings({...telemetrySettings, lookAheadMaxDistance: Number(e.target.value)})}
-                    className="flex-1 accent-white"
-                  />
-                  <span className="text-xl font-display font-black italic text-white w-16">{telemetrySettings.lookAheadMaxDistance || 1500}m</span>
-                </div>
-                <p className="text-[8px] text-zinc-600 font-medium">Limite máximo de antecipação (mesmo em alta velocidade).</p>
-              </div>
-            </div>
-
-            <div className="bg-zinc-950/80 p-6 rounded-3xl border border-zinc-500/20 flex flex-col gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-green-500/20 flex items-center justify-center">
-                  <ShieldCheck className="w-4 h-4 text-green-500" />
-                </div>
-                <div>
-                  <h4 className="text-[10px] font-black text-white uppercase tracking-widest leading-tight">Segurança Ativa: v1.5.3</h4>
-                  <p className="text-[8px] text-zinc-500 font-bold uppercase mt-0.5 tracking-tighter">Status: Ativado por Hardware</p>
-                </div>
-              </div>
-              <div className="space-y-2 pt-2 border-t border-white/5">
-                <div className="flex justify-between items-center">
-                  <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">Drift Guard</span>
-                  <span className="text-[9px] text-green-500 font-black italic uppercase">±5 km/h limit</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">Balanced Damping</span>
-                  <span className="text-[9px] text-green-500 font-black italic uppercase">20% Influence</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      {/* Power Reference Management Section */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between px-1">
-          <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
-            <Gauge className="w-3 h-3 text-brand-primary" />
-            Gestão de Potência & Calibração
-          </h3>
-          <div className="flex gap-2">
-            <button 
-              onClick={async () => {
-                const q = query(collection(db, 'power_references'), limit(50));
-                const snapshot = await getDocs(q);
-                const refs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as PowerReference));
-                setPowerRefs(refs.sort((a, b) => b.timestamp - a.timestamp));
-              }}
-              className="p-2 bg-zinc-900 rounded-lg text-zinc-400 active:rotate-180 transition-all duration-500 border border-white/5"
+          {activeTab === 'users' && (
+            <motion.div 
+              key="users"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6 pt-2"
             >
-              <RotateCw className="w-4 h-4" />
-            </button>
-            <button 
-              onClick={() => setShowPowerForm(!showPowerForm)}
-              className="p-2 bg-zinc-900 rounded-lg text-brand-primary active:scale-95 transition-all border border-brand-primary/20"
-            >
-              {showPowerForm ? <ChevronLeft className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
+              <div className="space-y-4">
+                <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
+                  <User className="w-3 h-3 text-brand-primary" />
+                  CRM & Gestão Comercial
+                </h3>
 
-        {showPowerForm ? (
-          <motion.div 
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            className="glass-panel p-6 rounded-3xl border border-brand-primary/20 bg-brand-primary/5 space-y-4"
-          >
-             <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2 space-y-1">
-                  <label className="text-[9px] font-black text-zinc-500 uppercase px-1">Nome do Veículo Base</label>
+                <div className="relative group h-14">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-brand-primary transition-colors" />
                   <input 
                     type="text" 
-                    value={refFormData.carName}
-                    onChange={e => setRefFormData({...refFormData, carName: e.target.value})}
-                    placeholder="Ex: Marea Turbo (Fase 2)"
-                    className="w-full bg-zinc-950 border border-white/5 rounded-xl p-3 text-sm text-white"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                    placeholder="Nome do piloto..."
+                    className="w-full h-full bg-zinc-900 border border-white/5 rounded-2xl pl-12 pr-4 text-sm text-white focus:border-brand-primary/50 outline-none transition-all"
                   />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-zinc-500 uppercase px-1">Peso (kg)</label>
-                  <input 
-                    type="number" 
-                    value={refFormData.weight || ''}
-                    onChange={e => setRefFormData({...refFormData, weight: Number(e.target.value)})}
-                    placeholder="1450"
-                    className="w-full bg-zinc-950 border border-white/5 rounded-xl p-3 text-sm text-white"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-zinc-500 uppercase px-1">Tempo (s)</label>
-                  <input 
-                    type="number" 
-                    value={refFormData.time || ''}
-                    onChange={e => setRefFormData({...refFormData, time: Number(e.target.value)})}
-                    placeholder="8.50"
-                    className="w-full bg-zinc-950 border border-white/5 rounded-xl p-3 text-sm text-white"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-zinc-500 uppercase px-1">Inclinação (%)</label>
-                  <input 
-                    type="number" 
-                    value={refFormData.slope || ''}
-                    onChange={e => setRefFormData({...refFormData, slope: Number(e.target.value)})}
-                    placeholder="0.0"
-                    className="w-full bg-zinc-950 border border-white/5 rounded-xl p-3 text-sm text-white"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-zinc-500 uppercase px-1">Cavalaria Real (cv)</label>
-                  <input 
-                    type="number" 
-                    value={refFormData.verifiedCV || ''}
-                    onChange={e => setRefFormData({...refFormData, verifiedCV: Number(e.target.value)})}
-                    placeholder="182"
-                    className="w-full bg-zinc-950 border border-white/5 rounded-xl p-3 text-sm text-white"
-                  />
-                </div>
-             </div>
-              <div className="grid grid-cols-2 gap-3 pb-2 pt-4">
-                <button 
-                  onClick={handleSavePowerRef}
-                  disabled={saveLoading}
-                  className="py-4 bg-zinc-800 text-white rounded-2xl font-black uppercase tracking-widest border border-white/5 active:scale-95 transition-all text-[10px]"
-                >
-                  {saveLoading ? '...' : 'Salvar Manual'}
-                </button>
-                <button 
-                  onClick={() => {
-                    if (!refFormData.carName || !refFormData.weight || !refFormData.verifiedCV) {
-                      alert("Preencha Nome, Peso e CV para iniciar o teste real.");
-                      return;
-                    }
-                    onStartLiveCalibration?.(refFormData);
-                  }}
-                  className="py-4 bg-brand-primary text-white rounded-2xl font-black uppercase tracking-widest shadow-lg shadow-brand-primary/20 active:scale-95 transition-all text-[10px]"
-                >
-                  Iniciar Teste Real (201m)
-                </button>
-              </div>
-          </motion.div>
-        ) : (
-          <div className="space-y-2">
-            {powerRefs.length > 0 ? (
-              powerRefs.map(ref => (
-                <div key={ref.id} className="glass-panel p-4 rounded-2xl border border-white/5 bg-zinc-900/40 flex items-center justify-between group">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-black text-white italic leading-tight uppercase">{ref.carName}</h4>
-                      {ref.isLiveTest && (
-                         <span className="bg-brand-primary/20 text-brand-primary px-1.5 py-0.5 rounded text-[6px] font-black uppercase border border-brand-primary/30">Sensor Data</span>
-                      )}
-                    </div>
-                    <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-1.5 flex flex-wrap gap-x-2 gap-y-1">
-                      <span>{ref.weight}kg</span>
-                      <span className="text-zinc-700">•</span>
-                      <span className="text-zinc-300">{ref.distance || 201}m @ {ref.time.toFixed(2)}s</span>
-                      <span className="text-zinc-700">•</span>
-                      <span className={`font-black ${Math.abs(ref.slope) > 2 ? 'text-red-500' : 'text-zinc-400'}`}>
-                        {ref.slope > 0 ? '+' : ''}{ref.slope.toFixed(1)}% Incl.
-                      </span>
-                      <span className="text-zinc-700">•</span>
-                      <span className="text-brand-primary font-black italic">{ref.verifiedCV} CV REAL</span>
-                    </p>
-                  </div>
-                  <button 
-                    onClick={() => deletePowerRef(ref.id)}
-                    className="p-2.5 text-zinc-700 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all active:scale-95"
-                  >
-                    <Trash2 className="w-4 h-4" />
+                  <button onClick={handleSearch} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-brand-primary text-white rounded-xl">
+                    <Search className="w-4 h-4" />
                   </button>
                 </div>
-              ))
-            ) : (
-              <div className="p-8 border-2 border-dashed border-white/5 rounded-3xl text-center opacity-30">
-                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Nenhuma referência cadastrada</p>
+
+                <div className="space-y-4">
+                  {userLoading ? (
+                    <div className="flex justify-center py-12"><div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" /></div>
+                  ) : users.length > 0 ? (
+                    users.map(u => (
+                      <div key={u.uid} className="glass-panel border-white/5 p-5 rounded-[32px] bg-zinc-900/40 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-14 h-14 rounded-2xl overflow-hidden bg-zinc-950 border border-white/5">
+                              {u.photoURL ? <img src={u.photoURL} className="w-full h-full object-cover" referrerPolicy="no-referrer" /> : <User className="w-full h-full p-4 text-white/10" />}
+                            </div>
+                            <div>
+                              <p className="text-sm font-black text-white italic uppercase tracking-tight">{u.displayName || 'Piloto'}</p>
+                              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-0.5">#{u.handle || 'ID DESCONHECIDO'}</p>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => togglePremium(u)}
+                            className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${u.isPremium ? 'bg-yellow-500 text-black' : 'bg-zinc-800 text-zinc-500'}`}
+                          >
+                            {u.isPremium ? 'PREMIUM ✅' : 'ATIVAR PRO'}
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between bg-zinc-950/50 p-3 rounded-2xl border border-white/5">
+                          <div className="flex items-center gap-2">
+                             <div className="w-8 h-8 rounded-lg bg-zinc-900 flex items-center justify-center"><Coins className="w-4 h-4 text-brand-primary" /></div>
+                             <div>
+                                <p className="text-[8px] font-black text-zinc-500 uppercase">Saldo</p>
+                                <p className="text-sm font-bold text-white italic">{u.dfCoins || 0} DC</p>
+                             </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                             <input 
+                                type="number" placeholder="+ Moedas" value={coinAmount[u.uid] || ''}
+                                onChange={(e) => setCoinAmount({ ...coinAmount, [u.uid]: Number(e.target.value) })}
+                                className="w-20 bg-zinc-800 border-white/5 rounded-lg p-2 text-xs text-white text-center"
+                             />
+                             <button 
+                                onClick={() => handleAddCoins(u, coinAmount[u.uid] || 0)}
+                                className="bg-brand-primary text-white p-2 rounded-lg"
+                             >
+                                <Plus className="w-4 h-4" />
+                             </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-12 p-8 border-2 border-dashed border-white/5 rounded-[40px] opacity-20">
+                       <Search className="w-12 h-12 mx-auto mb-3" />
+                       <p className="text-[10px] font-black uppercase">Pesquise para gerenciar pilotos</p>
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
-        )}
+            </motion.div>
+          )}
+
+          {activeTab === 'settings' && (
+            <motion.div 
+              key="settings"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-6 pt-2"
+            >
+              <div className="space-y-4">
+                <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
+                  <Activity className="w-3 h-3 text-brand-primary" />
+                  Ajustes de Sensores
+                </h3>
+
+                <div className="glass-panel p-6 rounded-[34px] border border-white/5 bg-zinc-900/40 space-y-6">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Profiles</label>
+                    <button onClick={() => setShowNewProfileModal(true)} className="p-1.5 bg-zinc-950 border border-white/5 rounded-lg text-brand-primary"><Plus className="w-4 h-4" /></button>
+                  </div>
+
+                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                    {Object.values(profiles).map((profile) => (
+                      <button
+                        key={profile.id} onClick={() => selectProfile(profile.id)}
+                        className={`flex-shrink-0 px-4 py-3 rounded-2xl border transition-all flex flex-col gap-1 min-w-[120px] ${selectedProfileId === profile.id ? 'border-brand-primary bg-brand-primary/10' : 'bg-zinc-950/50 border-white/5'}`}
+                      >
+                        <span className={`text-[10px] font-black uppercase truncate ${selectedProfileId === profile.id ? 'text-white' : 'text-zinc-600'}`}>{profile.name}</span>
+                        {profile.isDefault && <ShieldCheck className="w-3 h-3 text-zinc-700" />}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-6 pt-4">
+                    {[
+                      { id: 'motionSensitivity', label: 'Sensibilidade Largada (G)', min: 1.0, max: 2.5, step: 0.1, icon: Radio },
+                      { id: 'noiseFloor', label: 'Noise Floor (Ruído)', min: 0.01, max: 0.5, step: 0.01, icon: Gauge },
+                      { id: 'maxAccelG', label: 'Aceleração Máxima (CAP)', min: 1.5, max: 5.0, step: 0.1, icon: Zap },
+                      { id: 'fusionGpsWeight', label: 'Confiança GPS', min: 0.5, max: 1.0, step: 0.05, icon: Activity }
+                    ].map(field => (
+                      <div key={field.id} className="space-y-3">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                            <field.icon className="w-3 h-3 text-brand-primary" />
+                            {field.label}
+                          </label>
+                          <span className="text-sm font-display font-black italic text-white">{(telemetrySettings as any)[field.id]}</span>
+                        </div>
+                        <input 
+                          type="range" min={field.min} max={field.max} step={field.step} 
+                          value={(telemetrySettings as any)[field.id]} 
+                          onChange={(e) => setTelemetrySettings({...telemetrySettings, [field.id]: Number(e.target.value)})}
+                          className="w-full accent-brand-primary h-1.5"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="pt-4 border-t border-white/5 flex gap-2">
+                    <button onClick={saveToCurrentProfile} disabled={saveLoading} className="flex-1 py-4 bg-zinc-950 border border-white/5 text-xs font-black uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2">
+                      <Save className="w-4 h-4 text-zinc-500" /> Salvar Perfil
+                    </button>
+                    {selectedProfileId !== activeProfileId && (
+                      <button onClick={activateProfile} disabled={saveLoading} className="flex-1 py-4 bg-brand-primary text-white text-xs font-black uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2">
+                        <Zap className="w-4 h-4" /> Ativar Global
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'power' && (
+            <motion.div 
+              key="power"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="space-y-6 pt-2"
+            >
+              <div className="space-y-4">
+                <div className="flex items-center justify-between px-1">
+                  <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
+                    <Gauge className="w-3 h-3 text-brand-primary" />
+                    Gestão de Calibração
+                  </h3>
+                  <button onClick={() => setShowPowerForm(!showPowerForm)} className="p-2 bg-zinc-900 rounded-lg text-brand-primary border border-brand-primary/20">
+                    {showPowerForm ? <ChevronLeft className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                {showPowerForm ? (
+                  <div className="glass-panel p-6 rounded-[34px] border border-brand-primary/10 bg-brand-primary/5 space-y-4">
+                    <input type="text" value={refFormData.carName} onChange={e => setRefFormData({...refFormData, carName: e.target.value})} placeholder="Modelo do Carro" className="w-full bg-zinc-950 border-white/5 rounded-xl p-4 text-sm text-white" />
+                    <div className="grid grid-cols-2 gap-3">
+                      <input type="number" value={refFormData.weight || ''} onChange={e => setRefFormData({...refFormData, weight: Number(e.target.value)})} placeholder="Peso(kg)" className="bg-zinc-950 border-white/5 rounded-xl p-4 text-sm text-white" />
+                      <input type="number" value={refFormData.verifiedCV || ''} onChange={e => setRefFormData({...refFormData, verifiedCV: Number(e.target.value)})} placeholder="CV Real" className="bg-zinc-950 border-white/5 rounded-xl p-4 text-sm text-white" />
+                    </div>
+                    <button onClick={handleSavePowerRef} className="w-full py-4 bg-brand-primary text-white rounded-2xl font-black uppercase text-[10px]">Cadastrar Referência</button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {powerRefs.length > 0 ? powerRefs.map(ref => (
+                      <div key={ref.id} className="glass-panel p-4 rounded-[26px] border border-white/5 bg-zinc-900/40 flex items-center justify-between">
+                        <div>
+                          <h4 className="text-sm font-black text-white italic uppercase">{ref.carName}</h4>
+                          <p className="text-[10px] text-zinc-500 font-bold uppercase mt-1">MT: {ref.weight}kg • PW: {ref.verifiedCV} CV</p>
+                        </div>
+                        <button onClick={() => deletePowerRef(ref.id)} className="p-3 text-zinc-700 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    )) : (
+                      <div className="p-12 border-2 border-dashed border-white/5 rounded-[40px] text-center opacity-20">Nenhuma calibração.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* User Management Section */}
-      <div className="space-y-4">
-        <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
-          <ShieldCheck className="w-3 h-3 text-yellow-500" />
-          Gerenciar Usuários & Premium
-        </h3>
-
-        <div className="space-y-4">
-          <div className="relative group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600 group-focus-within:text-brand-primary transition-colors" />
-            <input 
-              type="text" 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Buscar por nome do piloto..."
-              className="w-full bg-zinc-900 border border-white/5 rounded-2xl py-4 pl-12 pr-4 text-sm text-white focus:border-brand-primary/50 outline-none transition-all"
-            />
-          </div>
-
-          <div className="space-y-3">
-            <AnimatePresence mode="popLayout">
-              {userLoading ? (
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="flex justify-center py-12"
-                >
-                  <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
-                </motion.div>
-              ) : users.length > 0 ? (
-                users.map(u => (
-                  <motion.div 
-                    key={u.uid}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="glass-panel border-white/5 p-4 rounded-3xl flex items-center justify-between hover:bg-zinc-900/50 transition-all"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-2xl overflow-hidden bg-zinc-950 border border-white/5 relative">
-                        {u.photoURL ? (
-                          <img src={u.photoURL} alt={u.displayName || ''} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <User className="w-6 h-6 text-zinc-800" />
-                          </div>
-                        )}
-                        {u.isPremium && (
-                          <div className="absolute top-0 right-0 bg-yellow-500 p-0.5 rounded-bl-lg">
-                            <Zap className="w-2.5 h-2.5 text-zinc-950 fill-current" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-white truncate leading-tight">{u.displayName || 'Piloto DragFire'}</p>
-                        <p className="text-[9px] text-zinc-500 uppercase font-black tracking-widest mt-1 opacity-50">UID: {u.uid.slice(0, 10)}... • 🪙 {u.dfCoins || 0} DC</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-2">
-                      <button 
-                        onClick={() => togglePremium(u)}
-                        className={`px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 ${
-                          u.isPremium 
-                            ? 'bg-yellow-500 text-zinc-950 shadow-lg shadow-yellow-500/20' 
-                            : 'bg-zinc-800 text-zinc-500 border border-white/5 hover:text-white'
-                        }`}
-                      >
-                        {u.isPremium ? 'Premium OK' : 'Ativar Premium'}
-                      </button>
-                      <button 
-                        onClick={() => handleAddCoins(u, 1000)}
-                        className="px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all active:scale-95 bg-brand-primary/20 text-brand-primary border border-brand-primary/30 hover:bg-brand-primary hover:text-white"
-                      >
-                        + 1000 DC
-                      </button>
-                    </div>
-                  </motion.div>
-                ))
-              ) : searchTerm.length > 0 ? (
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="text-center py-12 space-y-3 opacity-40"
-                >
-                  <Search className="w-12 h-12 text-zinc-800 mx-auto" />
-                  <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">Nenhum piloto encontrado</p>
-                </motion.div>
-              ) : (
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="glass-panel border-dashed border-white/5 bg-transparent p-12 rounded-3xl text-center space-y-3"
-                >
-                  <User className="w-10 h-10 text-zinc-800 mx-auto opacity-20" />
-                  <p className="text-zinc-700 text-[9px] font-black uppercase tracking-[0.2em]">Pesquise para gerenciar créditos</p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-      </div>
-      {/* New Profile Modal */}
       <AnimatePresence>
         {showNewProfileModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 pb-32">
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowNewProfileModal(false)}
-              className="absolute inset-0 bg-zinc-950/90 backdrop-blur-md"
-            />
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="relative w-full max-w-sm glass-panel bg-zinc-900/50 p-8 rounded-[40px] border-white/5 space-y-6"
-            >
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-brand-primary/20 rounded-2xl">
-                  <RotateCw className="w-6 h-6 text-brand-primary" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-display font-black italic text-white uppercase italic tracking-tighter leading-none">NOVO PERFIL</h3>
-                  <p className="text-[10px] text-brand-primary font-black uppercase tracking-widest mt-1">Salvar Configuração</p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">Nome do Perfil</label>
-                  <input 
-                    type="text"
-                    autoFocus
-                    value={profileNameInput}
-                    onChange={(e) => setProfileNameInput(e.target.value)}
-                    placeholder="Ex: Performance Pro..."
-                    className="w-full bg-zinc-950 border border-white/5 rounded-2xl py-4 px-6 text-sm text-white focus:border-brand-primary/50 outline-none transition-all"
-                  />
-                </div>
-
-                <div className="flex gap-3">
-                  <button 
-                    onClick={() => setShowNewProfileModal(false)}
-                    className="flex-1 py-4 bg-zinc-800 text-zinc-400 rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all"
-                  >
-                    Cancelar
-                  </button>
-                  <button 
-                    onClick={createNewProfile}
-                    className="flex-2 py-4 bg-brand-primary text-white rounded-2xl font-black text-[10px] uppercase tracking-widest active:scale-95 transition-all shadow-lg shadow-red-600/20"
-                  >
-                    Salvar Perfil
-                  </button>
-                </div>
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowNewProfileModal(false)} className="absolute inset-0 bg-zinc-950/90 backdrop-blur-md" />
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-sm glass-panel bg-zinc-900/40 p-8 rounded-[40px] border-white/5 space-y-6">
+              <div className="flex items-center gap-3"><div className="p-3 bg-brand-primary/20 rounded-xl"><RotateCw className="w-5 h-5 text-brand-primary" /></div><h3 className="text-lg font-display font-black text-white italic uppercase">Novo Perfil</h3></div>
+              <input type="text" autoFocus value={profileNameInput} onChange={(e) => setProfileNameInput(e.target.value)} placeholder="Nome do Ajuste..." className="w-full bg-zinc-950 border-white/5 rounded-2xl py-4 px-6 text-sm text-white" />
+              <div className="flex gap-3">
+                <button onClick={() => setShowNewProfileModal(false)} className="flex-1 py-4 bg-zinc-800 text-zinc-400 rounded-[20px] font-black text-[10px] uppercase">Cancelar</button>
+                <button onClick={createNewProfile} className="flex-2 py-4 bg-brand-primary text-white rounded-[20px] font-black text-[10px] uppercase shadow-lg shadow-red-600/20">Salvar</button>
               </div>
             </motion.div>
           </div>

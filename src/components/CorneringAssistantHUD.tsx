@@ -287,8 +287,6 @@ export function CorneringAssistantHUD({
         </div>
       </div>
 
-      </div>
-      
       {/* Distance Progress Bar (500m to 0m) */}
       <div className="px-6 mt-4">
         <div className="h-2 bg-white/5 rounded-full overflow-hidden border border-white/5 backdrop-blur-md relative">

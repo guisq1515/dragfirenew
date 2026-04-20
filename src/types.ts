@@ -103,6 +103,13 @@ export interface UserProfile {
   activeNeonColor?: string | null;
   unlockedNeonColors?: string[];
   hasNeon?: boolean;
+  activeTitleId?: string | null;
+  unlockedTitles?: string[];
+  completedMissions?: string[];
+  missionProgress?: Record<string, any>;
+  lastLoginDate?: string;
+  lastWeeklyReset?: string;
+  lastRewardClaimMonth?: string; // Format: YYYY-MM
 }
 
 export interface Vehicle {
@@ -222,7 +229,7 @@ export interface Activity {
   userName: string;
   userPhoto?: string;
   handle?: string;
-  type: 'new_run' | 'new_vehicle' | 'new_record' | 'follow';
+  type: 'new_run' | 'new_vehicle' | 'new_record' | 'follow' | 'ranking_reward';
   data: {
     runId?: string;
     vehicleId?: string;
@@ -230,6 +237,9 @@ export interface Activity {
     description?: string;
     target?: string;
     time?: string;
+    month?: string;
+    position?: string;
+    amount?: number;
   };
   timestamp: number;
 }
@@ -241,4 +251,14 @@ export interface UserAlbum {
   coverPhotoURL?: string;
   photos: string[];
   createdAt: number;
+}
+
+export interface RemoteLog {
+  uid: string;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+  details?: any;
+  timestamp: number;
+  platform: string;
+  version: string;
 }

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Palette, X, Sparkles, CheckCircle2, ChevronRight, Tags, Award, Sun } from 'lucide-react';
-import { PROFILE_THEMES, ProfileThemeDef, BADGES, NEON_COLORS, StoreItem } from '../constants/themes';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Palette, X, Sparkles, CheckCircle2, ChevronRight, Tags, Award, Sun, Coins, ShieldCheck } from 'lucide-react';
+import { PROFILE_THEMES, ProfileThemeDef, BADGES, NEON_COLORS, TITLES, StoreItem } from '../constants/themes';
 import { UserProfile } from '../types';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -15,21 +15,37 @@ export function ThemeStoreModal({
   onClose: () => void;
   onUpdate: (data: Partial<UserProfile>) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<'exclusive' | 'brands' | 'badges' | 'neon'>('exclusive');
+  const [activeTab, setActiveTab] = useState<'themes' | 'badges' | 'neon' | 'titles'>('themes');
+  const [themeCategory, setThemeCategory] = useState<'all' | 'normal' | 'brands'>('all');
   const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
 
   const unlockedThemes = profile.unlockedThemes || ['default'];
   const unlockedBadges = profile.unlockedBadges || [];
   const unlockedNeonColors = profile.unlockedNeonColors || [];
+  const unlockedTitles = profile.unlockedTitles || [];
   
   const currentActiveTheme = profile.activeThemeId || 'default';
   const currentActiveBadge = profile.activeBadgeId;
   const currentActiveNeon = profile.activeNeonColor;
+  const currentActiveTitle = profile.activeTitleId;
 
-  const exclusiveThemes = PROFILE_THEMES.filter(t => !t.isBrand);
-  const brandThemes = PROFILE_THEMES.filter(t => t.isBrand);
+  // Filter themes and sort them (equipped/unlocked first)
+  const filteredThemes = PROFILE_THEMES.filter(t => {
+    if (themeCategory === 'all') return true;
+    if (themeCategory === 'normal') return !t.isBrand && t.id !== 'default';
+    if (themeCategory === 'brands') return t.isBrand;
+    return true;
+  });
 
-  const handleAction = async (item: ProfileThemeDef | StoreItem, type: 'theme' | 'badge' | 'neon') => {
+  const allThemes = (activeTab === 'themes' ? filteredThemes : PROFILE_THEMES).sort((a, b) => {
+    const aUnlocked = unlockedThemes.includes(a.id) || a.id === 'default';
+    const bUnlocked = unlockedThemes.includes(b.id) || b.id === 'default';
+    if (aUnlocked && !bUnlocked) return -1;
+    if (!aUnlocked && bUnlocked) return 1;
+    return a.price - b.price;
+  });
+
+  const handleAction = async (item: ProfileThemeDef | StoreItem, type: 'theme' | 'badge' | 'neon' | 'title') => {
     try {
       setLoadingItemId(item.id);
       const ref = doc(db, 'users', profile.uid);
@@ -86,6 +102,23 @@ export function ThemeStoreModal({
           await updateDoc(ref, { unlockedNeonColors: newUnlocked, activeNeonColor: neon.color, hasNeon: true, dfCoins: newBalance });
           onUpdate({ unlockedNeonColors: newUnlocked, activeNeonColor: neon.color, hasNeon: true, dfCoins: newBalance });
         }
+      } else if (type === 'title') {
+        const isUnlocked = unlockedTitles.includes(item.id);
+        if (isUnlocked) {
+          const newTitle = currentActiveTitle === item.id ? null : item.id;
+          await updateDoc(ref, { activeTitleId: newTitle });
+          onUpdate({ activeTitleId: newTitle });
+        } else {
+          const title = item as StoreItem;
+          if ((profile.dfCoins || 0) < title.price) {
+            alert(`Saldo Insuficiente! Você precisa de ${title.price} DC.`);
+            return;
+          }
+          const newUnlocked = [...unlockedTitles, title.id];
+          const newBalance = (profile.dfCoins || 0) - title.price;
+          await updateDoc(ref, { unlockedTitles: newUnlocked, activeTitleId: title.id, dfCoins: newBalance });
+          onUpdate({ unlockedTitles: newUnlocked, activeTitleId: title.id, dfCoins: newBalance });
+        }
       }
     } catch (e) {
       console.error(e);
@@ -95,12 +128,14 @@ export function ThemeStoreModal({
     }
   };
 
+  const isAdmin = profile.email === 'guisq1515@gmail.com';
+
   const DEV_addCoins = async () => {
     const ref = doc(db, 'users', profile.uid);
-    const newBalance = (profile.dfCoins || 0) + 500;
+    const newBalance = (profile.dfCoins || 0) + 9999;
     await updateDoc(ref, { dfCoins: newBalance });
     onUpdate({ dfCoins: newBalance });
-    alert('500 DFCoin adicionados para testes!');
+    alert('9.999 DFCoin adicionados para testes!');
   };
 
   return (
@@ -108,165 +143,265 @@ export function ThemeStoreModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/90 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/95 backdrop-blur-md"
     >
       <motion.div 
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
-        className="bg-zinc-950 w-full sm:max-w-md rounded-3xl overflow-hidden border border-white/10 shadow-2xl flex flex-col max-h-[90vh]"
+        className="bg-zinc-950 w-full sm:max-w-2xl sm:rounded-[40px] overflow-hidden border-t sm:border border-white/10 shadow-2xl flex flex-col h-[90vh] sm:h-auto sm:max-h-[85vh]"
       >
-        {/* Header */}
-        <div className="p-6 relative bg-zinc-900 shrink-0">
-           <button onClick={onClose} className="absolute top-6 right-6 p-2 text-zinc-400 bg-black/40 rounded-xl">
+        {/* Header Section */}
+        <div className="p-6 pb-2 relative shrink-0">
+           <button 
+             onClick={onClose} 
+             className="absolute top-6 right-6 p-2 text-zinc-500 bg-white/5 hover:bg-white/10 hover:text-white rounded-xl transition-all active:scale-90"
+           >
              <X className="w-5 h-5" />
            </button>
            
-           <div className="flex justify-between items-start mb-2 pr-12">
+           <div className="flex justify-between items-center mb-6">
              <div>
-               <h2 className="text-2xl font-display font-black italic text-white leading-none flex items-center gap-2">
-                  <Palette className="w-5 h-5 text-brand-primary" /> DRAGFIRE STORE
-               </h2>
-               <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-1">Skins Exclusivas de Perfil</p>
+                <div className="flex items-center gap-2 mb-1">
+                  <Palette className="w-4 h-4 text-brand-primary" />
+                  <h2 className="text-xl font-display font-black italic text-white uppercase tracking-tighter">
+                    LOJA <span className="text-brand-primary">PREMIUM</span>
+                  </h2>
+                </div>
+                <p className="text-[7px] text-zinc-500 font-black uppercase tracking-[0.4em] flex items-center gap-1.5">
+                  <ShieldCheck className="w-2.5 h-2.5" /> High-End Social Custom
+                </p>
              </div>
              
-             <div className="flex flex-col items-end">
-               <div className="flex items-center gap-1.5 bg-zinc-950 px-3 py-1.5 rounded-lg border border-yellow-500/30">
-                 <span className="text-lg">🪙</span>
-                 <span className="text-white font-black italic">{profile.dfCoins || 0}</span>
-               </div>
-               <button 
-                 onClick={DEV_addCoins}
-                 className="text-[9px] text-zinc-500 font-bold uppercase hover:text-white transition-colors mt-1"
-               >
-                 + Recarregar (Teste)
-               </button>
+             <div className="flex flex-col items-end pr-10 sm:pr-0">
+                <div className="flex items-center gap-2 bg-zinc-900 border border-white/5 px-3 py-1.5 rounded-xl shadow-inner group">
+                  <Coins className="w-3.5 h-3.5 text-yellow-500 transition-transform group-hover:rotate-12" />
+                  <span className="text-lg font-display font-black italic text-white leading-none">
+                    {(profile.dfCoins || 0).toLocaleString()} <span className="text-[8px] text-zinc-500 ml-0.5 tracking-widest">DC</span>
+                  </span>
+                </div>
+                {isAdmin && (
+                  <button 
+                    onClick={DEV_addCoins}
+                    className="text-[8px] text-emerald-500 font-black uppercase tracking-widest hover:text-white transition-colors mt-1.5 underline decoration-emerald-500/30 underline-offset-4"
+                  >
+                    + Admin Refill (9999)
+                  </button>
+                )}
              </div>
            </div>
         </div>
 
-        <div className="flex bg-zinc-900 border-b border-white/5 shrink-0 overflow-x-auto scrollbar-none">
-          <button 
-            onClick={() => setActiveTab('exclusive')}
-            className={`min-w-[100px] py-3 text-[10px] font-black uppercase tracking-widest transition-all border-b-2 flex justify-center items-center gap-1.5 ${activeTab === 'exclusive' ? 'border-brand-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}
-          >
-            <Sparkles className="w-3 h-3" /> Especiais
-          </button>
-          <button 
-            onClick={() => setActiveTab('brands')}
-            className={`min-w-[100px] py-3 text-[10px] font-black uppercase tracking-widest transition-all border-b-2 flex justify-center items-center gap-1.5 ${activeTab === 'brands' ? 'border-brand-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}
-          >
-            <Tags className="w-3 h-3" /> Marcas
-          </button>
-          <button 
-            onClick={() => setActiveTab('badges')}
-            className={`min-w-[100px] py-3 text-[10px] font-black uppercase tracking-widest transition-all border-b-2 flex justify-center items-center gap-1.5 ${activeTab === 'badges' ? 'border-brand-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}
-          >
-            <Award className="w-3 h-3" /> Badges
-          </button>
-          <button 
-            onClick={() => setActiveTab('neon')}
-            className={`min-w-[100px] py-3 text-[10px] font-black uppercase tracking-widest transition-all border-b-2 flex justify-center items-center gap-1.5 ${activeTab === 'neon' ? 'border-brand-primary text-white' : 'border-transparent text-zinc-500 hover:text-white'}`}
-          >
-            <Sun className="w-3 h-3" /> Neon
-          </button>
+        {/* Categories */}
+        <div className="px-6 shrink-0 mb-4">
+          <div className="flex bg-zinc-900/50 p-1 rounded-2xl border border-white/5 gap-1">
+            {[
+              { id: 'themes', label: 'Temas', icon: Palette },
+              { id: 'badges', label: 'Badges', icon: Award },
+              { id: 'titles', label: 'Títulos', icon: Tags },
+              { id: 'neon', label: 'Auras', icon: Sun },
+            ].map(tab => (
+              <button 
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex-1 py-3 px-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex justify-center items-center gap-2 relative overflow-hidden
+                  ${activeTab === tab.id ? 'bg-brand-primary text-white shadow-xl shadow-brand-primary/20' : 'text-zinc-600 hover:text-zinc-400 hover:bg-white/5'}`}
+              >
+                <tab.icon className={`w-3.5 h-3.5 ${activeTab === tab.id ? '' : 'opacity-40'}`} />
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-           {activeTab === 'exclusive' || activeTab === 'brands' ? (activeTab === 'exclusive' ? exclusiveThemes : brandThemes).map(theme => {
-             const hasTheme = unlockedThemes.includes(theme.id) || theme.id === 'default';
-             const isEquipped = currentActiveTheme === theme.id;
-             const isProcessing = loadingItemId === theme.id;
-
-             return (
-               <div key={theme.id} className={`rounded-2xl border overflow-hidden transition-all ${theme.borderClass} ${theme.backgroundClass}`}>
-                 <div className={`h-24 ${theme.headerClass} relative`}>
-                    {theme.bannerUrl && <img src={theme.bannerUrl} className="w-full h-full object-cover opacity-50" />}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
-                    {isEquipped && (
-                      <div className="absolute top-2 right-2 bg-black/60 rounded-lg px-2 py-1 flex items-center gap-1 text-white text-[9px] font-black uppercase">
-                         <CheckCircle2 className={`w-3 h-3 ${theme.accentText}`} /> Utilizando
-                      </div>
-                    )}
-                 </div>
-                 
-                 <div className="p-4 flex items-center justify-between">
-                    <div>
-                       <h3 className="font-black italic text-white text-lg uppercase leading-none">{theme.name}</h3>
-                       {!hasTheme && <p className="text-[10px] text-zinc-400 font-bold tracking-widest uppercase mt-1">Skin de Perfil</p>}
-                    </div>
-
-                    <button 
-                      onClick={() => handleAction(theme, 'theme')}
-                      disabled={isEquipped || isProcessing}
-                      className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-transform active:scale-95 flex items-center justify-center min-w-[100px] 
-                         ${isEquipped ? 'bg-zinc-800 text-zinc-500 opacity-50' : 
-                           hasTheme ? `${theme.accentBg} text-white` : 
-                           'bg-brand-primary text-white shadow-lg'}`
-                      }
-                    >
-                      {isProcessing ? '...' : isEquipped ? 'Equipado' : hasTheme ? 'Equipar' : `Comprar ${theme.priceLabel}`}
-                    </button>
-                 </div>
-               </div>
-             );
-           }) : activeTab === 'badges' ? BADGES.map(badge => {
-             const hasBadge = unlockedBadges.includes(badge.id);
-             const isEquipped = currentActiveBadge === badge.id;
-             const isProcessing = loadingItemId === badge.id;
-
-             return (
-               <div key={badge.id} className="bg-zinc-900 border border-white/5 rounded-2xl p-4 flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-xl bg-black flex items-center justify-center overflow-hidden border border-white/5">
-                    <img src={badge.imageUrl} className="w-10 h-10 object-contain" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="font-black italic text-white text-md uppercase leading-none">{badge.name}</h3>
-                    <p className="text-[9px] text-zinc-500 font-bold tracking-widest uppercase mt-1">Badge de Perfil</p>
-                  </div>
-                  <button 
-                    onClick={() => handleAction(badge, 'badge')}
-                    disabled={isProcessing}
-                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-transform active:scale-95 flex items-center justify-center min-w-[100px] 
-                       ${isEquipped ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 
-                         hasBadge ? 'bg-zinc-800 text-white' : 
-                         'bg-brand-primary text-white'}`
-                    }
+        {/* Main Store Content */}
+        <div className="flex-1 overflow-y-auto p-6 pt-2 space-y-4 hide-scrollbar pb-10">
+           {/* Sub-Category Menu for Themes */}
+           {activeTab === 'themes' && (
+             <motion.div 
+               initial={{ opacity: 0, y: -10 }}
+               animate={{ opacity: 1, y: 0 }}
+               className="flex items-center gap-2 mb-2"
+             >
+                {[
+                  { id: 'all', label: 'Todos' },
+                  { id: 'normal', label: 'Geral' },
+                  { id: 'brands', label: 'Marcas' }
+                ].map(cat => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setThemeCategory(cat.id as any)}
+                    className={`px-4 py-2 rounded-xl text-[8px] font-black uppercase tracking-widest transition-all border
+                      ${themeCategory === cat.id ? 'bg-white text-black border-white' : 'bg-zinc-900 text-zinc-500 border-white/5 hover:text-white hover:bg-zinc-800'}`}
                   >
-                    {isProcessing ? '...' : isEquipped ? 'Desequipar' : hasBadge ? 'Equipar' : `Comprar ${badge.priceLabel}`}
+                    {cat.label}
                   </button>
-               </div>
-             );
-           }) : NEON_COLORS.map(neon => {
-             const hasNeon = unlockedNeonColors.includes(neon.id);
-             const isEquipped = currentActiveNeon === neon.color;
-             const isProcessing = loadingItemId === neon.id;
+                ))}
+             </motion.div>
+           )}
 
-             return (
-               <div key={neon.id} className="bg-zinc-900 border border-white/5 rounded-2xl p-4 flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full border-4 flex items-center justify-center" style={{ borderColor: `${neon.color}44`, backgroundColor: `${neon.color}22` }}>
-                    <div className="w-4 h-4 rounded-full" style={{ backgroundColor: neon.color, boxShadow: `0 0 15px ${neon.color}` }} />
+           <AnimatePresence mode="wait">
+             <motion.div
+               key={activeTab}
+               initial={{ opacity: 0, y: 10 }}
+               animate={{ opacity: 1, y: 0 }}
+               exit={{ opacity: 0, y: -10 }}
+               transition={{ duration: 0.2 }}
+               className="grid grid-cols-1 gap-4"
+             >
+               {activeTab === 'themes' ? allThemes.map(theme => {
+                 const hasTheme = unlockedThemes.includes(theme.id) || theme.id === 'default';
+                 const isEquipped = currentActiveTheme === theme.id;
+                 const isProcessing = loadingItemId === theme.id;
+
+                 return (
+                   <div key={theme.id} className={`group rounded-[28px] border-2 overflow-hidden transition-all duration-300 ${theme.borderClass} ${theme.backgroundClass}`}>
+                     <div className="relative aspect-[16/7] overflow-hidden">
+                        {theme.bannerUrl ? (
+                          <img src={theme.bannerUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="" />
+                        ) : (
+                          <div className={`w-full h-full ${theme.headerClass}`} />
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent" />
+                        
+                        <div className="absolute top-3 left-4">
+                          {isEquipped && (
+                            <div className="bg-black/60 backdrop-blur-md rounded-lg px-2 py-1 flex items-center gap-1.5 text-white text-[8px] font-black uppercase border border-white/10">
+                               <CheckCircle2 className={`w-3 h-3 ${theme.accentText} fill-current`} /> Equipado
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between gap-2">
+                           <div className="min-w-0">
+                              <h3 className="font-display font-black italic text-lg text-white uppercase tracking-tighter leading-tight mb-0.5 truncate">{theme.name}</h3>
+                              <p className="text-[7px] text-zinc-400 font-black tracking-widest uppercase truncate opacity-60">Custom Profile Wrap</p>
+                           </div>
+
+                           <button 
+                             onClick={() => handleAction(theme, 'theme')}
+                             disabled={isEquipped || isProcessing}
+                             className={`px-4 py-2.5 rounded-xl text-[8px] font-black uppercase tracking-widest transition-all min-w-[100px] border active:scale-95
+                                ${isEquipped ? 'bg-white/5 text-zinc-700 border-white/5 opacity-50 cursor-default' : 
+                                  hasTheme ? `${theme.accentBg} text-white border-white/10` : 
+                                  'bg-white text-black border-white hover:bg-brand-primary hover:text-white'}`
+                             }
+                           >
+                             {isProcessing ? (
+                               <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin mx-auto" />
+                             ) : isEquipped ? 'Ativado' : hasTheme ? 'Equipar' : theme.priceLabel}
+                           </button>
+                        </div>
+                     </div>
+                   </div>
+                 );
+               }) : activeTab === 'badges' ? (
+                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-8">
+                   {BADGES.map(badge => {
+                     const hasBadge = unlockedBadges.includes(badge.id);
+                     const isEquipped = currentActiveBadge === badge.id;
+                     const isProcessing = loadingItemId === badge.id;
+
+                     return (
+                       <div key={badge.id} className="bg-zinc-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 flex items-center gap-4 group hover:border-brand-primary/30 transition-all">
+                          <div className="w-12 h-12 rounded-xl bg-black flex items-center justify-center overflow-hidden border border-white/5 p-1">
+                            <img src={badge.imageUrl} className="w-10 h-10 object-contain" alt="" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                             <h3 className="font-black italic text-white text-xs uppercase truncate leading-none mb-1.5">{badge.name}</h3>
+                             <p className="text-[7px] text-zinc-500 font-black tracking-widest uppercase">Elite Badge</p>
+                          </div>
+                          <button 
+                            onClick={() => handleAction(badge, 'badge')}
+                            disabled={isProcessing}
+                            className={`w-10 h-10 rounded-xl transition-all active:scale-90 flex items-center justify-center border shadow-lg
+                               ${isEquipped ? 'bg-emerald-500 text-white border-emerald-400' : 
+                                 hasBadge ? 'bg-zinc-800 text-white border-white/10 hover:bg-zinc-700' : 
+                                 'bg-brand-primary text-white border-brand-primary'}`
+                            }
+                          >
+                            {isProcessing ? (
+                              <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            ) : isEquipped ? <X className="w-4 h-4" /> : hasBadge ? <CheckCircle2 className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                          </button>
+                       </div>
+                     );
+                   })}
+                 </div>
+               ) : activeTab === 'titles' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-8">
+                    {TITLES.map(title => {
+                      const hasTitle = unlockedTitles.includes(title.id);
+                      const isEquipped = currentActiveTitle === title.id;
+                      const isProcessing = loadingItemId === title.id;
+
+                      return (
+                        <div key={title.id} className="bg-zinc-900 border border-white/5 rounded-2xl p-4 flex items-center justify-between group hover:border-brand-primary/20 transition-all">
+                           <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center border border-white/5">
+                                <Tags className={`w-5 h-5 ${isEquipped ? 'text-brand-primary' : 'text-zinc-500'}`} />
+                              </div>
+                              <div>
+                                <h3 className="font-display font-black italic text-white text-xs uppercase tracking-tighter mb-0.5">{title.name}</h3>
+                                <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-[0.2em]">Honorário</p>
+                              </div>
+                           </div>
+                           <button 
+                             onClick={() => handleAction(title, 'title')}
+                             disabled={isProcessing}
+                             className={`px-4 py-2.5 rounded-xl text-[8px] font-black uppercase tracking-widest transition-all active:scale-95
+                                ${isEquipped ? 'bg-zinc-800 text-zinc-500 border border-white/5' : 
+                                  hasTitle ? 'bg-white text-black border-white' : 
+                                  'bg-brand-primary text-white border-brand-primary'}`
+                             }
+                           >
+                             {isProcessing ? <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin mx-auto" /> : isEquipped ? 'Ativado' : hasTitle ? 'Equipar' : title.priceLabel}
+                           </button>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="flex-1">
-                    <h3 className="font-black italic text-white text-md uppercase leading-none">{neon.name}</h3>
-                    <p className="text-[9px] text-zinc-500 font-bold tracking-widest uppercase mt-1">Aura de Borda</p>
-                  </div>
-                  <button 
-                    onClick={() => handleAction(neon, 'neon')}
-                    disabled={isProcessing}
-                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-transform active:scale-95 flex items-center justify-center min-w-[100px] 
-                       ${isEquipped ? 'bg-zinc-800 text-zinc-500 border border-white/5' : 
-                         hasNeon ? 'bg-zinc-800 text-white' : 
-                         'bg-brand-primary text-white'}`
-                    }
-                  >
-                    {isProcessing ? '...' : isEquipped ? 'Desativar' : hasNeon ? 'Ativar' : `Comprar ${neon.priceLabel}`}
-                  </button>
-               </div>
-             );
-           })}
+               ) : (
+                 <div className="grid grid-cols-1 gap-3 pb-8">
+                    {NEON_COLORS.map(neon => {
+                      const hasNeon = unlockedNeonColors.includes(neon.id);
+                      const isEquipped = currentActiveNeon === neon.color;
+                      const isProcessing = loadingItemId === neon.id;
+
+                      return (
+                        <div key={neon.id} className="bg-zinc-900 border border-white/5 rounded-3xl p-4 flex items-center gap-4 relative overflow-hidden">
+                           <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ background: `radial-gradient(circle at center, ${neon.color}, transparent)` }} />
+                           <div className="w-12 h-12 rounded-full border-2 flex items-center justify-center relative z-10" style={{ borderColor: `${neon.color}33`, backgroundColor: `${neon.color}08` }}>
+                             <div className="w-4 h-4 rounded-full" style={{ backgroundColor: neon.color, boxShadow: `0 0 15px ${neon.color}` }} />
+                           </div>
+                           <div className="flex-1 min-w-0 relative z-10">
+                             <h3 className="font-display font-black italic text-white text-sm uppercase leading-none mb-1.5">{neon.name}</h3>
+                             <p className="text-[7px] text-zinc-500 font-bold uppercase tracking-widest">Aura Perimetral</p>
+                           </div>
+                           <button 
+                             onClick={() => handleAction(neon, 'neon')}
+                             disabled={isProcessing}
+                             className={`px-6 py-3 rounded-xl text-[8px] font-black uppercase tracking-widest transition-all relative z-10 active:scale-95
+                                ${isEquipped ? 'bg-zinc-800 text-zinc-500 border border-white/5' : 
+                                  hasNeon ? 'bg-white text-black border-white' : 
+                                  'bg-brand-primary text-white border-brand-primary'}`
+                             }
+                           >
+                             {isProcessing ? <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin mx-auto" /> : isEquipped ? 'Desativar' : hasNeon ? 'Ativ.' : neon.priceLabel}
+                           </button>
+                        </div>
+                      );
+                    })}
+                 </div>
+               )}
+             </motion.div>
+           </AnimatePresence>
         </div>
 
+        {/* Footer info */}
+        <div className="p-4 bg-zinc-950 border-t border-white/5 text-center shrink-0">
+           <p className="text-[6px] text-zinc-600 font-black uppercase tracking-[0.5em] italic">Propulsado por DragFire Performance System</p>
+        </div>
       </motion.div>
     </motion.div>
   );

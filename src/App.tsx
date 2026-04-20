@@ -51,6 +51,7 @@ import {
   uploadString
 } from 'firebase/storage';
 import { auth, db, storage, googleProvider } from './firebase';
+import { logRemote } from './lib/remoteLogs';
 import {
   AlertCircle,
   Play,
@@ -120,7 +121,9 @@ import {
   Eye,
   LogOut,
   Settings2,
-  Palette
+  Palette,
+  Award,
+  Target
 } from 'lucide-react';
 import { PerformanceChart } from './components/PerformanceChart';
 import { TripAnalysis } from './components/TripAnalysis';
@@ -131,9 +134,11 @@ import { AIPhotoEditor } from './components/AIPhotoEditor';
 import { GasStations } from './components/GasStations';
 import { AntigravityImporter } from './components/AntigravityImporter';
 import { AdminDashboard } from './components/AdminDashboard';
-import { getThemeById, PROFILE_THEMES, BADGES, NEON_COLORS } from './constants/themes';
+import { getThemeById, PROFILE_THEMES, BADGES, NEON_COLORS, TITLES } from './constants/themes';
 import { ThemeStoreModal } from './components/ThemeStoreModal';
-
+import { MissionsView } from './components/MissionsView';
+import { ACHIEVEMENTS } from './constants/achievements';
+import { PodiumRewardModal } from './components/MonthlyRewardModal';
 import { APP_VERSION } from './versions';
 import { useCorneringAssistant } from './hooks/useCorneringAssistant';
 import { CorneringAssistantHUD } from './components/CorneringAssistantHUD';
@@ -434,7 +439,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 const TERMS_VERSION = '1.0.0';
 const ADMIN_EMAILS = ['guisq1515@gmail.com'];
 
-type Screen = 'home' | 'timer' | 'challenge' | 'duel-result' | 'settings' | 'login' | 'terms' | 'vehicle-settings' | 'profile-settings' | 'theme-store' | 'regional-ranking' | 'history' | 'gps-guide' | 'custom-setup' | 'trip-view' | 'fuel-calculator' | 'public-profile' | 'feed' | 'search' | 'ai-editor' | 'fuel-stations' | 'anp-import' | 'admin-dashboard' | 'cornering-assistant' | 'vehicle-catalog';
+type Screen = 'home' | 'timer' | 'challenge' | 'duel-result' | 'settings' | 'login' | 'terms' | 'vehicle-settings' | 'profile-settings' | 'theme-store' | 'regional-ranking' | 'history' | 'gps-guide' | 'custom-setup' | 'trip-view' | 'fuel-calculator' | 'public-profile' | 'feed' | 'search' | 'ai-editor' | 'fuel-stations' | 'anp-import' | 'admin-dashboard' | 'cornering-assistant' | 'vehicle-catalog' | 'missions';
 
 function GPSGuide({ onBack }: { onBack: () => void }) {
   const tips = [
@@ -647,6 +652,10 @@ function HistoryItem({ run, isPremium, onDelete }: HistoryItemProps) {
                 run.config.mode === 'speed' ? `${run.config.target} km/h` : `${run.config.target}m`
               )}
             </h4>
+            <div className="text-right">
+              <h2 className="text-xl font-display font-black italic text-white leading-none tracking-tight">RANKING <span className="text-brand-primary">REGIONAL</span></h2>
+              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mt-1">Temporada de {new Date().toLocaleString('pt-BR', { month: 'long' })}</p>
+            </div>
             <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">{formatDate(run.timestamp)}</p>
           </div>
         </div>
@@ -987,6 +996,7 @@ function BottomNav({
     { id: 'search', icon: Search, label: 'Busca', locked: false },
     { id: 'regional-ranking', icon: Trophy, label: 'Ranking', locked: false },
     ...(isAdmin ? [{ id: 'admin-dashboard', icon: LayoutDashboard, label: 'Dash', locked: false }] : []),
+    { id: 'missions', icon: Target, label: 'Missões', locked: isGuest },
     { id: 'public-profile', icon: User, label: 'Perfil', locked: isGuest },
   ];
 
@@ -1003,7 +1013,7 @@ function BottomNav({
             className={`flex flex-col items-center gap-1 transition-all active:scale-90 relative ${isActive ? 'text-brand-primary' : 'text-zinc-500'} ${item.locked ? 'opacity-50 grayscale' : ''}`}
           >
             {item.id === 'public-profile' && userPhoto ? (
-              <div className={`w-6 h-6 rounded-full overflow-hidden border-2 ${isActive ? 'border-brand-primary' : 'border-transparent'}`}>
+              <div className={`w-8 h-8 rounded-full overflow-hidden border-2 ${isActive ? 'border-brand-primary' : 'border-zinc-800'} shadow-lg transition-all`}>
                 <img src={userPhoto} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               </div>
             ) : (
@@ -1214,7 +1224,7 @@ function Feed() {
                 <div className="flex-1 min-w-0">
                    <div className="flex items-center gap-1.5">
                       <span className="text-xs font-black text-white italic uppercase tracking-tight truncate">{act.userName}</span>
-                      {act.handle && <span className="text-[9px] text-brand-primary font-black italic">#{act.handle}</span>}
+                      {act.handle && <span className="text-[9px] text-brand-primary font-black italic uppercase">#{act.handle}</span>}
                    </div>
                    <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">{new Date(act.timestamp).toLocaleDateString()} • {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                 </div>
@@ -1433,98 +1443,104 @@ function PublicProfile({
       </div>
 
       {/* Profile Info */}
-      <div className="px-6 -mt-12 relative z-20 space-y-6">
-        <div className="flex items-end justify-between">
-          <div className="relative">
-            <div className="w-24 h-24 rounded-3xl border-4 border-zinc-950 overflow-hidden bg-zinc-800 shadow-2xl">
+      <div className="px-6 -mt-16 relative z-20">
+        <div className="flex items-start gap-6">
+          {/* Profile Picture & Badge Wrapper */}
+          <div className="relative shrink-0">
+            <div className="w-28 h-28 rounded-3xl border-4 border-zinc-950 overflow-hidden bg-zinc-800 shadow-2xl">
               {profile.photoURL ? (
                 <img src={profile.photoURL} alt={profile.displayName || ''} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
-                  <User className="w-10 h-10 text-zinc-600" />
+                  <User className="w-12 h-12 text-zinc-600" />
                 </div>
               )}
             </div>
-            </div>
-            {/* Badge System: Zap for ADMIN, Brand Badge for Users */}
+            
+            {/* Clean, Frameless Badge System */}
             {(uid === currentUserId && isAdmin) ? (
-              <div className={`absolute -bottom-2 -right-2 ${theme.accentBg} text-white p-1.5 rounded-lg shadow-lg z-30`}>
-                <Zap className="w-4 h-4 fill-current" />
+              <div className="absolute -bottom-3 -right-3 bg-brand-primary text-white p-2 rounded-xl shadow-lg z-30 border-2 border-zinc-950">
+                <Zap className="w-5 h-5 fill-current" />
               </div>
             ) : profile.activeBadgeId ? (
-              <div className="absolute -bottom-2 -right-2 w-8 h-8 rounded-lg bg-black border border-white/10 shadow-2xl flex items-center justify-center z-30 p-1">
-                <img src={BADGES.find(b => b.id === profile.activeBadgeId)?.imageUrl} className="w-full h-full object-contain" />
+              <div className="absolute -bottom-4 -right-4 w-16 h-16 flex items-center justify-center z-30 pointer-events-none">
+                <img 
+                  src={BADGES.find(b => b.id === profile.activeBadgeId)?.imageUrl} 
+                  className="w-full h-full object-contain filter drop-shadow-[0_8px_15px_rgba(0,0,0,0.6)]" 
+                  alt="Pilot Badge"
+                />
               </div>
             ) : profile.isPremium ? (
-               <div className={`absolute -bottom-2 -right-2 ${theme.accentBg} text-white p-1 rounded-lg shadow-lg z-30`}>
-                 <CheckCircle2 className="w-3 h-3 fill-current" />
+               <div className="absolute -bottom-3 -right-3 bg-brand-primary text-white p-2 rounded-xl shadow-lg z-30 border-2 border-zinc-950">
+                 <CheckCircle2 className="w-4 h-4 fill-current" />
                </div>
             ) : null}
           </div>
-          
-          {currentUserId !== uid && (
-            <button 
-              onClick={handleFollow}
-              className={`px-6 py-2.5 rounded-xl font-black uppercase tracking-widest text-[10px] transition-all flex items-center gap-2 ${isFollowing || isRequested ? 'bg-zinc-800 text-zinc-400 border border-white/5' : 'bg-brand-primary text-white shadow-lg shadow-red-600/20'}`}
-            >
-              {isFollowing ? (
-                <>
-                  <UserMinus className="w-3.5 h-3.5" />
-                  Seguindo
-                </>
-              ) : isRequested ? (
-                <>
-                  <Clock className="w-3.5 h-3.5" />
-                  Solicitado
-                </>
-              ) : (
-                <>
-                  <UserPlus className="w-3.5 h-3.5" />
-                  Seguir
-                </>
+
+          {/* User Info & Stats Layout */}
+          <div className="flex-1 pt-6 space-y-4">
+            <div className="flex flex-col">
+              <h2 className="text-2xl font-display font-black italic text-white leading-none uppercase tracking-tighter">
+                {profile.displayName || 'Piloto Anônimo'}
+              </h2>
+              {profile.handle && (
+                <p className="text-[10px] text-brand-primary font-black italic tracking-[0.2em] mt-1.5 uppercase opacity-80">#{profile.handle.toUpperCase()}</p>
               )}
-            </button>
-          )}
-        </div>
+            </div>
 
-        <div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-2xl font-display font-black italic text-white leading-none">
-              {profile.displayName || 'Piloto Anônimo'}
-            </h2>
-            {profile.handle && (
-              <p className={`w-full text-xs ${theme.accentText} font-black italic tracking-widest mt-1 uppercase`}>#{profile.handle}</p>
-            )}
-            {profile.isVerified && (
-              <CheckCircle2 className="w-5 h-5 text-blue-400 fill-blue-400/10" />
-            )}
-            {profile.instagram && (
-              <a 
-                href={`https://instagram.com/${profile.instagram.replace('@', '')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-tr from-purple-600 to-pink-500 rounded-xl text-white shadow-lg shadow-pink-600/20 active:scale-95 transition-all ml-1"
+            <div className="flex items-center gap-5">
+              <div className="flex flex-col">
+                <span className="text-white font-black italic text-lg leading-none">{profile.followersCount || 0}</span>
+                <span className="text-[8px] text-zinc-500 font-black uppercase tracking-widest mt-1">Seguidores</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-white font-black italic text-lg leading-none">{profile.followingCount || 0}</span>
+                <span className="text-[8px] text-zinc-500 font-black uppercase tracking-widest mt-1">Seguindo</span>
+              </div>
+
+              {profile.instagram && (
+                <a 
+                  href={`https://instagram.com/${profile.instagram.replace('@', '')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center w-8 h-8 bg-gradient-to-tr from-purple-600 to-pink-500 rounded-lg text-white shadow-lg shadow-pink-600/20 active:scale-95 transition-all ml-auto xs:ml-0"
+                >
+                  <Instagram className="w-4 h-4" />
+                </a>
+              )}
+            </div>
+            
+            {currentUserId !== uid && (
+              <button 
+                onClick={handleFollow}
+                className={`w-full py-2.5 rounded-xl font-black uppercase tracking-widest text-[9px] transition-all flex items-center justify-center gap-2 ${isFollowing || isRequested ? 'bg-zinc-800 text-zinc-400 border border-white/5' : 'bg-brand-primary text-white shadow-lg shadow-red-600/20'}`}
               >
-                <Instagram className="w-4 h-4" />
-                <span className="text-xs font-black tracking-tight">{profile.instagram.startsWith('@') ? profile.instagram : `@${profile.instagram}`}</span>
-              </a>
+                {isFollowing ? (
+                  <>
+                    <UserMinus className="w-3.5 h-3.5" />
+                    Seguindo
+                  </>
+                ) : isRequested ? (
+                  <>
+                    <Clock className="w-3.5 h-3.5" />
+                    Solicitado
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="w-3.5 h-3.5" />
+                    Seguir
+                  </>
+                )}
+              </button>
             )}
           </div>
-          {profile.bio && <p className="text-zinc-400 text-sm mt-2">{profile.bio}</p>}
-          
-
-
-          <div className="flex gap-4 mt-4">
-            <div className="flex flex-col">
-              <span className="text-white font-black italic text-lg leading-none">{profile.followersCount || 0}</span>
-              <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Seguidores</span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-white font-black italic text-lg leading-none">{profile.followingCount || 0}</span>
-              <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Seguindo</span>
-            </div>
-          </div>
         </div>
+
+        {profile.bio && (
+          <p className="text-zinc-400 text-xs mt-6 px-1 italic border-l-2 border-brand-primary/30 pl-4">{profile.bio}</p>
+        )}
+      </div>
+
 
         {/* Tab Navigation */}
         <div className="flex bg-zinc-900 rounded-xl overflow-hidden p-1 border border-white/5 shadow-lg">
@@ -1571,10 +1587,10 @@ function PublicProfile({
                 {uid === currentUserId && onEditVehicles && (
                   <button 
                     onClick={onEditVehicles}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-primary/10 border border-brand-primary/20 rounded-lg text-brand-primary hover:bg-brand-primary hover:text-white transition-all active:scale-95"
+                    className="flex items-center gap-2 px-6 py-3 bg-brand-primary/10 border border-brand-primary/20 rounded-xl text-brand-primary hover:bg-brand-primary hover:text-white transition-all active:scale-95 shadow-[0_5px_15px_rgba(239,68,68,0.1)]"
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Adicionar</span>
+                    <Plus className="w-4 h-4" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">ADICIONAR</span>
                   </button>
                 )}
                 <span className="text-[10px] text-zinc-500 font-bold">{vehicles.length} {vehicles.length === 1 ? 'Veículo' : 'Veículos'}</span>
@@ -1667,9 +1683,14 @@ function RegionalRanking({
 
   useEffect(() => {
     setLoading(true);
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
     const q = query(
       collection(db, 'rankings'), 
       where('category', '==', filter.includes('201') || filter === 'regional-201' ? '201m' : '0-100'),
+      where('timestamp', '>=', startOfMonth.getTime()),
       orderBy('time', 'asc'), 
       limit(100)
     );
@@ -1715,8 +1736,8 @@ function RegionalRanking({
           <ChevronLeft className="w-5 h-5" />
         </button>
         <div>
-          <h2 className="text-xl font-display font-black italic text-white leading-none">RANKING 0-100</h2>
-          <p className="text-xs text-brand-primary font-bold uppercase tracking-widest mt-1">Desafio Regional</p>
+          <h2 className="text-xl font-display font-black italic text-white leading-none">RANKING {filter.includes('201') ? '201M' : '0-100'}</h2>
+          <p className="text-xs text-brand-primary font-bold uppercase tracking-widest mt-1">Temporada de {new Date().toLocaleString('pt-BR', { month: 'long' })}</p>
         </div>
       </div>
 
@@ -1838,10 +1859,15 @@ function RegionalRankingElite({
     const mode = category === '201m' ? 'distance' : 'speed';
     const target = category === '201m' ? 201 : 100;
 
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
     const q = query(
       collection(db, 'rankings'), 
       where('mode', '==', mode),
       where('target', '==', target),
+      where('timestamp', '>=', startOfMonth.getTime()),
       orderBy('time', 'asc'), 
       limit(100)
     );
@@ -1890,7 +1916,7 @@ function RegionalRankingElite({
             </button>
             <div className="text-right">
               <h2 className="text-3xl font-display font-black italic text-white leading-none tracking-tighter">ELITE <span className="text-brand-primary underline decoration-2">RANK</span></h2>
-              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.3em] mt-1">Temporada 2026</p>
+              <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.3em] mt-1">Tempo de {new Date().toLocaleString('pt-BR', { month: 'long' }).toUpperCase()}</p>
             </div>
           </header>
 
@@ -2091,6 +2117,7 @@ function ProfileSettings({
 
   useEffect(() => {
     if (!user) return;
+
     setLoadingRequests(true);
     const q = query(collection(db, 'follow_requests'), where('followingId', '==', user.uid));
     const unsubscribe = onSnapshot(q, async (snapshot) => {
@@ -2152,10 +2179,26 @@ function ProfileSettings({
     setUploading(true);
     try {
       const storageRef = ref(storage, `profiles/${user.uid}/${file.name}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
-      setPhotoURL(url);
-      onUpdate({ photoURL: url });
+      const uploadTask = uploadBytesResumable(storageRef, file);
+      
+      return new Promise<void>((resolve, reject) => {
+        uploadTask.on('state_changed', null, 
+          (error) => {
+            console.error('Profile upload failed:', error);
+            reject(error);
+          }, 
+          async () => {
+            try {
+              const url = await getDownloadURL(uploadTask.snapshot.ref);
+              setPhotoURL(url);
+              onUpdate({ photoURL: url });
+              resolve();
+            } catch (err) {
+              reject(err);
+            }
+          }
+        );
+      });
     } catch (error) {
       console.error('Error uploading photo:', error);
     } finally {
@@ -2192,7 +2235,7 @@ function ProfileSettings({
       bio, 
       instagram, 
       isPrivate: privacySettings.isPrivate,
-      handle: handle.toLowerCase().replace(/[^a-z0-9_]/g, ''),
+      handle: handle.toUpperCase().replace(/[^A-Z0-9_]/g, ''),
       privacySettings 
     });
     onBack();
@@ -2332,7 +2375,7 @@ function ProfileSettings({
                 type="text"
                 value={handle}
                 onChange={e => {
-                  const val = e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+                  const val = e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '');
                   setHandle(val);
                   checkHandle(val);
                 }}
@@ -2876,58 +2919,64 @@ function VehicleSettings({
   const [activeTab, setActiveTab] = useState<'basics' | 'technical'>('basics');
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement> | null) => {
-    let blob: Blob | null = null;
-    let dataToUpload: string | null = null;
-    let isBase64Str = false;
-    let downloadURL = '';
-
     setIsUploading(true);
+    setUploadProgress(1);
     
-    // Safety timeout (30s)
-    const timeout = setTimeout(() => {
-      setIsUploading(false);
-      // We don't alert here because if it finally finishes, it will just update the state.
-      // But we must release the UI.
-    }, 30000);
-
     try {
       if (!auth.currentUser) throw new Error('Usuário não autenticado.');
+      
+      await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'UPLOAD_MAIN_START', details: { vehicleId: formData.id } });
       
       setUploadStatus('[S1] Abrindo Galeria...');
       
       const photo = await Camera.getPhoto({
-        quality: 90,
+        quality: 80,
         allowEditing: false,
-        resultType: CameraResultType.Uri, 
+        resultType: CameraResultType.DataUrl,
         source: CameraSource.Photos,
-        width: 1280,
-        height: 1280
+        width: 1024,
+        height: 1024
       });
 
-      if (!photo.webPath) throw new Error('Câmera não retornou a imagem.');
+      if (!photo.dataUrl) throw new Error('Câmera não retornou os dados da imagem.');
+      await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'PHOTO_DATA_RECEIVED', details: { format: photo.format } });
       
       setUploadStatus('[S2] Preparando Foto...');
       const fileName = `main_${Date.now()}.jpg`;
       const path = `vehicles/${auth.currentUser.uid}/${formData.id || 'new'}/${fileName}`;
       const storageRef = ref(storage, path);
       
-      setUploadProgress(10);
-      const response = await fetch(photo.webPath);
-      const blob = await response.blob();
-      
-      setUploadProgress(40);
+      setUploadProgress(30);
       setUploadStatus('[S3] Enviando para Nuvem...');
+      await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'STORAGE_UPLOAD_START', details: { path } });
       
-      await uploadBytes(storageRef, blob);
+      await uploadString(storageRef, photo.dataUrl, 'data_url');
+      
+      setUploadStatus('[S4] Finalizando...');
+      setUploadProgress(90);
+      
       const downloadURL = await getDownloadURL(storageRef);
-
       setFormData({ ...formData, photoURL: downloadURL });
+      
+      await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'UPLOAD_MAIN_SUCCESS', details: { url: downloadURL } });
+      
       setUploadStatus('Sucesso!');
+      setUploadProgress(100);
+      
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+        setUploadStatus('');
+      }, 1000);
     } catch (error: any) {
       console.error('Photo Error:', error);
+      await logRemote({ 
+        uid: auth?.currentUser?.uid || 'unknown', 
+        level: 'error', 
+        message: 'UPLOAD_MAIN_ERROR', 
+        details: { message: error.message, stack: error.stack } 
+      });
       alert(`Erro ao processar foto: ${error.message || 'Erro desconhecido'}`);
-    } finally {
-      clearTimeout(timeout);
       setIsUploading(false);
       setUploadProgress(0);
       setUploadStatus('');
@@ -2938,59 +2987,111 @@ function VehicleSettings({
     if (!auth.currentUser || !isPremium) return;
     
     setIsUploading(true);
-    const timeout = setTimeout(() => setIsUploading(false), 30000);
+    setUploadProgress(1);
 
     try {
       setUploadStatus('[S1] Abrindo Galeria...');
       const currentPhotos = formData.photoURLs || [];
       if (currentPhotos.length >= 6) {
         alert('Limite de 6 fotos extras atingido.');
+        setIsUploading(false);
         return;
       }
 
       const fileName = `extra_${Date.now()}.jpg`;
       const path = `vehicles/${auth.currentUser.uid}/${formData.id || 'new'}/${fileName}`;
       const storageRef = ref(storage, path);
-      let payloadBlob: Blob | null = null;
+      let payloadBlob: Blob | Uint8Array | null = null;
 
       if (Capacitor.isNativePlatform() && !e) {
+        setUploadStatus('[S1] Capturando Foto...');
         const photo = await Camera.getPhoto({
-          quality: 90,
+          quality: 80,
           allowEditing: false,
-          resultType: CameraResultType.Uri,
+          resultType: CameraResultType.DataUrl,
           source: CameraSource.Photos,
-          width: 1280,
-          height: 1280
+          width: 1024,
+          height: 1024
         });
         
-        if (!photo.webPath) throw new Error('Câmera não retornou imagem nativa.');
-        setUploadProgress(10);
-        const response = await fetch(photo.webPath);
-        payloadBlob = await response.blob();
+        if (!photo.dataUrl) throw new Error('Câmera não retornou os dados da imagem.');
+        await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'EXTRA_PHOTO_DATA_RECEIVED', details: { format: photo.format } });
+        
+        setUploadStatus('[S2] Enviando Foto Extra...');
+        setUploadProgress(40);
+        
+        await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'EXTRA_STORAGE_UPLOAD_START', details: { path } });
+        await uploadString(storageRef, photo.dataUrl, 'data_url');
+        
+        setUploadStatus('[S3] Finalizando...');
+        setUploadProgress(90);
+        
+        const downloadURL = await getDownloadURL(storageRef);
+        setFormData({
+          ...formData,
+          photoURLs: [...currentPhotos, downloadURL]
+        });
+        
+        await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'EXTRA_UPLOAD_SUCCESS', details: { url: downloadURL } });
+        
+        setUploadStatus('Sucesso!');
+        setUploadProgress(100);
+        setTimeout(() => {
+          setIsUploading(false);
+          setUploadProgress(0);
+          setUploadStatus('');
+        }, 1000);
       } else if (e) {
         const file = e.target.files?.[0];
-        if (file) payloadBlob = file;
+        if (!file) throw new Error('Nenhum arquivo selecionado.');
+        
+        setUploadStatus('[S2] Enviando Arquivo...');
+        const uploadTask = uploadBytesResumable(storageRef, file, { contentType: file.type });
+
+        return new Promise<void>((resolve, reject) => {
+          uploadTask.on('state_changed', 
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              setUploadProgress(20 + (progress * 0.75));
+              setUploadStatus(`Enviando Extra... ${Math.round(progress)}%`);
+            }, 
+            (error) => {
+              console.error('Extra upload failed:', error);
+              reject(error);
+            }, 
+            async () => {
+              try {
+                setUploadStatus('Finalizando...');
+                setUploadProgress(96);
+                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                setFormData({
+                  ...formData,
+                  photoURLs: [...currentPhotos, downloadURL]
+                });
+                setUploadStatus('Sucesso!');
+                setUploadProgress(100);
+                setTimeout(() => {
+                  setIsUploading(false);
+                  setUploadProgress(0);
+                  setUploadStatus('');
+                }, 1000);
+                resolve();
+              } catch (err) {
+                reject(err);
+              }
+            }
+          );
+        });
       }
-
-      if (!payloadBlob) throw new Error('Nenhuma imagem processada.');
-      
-      setUploadStatus('[S2] Enviando Foto Extra...');
-      setUploadProgress(40);
-      
-      await uploadBytes(storageRef, payloadBlob);
-      const downloadURL = await getDownloadURL(storageRef);
-
-      setFormData({
-        ...formData,
-        photoURLs: [...currentPhotos, downloadURL]
-      });
-
-      setUploadStatus('Sucesso!');
     } catch (error: any) {
       console.error('Extra Photo Error:', error);
+      await logRemote({ 
+        uid: auth?.currentUser?.uid || 'unknown', 
+        level: 'error', 
+        message: 'UPLOAD_EXTRA_ERROR', 
+        details: { message: error.message, stack: error.stack } 
+      });
       alert(`Erro ao processar foto: ${error.message || 'Erro desconhecido'}`);
-    } finally {
-      clearTimeout(timeout);
       setIsUploading(false);
       setUploadProgress(0);
       setUploadStatus('');
@@ -3124,45 +3225,47 @@ function VehicleSettings({
               key={v.id}
               className={`p-4 rounded-2xl border transition-all flex items-center gap-4 ${v.active ? 'bg-brand-primary/10 border-brand-primary/30' : 'bg-zinc-900/50 border-white/5'}`}
             >
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden ${v.active ? 'bg-brand-primary/20' : 'bg-zinc-800'}`}>
-                {v.photoURL ? (
-                  <img src={v.photoURL} alt={v.nickname} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                ) : (
-                  v.type === 'car' ? <Car className={`w-6 h-6 ${v.active ? 'text-brand-primary' : 'text-zinc-500'}`} /> : <Navigation className={`w-6 h-6 -rotate-90 ${v.active ? 'text-brand-primary' : 'text-zinc-500'}`} />
-                )}
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-bold text-white">{v.nickname}</h4>
-                  {v.active && <span className="text-[8px] bg-brand-primary text-white px-1.5 py-0.5 rounded-full font-black uppercase tracking-widest">Ativo</span>}
-                </div>
-                <p className="text-[10px] text-zinc-500 font-bold uppercase">{v.brand} {v.model} • {v.year}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={() => {
-                    setCatalogVehicle(v);
-                    setScreen('vehicle-catalog');
-                  }}
-                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-[8px] font-black uppercase tracking-widest text-zinc-400 rounded-lg border border-white/5 active:scale-95 transition-all"
-                >
-                  VER CATÁLOGO
-                </button>
+              {/* Clickable Area for Catalog */}
               <button 
-                  onClick={() => {
-                    setEditingVehicle(v);
-                    setScreen('vehicle-settings');
-                  }}
-                  className="p-2 bg-zinc-800 rounded-lg text-zinc-400 hover:text-white"
-                >
-                  <SettingsIcon className="w-4 h-4" />
-                </button>
+                onClick={() => {
+                  setCatalogVehicle(v);
+                  setScreen('vehicle-catalog');
+                }}
+                className="flex-1 flex items-center gap-4 text-left active:scale-[0.98] transition-all"
+              >
+                <div className={`w-16 h-16 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0 ${v.active ? 'bg-brand-primary/20' : 'bg-zinc-800'}`}>
+                  {v.photoURL ? (
+                    <img src={v.photoURL} alt={v.nickname} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    v.type === 'car' ? <Car className={`w-8 h-8 ${v.active ? 'text-brand-primary' : 'text-zinc-500'}`} /> : <Navigation className={`w-8 h-8 -rotate-90 ${v.active ? 'text-brand-primary' : 'text-zinc-500'}`} />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-base font-bold text-white italic uppercase tracking-tight">{v.nickname}</h4>
+                    {v.active && <span className="text-[8px] bg-brand-primary text-white px-2 py-0.5 rounded-full font-black uppercase tracking-widest animate-pulse">Ativo</span>}
+                  </div>
+                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{v.brand} {v.model} • {v.year}</p>
+                </div>
+              </button>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <button 
-                  onClick={() => onDelete(v)}
-                  className="p-2 bg-zinc-800 rounded-lg text-zinc-400 hover:text-red-500"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                   onClick={() => {
+                     setEditingVehicle(v);
+                     setScreen('vehicle-settings');
+                   }}
+                   className="p-3 bg-zinc-800/50 backdrop-blur-sm rounded-xl text-zinc-400 hover:text-white border border-white/5 active:scale-90 transition-all"
+                 >
+                    <SettingsIcon className="w-5 h-5" />
+                 </button>
+                 <button 
+                   onClick={() => onDelete(v)}
+                   className="p-3 bg-zinc-800/50 backdrop-blur-sm rounded-xl text-zinc-400 hover:text-red-500 border border-white/5 active:scale-90 transition-all"
+                 >
+                    <Trash2 className="w-5 h-5" />
+                 </button>
               </div>
             </div>
           ))}
@@ -4567,7 +4670,7 @@ function TimerClassic(props: TimerProps) {
                 <button onClick={() => { setRunVehicleId('anonimo'); setIsQuickSwitchOpen(false); }} className={`flex flex-col gap-2 p-3 rounded-[32px] border transition-all ${runVehicleId === 'anonimo' ? 'bg-zinc-800 border-brand-primary' : 'bg-zinc-950/50 border-white/5'}`}>
                   <div className="aspect-[4/3] w-full rounded-2xl bg-zinc-900 flex flex-col items-center justify-center border border-white/5 gap-1">
                     <EyeOff className="w-5 h-5 text-zinc-600" />
-                    <span className="text-[7px] text-zinc-700 font-black uppercase tracking-widest">Ghost Mode</span>
+                    <span className="text-[7px] text-zinc-700 font-black uppercase tracking-widest">Modo Fantasma</span>
                   </div>
                   <div className="text-center px-1">
                     <p className="text-[10px] font-black text-white uppercase italic">Anônimo</p>
@@ -4603,6 +4706,8 @@ function TimerElite(props: TimerProps) {
     requestPermission, setScreen, handleAcceptChallenge
   } = props;
 
+  const activeVehicle = vehicles.find(v => v.id === runVehicleId);
+
   return (
     <motion.div 
       key="timer-elite"
@@ -4611,369 +4716,335 @@ function TimerElite(props: TimerProps) {
       exit={{ opacity: 0 }}
       className="flex-1 flex flex-col bg-[#050505] relative overflow-hidden"
     >
-      {/* Real Racing Texture Background */}
-      <div className="absolute inset-0 opacity-[0.1] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ffffff 0.5px, transparent 0)', backgroundSize: '3px 3px' }} />
-      <div className="absolute inset-0 bg-gradient-to-b from-brand-primary/5 via-transparent to-transparent pointer-events-none" />
+      {/* High-Performance Tech Texture */}
+      <div className="absolute inset-0 opacity-[0.1] pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ffffff 0.5px, transparent 0)', backgroundSize: '15px 15px' }} />
+      <div className="absolute inset-0 bg-gradient-to-b from-brand-primary/5 via-transparent to-black pointer-events-none" />
 
-      {/* Elite Header */}
-      <header className="p-6 flex items-center justify-between z-20 relative">
-        <button onClick={handleBack} className="p-3 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 text-white shadow-xl active:scale-95 transition-all">
-          <ChevronLeft className="w-6 h-6" />
+      {/* Header Controls - Now with Logo integration */}
+      <header className="p-4 flex items-center justify-between z-50 relative">
+        <button onClick={handleBack} className="p-3 bg-zinc-900/60 backdrop-blur-2xl rounded-xl border border-white/10 text-white shadow-xl active:scale-95 transition-all">
+          <ChevronLeft className="w-5 h-5" />
         </button>
-        
-        <div className="flex flex-col items-end">
-           <h2 className="text-3xl font-display font-black italic tracking-tighter leading-none">
-             <span className="text-white">DRAG</span>
-             <span className="text-red-600">FIRE</span>
+        <div className="flex flex-col items-end opacity-60">
+           <h2 className="text-xl font-display font-black italic tracking-tighter leading-none">
+              <span className="text-white">DRAG</span><span className="text-red-600">FIRE</span>
            </h2>
-           <div className="flex items-center gap-2 mt-1">
-              <span className="text-[8px] font-black text-zinc-500 uppercase tracking-[0.3em]">{activeConfig?.label}</span>
-              <div className={`w-1.5 h-1.5 rounded-full ${gpsStatus === 'active' ? 'bg-cyan-400 glow-cyan animate-pulse' : 'bg-zinc-700'}`} />
-           </div>
+           <span className="text-[5px] font-black text-zinc-600 uppercase tracking-[0.3em]">ELITE PERFORMANCE</span>
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col p-6 z-10 relative">
+      <main className="flex-1 flex flex-col px-6 pt-2 pb-6 z-10 relative overflow-hidden">
         {error && (
-          <div className="mb-4 bg-red-500/20 border-l-4 border-red-500 p-4 rounded-r-xl flex items-center gap-3 backdrop-blur-md">
-            <AlertTriangle className="w-5 h-5 text-red-500" />
-            <p className="text-[10px] font-black uppercase text-red-200">{error}</p>
+          <div className="mb-2 bg-red-600/10 border border-red-600/30 p-3 rounded-xl flex items-center gap-3 backdrop-blur-md">
+            <AlertTriangle className="w-4 h-4 text-red-500" />
+            <p className="text-[9px] font-black uppercase text-red-200">{error}</p>
           </div>
         )}
 
-        {/* Dynamic Speedometer Layout */}
+        {/* New Widget Grid Layout (Boxes 1, 2, 3, 4) */}
+        {!lastResult && (
+           <div className="grid grid-cols-3 gap-4 mb-6">
+              {/* Box 1: Vehicle Info */}
+              <div className="flex flex-col gap-2 bg-zinc-950/20 backdrop-blur-md p-3 rounded-2xl border border-white/5 shadow-2xl">
+                 <button 
+                  onClick={() => !isRunning && setIsQuickSwitchOpen(true)}
+                  className="w-12 h-12 rounded-xl bg-zinc-900 border border-brand-primary/20 flex items-center justify-center overflow-hidden active:scale-95 transition-all shadow-xl"
+                 >
+                   {activeVehicle?.photoURL ? (
+                      <img src={activeVehicle.photoURL} className="w-full h-full object-cover rounded-lg" />
+                   ) : (
+                      activeVehicle?.type === 'car' ? <Car className="w-6 h-6 text-zinc-700" /> : <Navigation className="w-6 h-6 text-zinc-700 -rotate-90" />
+                   )}
+                 </button>
+                 <div className="flex flex-col min-w-0">
+                    <span className="text-xs font-display font-black text-white italic uppercase tracking-tight truncate">
+                      {activeVehicle?.nickname || 'PILOTO'}
+                    </span>
+                    <span className="text-[7px] font-bold text-zinc-500 uppercase tracking-widest leading-none mt-0.5 truncate">
+                      {activeVehicle?.brand} {activeVehicle?.model}
+                    </span>
+                 </div>
+              </div>
+
+              {/* Center Column: GPS (Box 3) & Mode (Box 4) */}
+              <div className="flex flex-col items-center justify-center gap-3">
+                 {/* Box 3: GPS Signal */}
+                 <div className="flex flex-col items-center gap-1.5">
+                    <div className="flex items-end gap-1 h-3">
+                       {[1, 2, 3, 4].map((i) => {
+                         const level = accuracy === null ? 0 : accuracy < 5 ? 4 : accuracy < 10 ? 3 : accuracy < 20 ? 2 : accuracy < 50 ? 1 : 0;
+                         const colors = ['bg-zinc-700', 'bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-green-500'];
+                         return (
+                           <div 
+                             key={i} 
+                             className={`w-1 rounded-full transition-all ${i <= level ? colors[level] : 'bg-zinc-800'}`}
+                             style={{ height: `${i * 25}%` }}
+                           />
+                         );
+                       })}
+                    </div>
+                    <span className="text-[7px] font-black text-zinc-500 uppercase tracking-[0.4em] leading-none">
+                       SINAL GPS
+                    </span>
+                 </div>
+
+                 {/* Box 4: Run Mode Name */}
+                 <div className="bg-brand-primary/10 px-3 py-1 rounded-lg border border-brand-primary/20">
+                    <span className="text-[8px] font-black text-white italic uppercase tracking-tighter whitespace-nowrap">
+                      {activeConfig?.mode === 'speed' ? `0-${activeConfig.target} KM/H` : activeConfig?.mode === 'distance' ? `${activeConfig.target}m Conv.` : 'TELEM. LIVRE'}
+                    </span>
+                 </div>
+              </div>
+
+              {/* Box 2: Last Run/Live Time - BIGGER */}
+              <div className="flex flex-col items-end justify-center bg-black/40 p-3 rounded-[24px] border border-white/5 backdrop-blur-xl shadow-2xl flex-1">
+                 <span className="text-[7px] font-black text-zinc-600 uppercase tracking-widest leading-none mb-2">TEMPO DE PUXADA</span>
+                 <span className="text-4xl font-display font-black text-white italic leading-none tracking-tighter">
+                   {elapsedTime.toFixed(2)}<span className="text-sm ml-0.5 text-zinc-600">s</span>
+                 </span>
+              </div>
+           </div>
+        )}
+
+        {/* Speedometer Gauge & Central UI */}
         {!lastResult ? (
-          <div className="flex-1 flex flex-col items-center justify-start pt-12 py-6 relative">
-             <div className="relative w-full flex flex-col items-center justify-center mb-10 px-4">
-                {/* Modern Arch Speedometer (Porsche/Audi Style) - EXPANDED TO FULL WIDTH */}
-                <svg className="absolute inset-0 w-full h-[120%] transform -top-10" viewBox="0 0 100 80">
-                  <defs>
-                    <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="#3b82f6" />
-                      <stop offset="50%" stopColor="#ef4444" />
-                      <stop offset="100%" stopColor="#ef4444" />
-                    </linearGradient>
-                  </defs>
-                  
-                  {/* Background Arch (Track) */}
-                  <path 
-                    d="M 15 65 A 40 40 0 1 1 85 65" 
-                    className="stroke-zinc-900 fill-none" 
-                    strokeWidth="4" 
-                    strokeLinecap="round"
-                    strokeDasharray="1 3"
-                  />
-                  
-                  {/* Progress Arch - THICKER AND LARGER */}
-                  <motion.path 
-                    d="M 15 65 A 40 40 0 1 1 85 65" 
-                    className="fill-none" 
-                    stroke="url(#gaugeGradient)"
-                    strokeWidth="8" 
-                    strokeLinecap="round"
-                    strokeDasharray="150"
-                    strokeDashoffset={150 - (Math.min(currentSpeed, 260) / 260) * 150}
-                    initial={{ strokeDashoffset: 150 }}
-                    animate={{ strokeDashoffset: 150 - (Math.min(currentSpeed, 260) / 260) * 150 }}
-                  />
+          <div className="flex-1 flex flex-col items-center relative h-full">
+             
+             {/* Main Dashboard Core */}
+             <div className="relative w-full flex-1 flex flex-col items-center justify-center -mt-6 min-h-0">
+                {/* Refined Arch Gauge */}
+                <div className="relative w-64 h-64 flex items-center justify-center">
+                  <svg className="absolute w-[140%] h-[140%] opacity-20 pointer-events-none" viewBox="0 0 100 80">
+                    <path 
+                      d="M 15 65 A 40 40 0 1 1 85 65" 
+                      className="stroke-zinc-900 fill-none" 
+                      strokeWidth="4" 
+                      strokeLinecap="round"
+                      strokeDasharray="1 3"
+                    />
+                    <motion.path 
+                      d="M 15 65 A 40 40 0 1 1 85 65" 
+                      className="fill-none" 
+                      stroke={currentSpeed > 200 ? "#ef4444" : "#ffffff"}
+                      strokeWidth="4" 
+                      strokeLinecap="round"
+                      strokeDasharray="150"
+                      strokeDashoffset={150 - (Math.min(currentSpeed, 300) / 300) * 150}
+                      initial={{ strokeDashoffset: 150 }}
+                      animate={{ strokeDashoffset: 150 - (Math.min(currentSpeed, 300) / 300) * 150 }}
+                    />
+                  </svg>
 
-                  {/* Sharp Ticks */}
-                  {[...Array(11)].map((_, i) => {
-                    const angle = -215 + i * 25;
-                    const x1 = 50 + 36 * Math.cos(angle * Math.PI / 180);
-                    const y1 = 45 + 36 * Math.sin(angle * Math.PI / 180);
-                    const x2 = 50 + 44 * Math.cos(angle * Math.PI / 180);
-                    const y2 = 45 + 44 * Math.sin(angle * Math.PI / 180);
-                    return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} className="stroke-zinc-800" strokeWidth="0.5" />;
-                  })}
-                </svg>
+                  {/* Speed & G-Force Core */}
+                  <div className="flex flex-col items-center justify-center z-10">
+                     <div className="flex flex-col items-center">
+                        <motion.span 
+                          className={`text-[100px] font-display font-black italic tracking-tighter leading-none ${isRunning ? 'text-white' : 'text-zinc-800'}`}
+                        >
+                           <SmoothCounter value={currentSpeed} />
+                        </motion.span>
+                        <div className="flex flex-col items-center -mt-2">
+                           <span className="text-[12px] font-black text-zinc-500 uppercase tracking-[0.8em] italic ml-3">KM/H</span>
+                        </div>
+                     </div>
 
-                {/* Digital Speed View */}
-                <div className="flex flex-col items-center justify-center z-10 pt-4">
-                   <div className="flex flex-col items-center">
-                      <motion.span 
-                        className={`text-[130px] font-display font-black italic tracking-tighter leading-none ${isRunning ? 'text-white' : 'text-zinc-700'}`}
-                        animate={{ scale: isRunning ? [1, 1.01, 1] : 1 }}
-                        transition={{ repeat: Infinity, duration: 2 }}
-                      >
-                         <SmoothCounter value={currentSpeed} />
-                      </motion.span>
-                      <div className="flex flex-col items-center gap-1 -mt-2">
-                         <span className="text-[14px] font-black text-zinc-500 uppercase tracking-[0.6em] italic">KM/H</span>
-                         {isRunning && (
-                            <div className="px-3 py-1 bg-red-600 border border-red-500 rounded italic text-[14px] font-black text-white shadow-[0_0_20px_rgba(239,68,68,0.5)]">
-                               {gForce.toFixed(2)}G
-                            </div>
-                         )}
-                      </div>
-                   </div>
+                     {/* Live G-Force Meter */}
+                     {isRunning && (
+                       <div className="mt-4 px-4 py-1 bg-zinc-900/40 backdrop-blur-md rounded-full border border-white/5 flex items-center gap-2 shadow-2xl">
+                          <ActivityIcon className="w-3 h-3 text-brand-primary" />
+                          <span className="text-lg font-display font-black text-white italic tracking-tighter">{gForce.toFixed(2)}<span className="text-[10px] ml-0.5 text-zinc-500">G</span></span>
+                       </div>
+                     )}
+                  </div>
                 </div>
 
-                {/* Progress Elite Bar - FIXED BELOW SPEEDOMETER */}
-                {(isRunning || isWaiting) && activeConfig?.mode !== 'free' && (
-                  <div className="w-full max-w-[280px] mt-8 z-20">
-                      <div className="flex justify-between items-end mb-2">
-                        <span className="text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em]">{activeConfig?.label}</span>
-                        <span className="text-xl font-display font-black text-white italic">{Math.round(progress)}%</span>
+                {/* High-Resolution Distance Progress Bar */}
+                {activeConfig?.mode === 'distance' && isRunning && (
+                   <div className="w-64 mt-6 space-y-1.5">
+                      <div className="flex justify-between items-end">
+                         <span className="text-[7px] font-black text-zinc-600 uppercase tracking-widest">Progresso da Puxada</span>
+                         <span className="text-[10px] font-display font-black italic text-white">{distance.toFixed(0)}m / {activeConfig.target}m</span>
                       </div>
-                      <div className="h-2 bg-zinc-900 rounded-full overflow-hidden border border-white/5">
-                        <motion.div 
-                          className="h-full bg-brand-primary shadow-[0_0_15px_rgba(239,68,68,0.8)]"
-                          animate={{ width: `${progress}%` }}
-                        />
+                      <div className="h-1.5 w-full bg-zinc-900/50 rounded-full overflow-hidden border border-white/5">
+                         <motion.div 
+                           initial={{ width: 0 }}
+                           animate={{ width: `${progress}%` }}
+                           className="h-full bg-brand-primary shadow-[0_0_10px_rgba(239,68,68,0.3)]" 
+                         />
                       </div>
-                  </div>
+                   </div>
                 )}
 
-                {/* Floating Vehicle Info - Far Left */}
-                <div className="absolute -top-10 left-0 flex items-center gap-4 bg-zinc-900/40 backdrop-blur-md px-4 py-2 rounded-3xl border border-white/5">
-                   <button 
-                     onClick={() => !isRunning && setIsQuickSwitchOpen(true)}
-                     className="w-14 h-14 rounded-2xl bg-zinc-950 border border-white/10 p-0.5 flex items-center justify-center overflow-hidden active:scale-95 transition-all shadow-xl"
+                {/* SINAL VERDE / CANCELAR TESTE */}
+                {!isRunning ? (
+                  <div className="mt-8 min-h-[100px] flex flex-col items-center justify-center">
+                      <AnimatePresence mode="wait">
+                        {isWaiting ? (
+                          <motion.div 
+                            key="classic-waiting"
+                            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                            className="flex flex-col items-center gap-3 text-center"
+                          >
+                            <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-500 ${isReady ? 'bg-brand-secondary shadow-[0_0_30px_rgba(34,197,94,0.6)]' : 'bg-zinc-900 border border-white/5 animate-pulse'}`}>
+                               {isReady ? <Play className="w-6 h-6 text-white fill-current" /> : <Clock className="w-6 h-6 text-zinc-600" />}
+                            </div>
+                            <div>
+                               <h4 className={`text-xl font-display font-black italic uppercase tracking-tighter transition-colors duration-500 ${isReady ? 'text-brand-secondary' : 'text-zinc-600'}`}>
+                                  {isReady ? 'SINAL VERDE: ARRANQUE!' : 'AGUARDANDO PARADA...'}
+                               </h4>
+                               <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-[0.2em] mt-0.5">
+                                  {isReady ? 'O cronômetro iniciará ao detectar movimento' : 'O teste começa com o carro parado'}
+                               </p>
+                            </div>
+                          </motion.div>
+                        ) : (
+                          <motion.div 
+                            key="classic-setup"
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                            className="flex flex-col items-center gap-4"
+                          >
+                            <div className="text-center">
+                               <h3 className="text-2xl font-display font-black text-white italic uppercase tracking-tighter leading-none">VAMOS COMEÇAR?</h3>
+                               <p className="text-[9px] text-zinc-600 font-bold uppercase tracking-[0.3em] mt-1.5">Verifique o sinal de satélite acima</p>
+                            </div>
+                            
+                            {activeConfig?.type === 'standing' && (
+                               <div className="flex items-center gap-3 px-4 py-2 rounded-xl bg-zinc-950/40 border border-white/5">
+                                 <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest italic">Rollout 1ft</span>
+                                 <button 
+                                   onClick={() => setUseRollout(!useRollout)}
+                                   className={`w-8 h-4 rounded-full relative transition-colors ${useRollout ? 'bg-brand-primary' : 'bg-zinc-800'}`}>
+                                   <motion.div animate={{ x: useRollout ? 16 : 0 }} className="absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full" />
+                                 </button>
+                               </div>
+                            )}
+
+                            <button 
+                              onClick={handleStart}
+                              className="w-full min-w-[200px] py-4 bg-brand-primary text-white font-display font-black text-xl italic tracking-[0.1em] uppercase rounded-[28px] shadow-[0_15px_40px_rgba(239,68,68,0.3)] border-t border-white/20 active:scale-95 transition-all"
+                            >
+                              INICIAR
+                            </button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                  </div>
+                ) : (
+                   /* Abort Button during Run */
+                   <motion.button
+                     initial={{ opacity: 0, scale: 0.9 }}
+                     animate={{ opacity: 1, scale: 1 }}
+                     onClick={reset}
+                     className="mt-12 px-8 py-3 bg-zinc-900 text-white/50 border border-white/10 rounded-full font-black italic uppercase tracking-widest text-[8px] active:scale-95 transition-all flex items-center gap-2 hover:text-red-500 hover:border-red-500/30"
                    >
-                     {(() => {
-                        const v = vehicles.find(veh => veh.id === runVehicleId);
-                        if (v?.photoURL) return <img src={v.photoURL} className="w-full h-full object-cover rounded-xl" />;
-                        return v?.type === 'car' ? <Car className="w-6 h-6 text-zinc-600" /> : <Navigation className="w-6 h-6 text-zinc-600 -rotate-90" />;
-                     })()}
-                   </button>
-                   <div className="flex flex-col">
-                      <span className="text-[12px] font-black text-white italic uppercase tracking-tighter">
-                        {vehicles.find(v => v.id === runVehicleId)?.nickname || 'Piloto'}
-                      </span>
-                      <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest leading-none">
-                        {vehicles.find(v => v.id === runVehicleId)?.brand} {vehicles.find(v => v.id === runVehicleId)?.model}
-                      </span>
-                   </div>
-                </div>
-
-                {/* Accuracy Widget - Center Top */}
-                <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-full max-w-[140px] z-30">
-                   <div className="px-3 py-2 bg-zinc-900/80 backdrop-blur-2xl border border-white/10 rounded-2xl flex items-center justify-center gap-3 shadow-2xl">
-                      <div className={`p-1.5 rounded-lg ${gpsStatus === 'active' ? 'bg-cyan-500/20 text-cyan-400 glow-cyan' : 'bg-zinc-800 text-zinc-600'}`}>
-                         <Signal className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="text-center">
-                         <span className="text-[7px] font-black text-zinc-600 uppercase tracking-widest block">Precisão</span>
-                         <span className={`text-[10px] font-black italic tracking-tighter ${gpsStatus === 'active' ? 'text-white' : 'text-zinc-600'}`}>
-                           {accuracy ? `${accuracy.toFixed(1)}m` : '---'}
-                         </span>
-                      </div>
-                   </div>
-                </div>
-
-                {/* Time Widget - Repositioned to Right */}
-                <div className="absolute top-0 right-0 flex flex-col gap-3">
-                   <div className="p-4 px-6 bg-zinc-900/50 backdrop-blur-md border border-white/5 rounded-[32px] flex flex-col items-end shadow-lg">
-                      <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-1">Time Elapsed</span>
-                      <span className="text-3xl font-display font-black text-white italic leading-none">{elapsedTime.toFixed(2)}<span className="text-[10px] ml-0.5">s</span></span>
-                   </div>
-                </div>
+                     <X className="w-3 h-3" />
+                     ABORTAR PUXADA
+                   </motion.button>
+                )}
              </div>
-{/* Stop Button in Racing Aesthetic */}
-             {((activeConfig?.mode === 'free' || activeConfig?.mode === 'trip') && isRunning) && (
-               <motion.button
-                 initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-                 onClick={manualStop}
-                 className="mt-12 px-12 py-5 bg-gradient-to-r from-red-600 to-red-800 text-white font-black italic uppercase tracking-[0.2em] rounded-full shadow-[0_15px_40px_rgba(185,28,28,0.4)] border-t border-white/20 active:scale-95 transition-all text-xs"
-               >
-                 ABORTAR PROVA
-               </motion.button>
-             )}
+
+             {/* Bottom Interruption Button - For free/trip modes only */}
+             <div className="w-full flex flex-col items-center pb-2">
+                {((activeConfig?.mode === 'free' || activeConfig?.mode === 'trip') && isRunning) && (
+                  <motion.button
+                    initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                    onClick={manualStop}
+                    className="w-full py-5 bg-red-600 text-white font-black italic uppercase tracking-[0.3em] rounded-[24px] shadow-[0_10px_30px_rgba(220,38,38,0.3)] border-t border-white/20 active:scale-95 transition-all text-xs"
+                  >
+                    INTERROMPER TESTE
+                  </motion.button>
+                )}
+             </div>
           </div>
         ) : (
-          /* Racing Results Screen (Elite) - RESTRUCTURED & SCROLLABLE */
+          /* Racing Results Screen (Elite) - Now more compact to fit one screen */
           <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-            className="flex-1 overflow-y-auto racing-scroll px-2 pb-32"
+            initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            className="flex-1 flex flex-col racing-scroll px-1 pb-4"
           >
-             <div className="relative p-6 rounded-[40px] bg-gradient-to-br from-brand-primary/15 via-zinc-900/60 to-zinc-950 border border-white/5 overflow-hidden mb-6">
-                <div className="absolute -top-10 -right-10 w-40 h-40 bg-brand-primary/10 rounded-full blur-[80px]" />
+             <div className="flex-1 relative p-6 rounded-[32px] bg-gradient-to-br from-zinc-900 to-black border border-white/5 overflow-hidden mb-4 shadow-2xl flex flex-col">
+                <div className="absolute top-0 right-0 w-24 h-24 bg-brand-primary/10 blur-[50px] pointer-events-none" />
                 
-                <header className="flex justify-between items-start mb-10">
+                <header className="flex justify-between items-center mb-6">
                    <div>
-                      <h3 className="text-3xl font-display font-black italic text-white leading-none tracking-tighter uppercase">STAGE <span className="text-brand-primary">HOMOLOGADO</span></h3>
-                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.4em] mt-2 italic">Aferição Validada via Satélite</p>
+                      <h3 className="text-xl font-display font-black italic text-white uppercase tracking-tighter">RESULTADO <span className="text-brand-primary">ELITE</span></h3>
                    </div>
-                   <div className="bg-white/5 p-3 rounded-2xl border border-white/10">
-                      <Flag className="w-6 h-6 text-brand-primary" />
+                   <div className="bg-white/5 p-2 rounded-xl border border-white/10">
+                      <Trophy className="w-5 h-5 text-brand-primary" />
                    </div>
                 </header>
 
-                {/* Main Metrics Card - No Overlap */}
-                <div className="space-y-8 mb-10 px-2">
-                   <div className="flex flex-col gap-2">
-                      <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Cronômetro Final</span>
-                      <p className="text-7xl font-display font-black text-white italic leading-none drop-shadow-2xl">
-                        {lastResult.time.toFixed(2)}<span className="text-2xl ml-1">S</span>
+                <div className="flex flex-col gap-6 mb-6">
+                   <div className="flex flex-col">
+                      <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Velocidade Final</span>
+                      <p className="text-6xl font-display font-black text-white italic leading-none">
+                        {Math.round(lastResult.maxSpeed)}<span className="text-xl ml-1 text-red-600">KM/H</span>
                       </p>
                    </div>
-                   <div className="flex flex-col gap-2 border-t border-white/5 pt-6">
-                      <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Velocidade Máxima (Real)</span>
-                      <p className="text-5xl font-display font-black text-brand-accent italic leading-none underline decoration-brand-accent/30">
-                        {Math.round(lastResult.maxSpeed)} <span className="text-xl ml-1">KM/H</span>
+                   <div className="flex flex-col border-t border-white/5 pt-4">
+                      <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Duração</span>
+                      <p className="text-4xl font-display font-black text-brand-accent italic leading-none">
+                        {lastResult.time.toFixed(2)}<span className="text-base ml-1">SEG</span>
                       </p>
                    </div>
                 </div>
 
-                {/* Top Partials Card - Featured in first view */}
-                <div className="p-5 bg-white/5 rounded-3xl border border-white/5 space-y-4">
-                   <div className="flex items-center gap-2">
-                      <Trophy className="w-3.5 h-3.5 text-yellow-500" />
-                      <span className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] block">Top Parciais (Intervalos)</span>
-                   </div>
-                   <div className="grid grid-cols-1 gap-3">
+                <div className="flex-1 space-y-4 pt-4 border-t border-white/5 overflow-y-auto custom-scrollbar">
+                   <span className="text-[8px] font-black text-zinc-500 uppercase tracking-[0.3em]">Intervalos</span>
+                   <div className="grid grid-cols-2 gap-2">
                       {calculateIntervals(lastResult.path, [20, 60, 100, 160]).map(interval => (
-                        <div key={interval.target} className="flex justify-between items-center py-2 border-b border-white/5 last:border-0 group">
-                          <span className="text-xs font-bold text-zinc-500 uppercase tracking-widest">0-{interval.target} KM/H</span>
-                          <span className="text-xl font-display font-black text-white italic group-hover:text-brand-primary transition-colors">{interval.time.toFixed(2)}s</span>
+                        <div key={interval.target} className="flex flex-col p-3 bg-white/5 rounded-2xl border border-white/5">
+                           <span className="text-[7px] font-black text-zinc-400 uppercase tracking-widest">0-{interval.target} KM/H</span>
+                           <span className="text-xl font-display font-black text-white italic">{interval.time.toFixed(2)}s</span>
                         </div>
                       ))}
                    </div>
                 </div>
-             </div>
 
-             {/* Part 2: Performance Chart - Dedicated Section */}
-             <div className="space-y-4 mb-6">
-                <div className="flex items-center gap-2 px-2">
-                   <div className="w-1 h-3 bg-brand-primary rounded-full" />
-                   <h4 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em]">Curva de Aceleração G / Velocitometria</h4>
-                </div>
-                <div className="h-56 rounded-[32px] overflow-hidden border border-white/5 bg-zinc-900/30 p-2">
-                   <PerformanceChart result={lastResult} opponentResult={activeChallenge?.result} isPremium={userProfile?.isPremium} />
-                </div>
+                <button onClick={reset} className="mt-4 w-full py-4 bg-zinc-800 text-white font-black italic uppercase tracking-widest rounded-2xl active:scale-95 transition-all text-[10px]">
+                   NOVO TESTE
+                </button>
              </div>
-
-             {/* Part 3: Secondary Telemetry */}
-             <div className="grid grid-cols-2 gap-3 mb-6">
-                <div className="p-5 bg-zinc-900 border border-white/5 rounded-[32px] space-y-3">
-                   <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block border-b border-white/5 pb-2">Telemetria G</span>
-                   <div className="space-y-4 pt-2">
-                      <div>
-                         <span className="text-[9px] text-zinc-500 uppercase font-black">Max Traction</span>
-                         <p className="text-2xl font-display font-black text-cyan-400 italic leading-none mt-1">{lastResult.maxG?.toFixed(2)}<span className="text-sm ml-0.5">G</span></p>
-                      </div>
-                   </div>
-                </div>
-                <div className="p-5 bg-zinc-900 border border-white/5 rounded-[32px] space-y-3">
-                   <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block border-b border-white/5 pb-2">Ambiente</span>
-                   <div className="space-y-4 pt-2">
-                      <div>
-                         <span className="text-[9px] text-zinc-500 uppercase font-black">Dens. Altitude</span>
-                         <p className="text-2xl font-display font-black text-white italic leading-none mt-1">{lastResult.da || 0} <span className="text-sm ml-0.5">ft</span></p>
-                      </div>
-                   </div>
-                </div>
-             </div>
-
           </motion.div>
-        )}
-
-        {/* Start Logic (Elite) */}
-        {!isRunning && !lastResult && (
-           <div className="w-full space-y-4">
-              <AnimatePresence mode="wait">
-                 {isWaiting ? (
-                   <motion.div 
-                     key="elite-waiting"
-                     initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                     className={`p-6 rounded-[32px] border flex flex-col items-center gap-4 text-center backdrop-blur-xl ${isReady ? 'bg-cyan-500/10 border-cyan-500/40 shadow-[0_0_40px_rgba(6,182,212,0.1)]' : 'bg-red-500/10 border-red-500/40 shadow-[0_0_40px_rgba(239,68,68,0.1)]'}`}
-                   >
-                     <div className={`w-16 h-16 rounded-full flex items-center justify-center ${isReady ? 'bg-cyan-500 text-white glow-cyan' : 'bg-red-500 text-white glow-red animate-pulse'}`}>
-                        {isReady ? <Play className="w-8 h-8 fill-current" /> : <Clock className="w-8 h-8" />}
-                     </div>
-                     <div>
-                        <h4 className={`text-xl font-display font-black italic uppercase tracking-tighter ${isReady ? 'text-cyan-400' : 'text-red-500'}`}>
-                           {isReady ? 'PRONTO PARA PARTIDA' : 'SISTEMA EM ESPERA'}
-                        </h4>
-                        <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mt-1">
-                           {isReady ? 'O sensor detectará o primeiro movimento.' : 'Aguardando o veículo parar totalmente...'}
-                        </p>
-                     </div>
-                     
-                     {(activeConfig?.mode === 'free' || activeConfig?.mode === 'trip') && (
-                       <button onClick={manualStart} className="w-full py-4 bg-white text-black font-black uppercase italic rounded-2xl">LARGAR AGORA</button>
-                     )}
-                   </motion.div>
-                 ) : (
-                   <motion.div 
-                     key="elite-setup"
-                     className="p-8 bg-white/5 backdrop-blur-xl border border-white/5 rounded-[40px] text-center space-y-6"
-                   >
-                     <div className="space-y-1">
-                        <h3 className="text-xl font-display font-black text-white italic uppercase tracking-tighter">PRONTO?</h3>
-                        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.3em]">Configure e Aqueça os Pneus</p>
-                     </div>
-                     
-                     {activeConfig?.type === 'standing' && (
-                        <div className="flex items-center justify-between p-4 bg-zinc-950/50 rounded-2xl border border-white/5">
-                           <span className="text-[10px] font-black text-zinc-400 uppercase tracking-widest">Rollout Control (30cm)</span>
-                           <button 
-                             onClick={() => setUseRollout(!useRollout)}
-                             className={`w-12 h-6 rounded-full relative transition-colors ${useRollout ? 'bg-brand-primary glow-red' : 'bg-zinc-800'}`}
-                           >
-                             <motion.div animate={{ x: useRollout ? 24 : 0 }} className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full" />
-                           </button>
-                        </div>
-                     )}
-
-                     <button 
-                       onClick={handleStart}
-                       className="w-full py-5 bg-brand-primary text-white font-display font-black text-2xl italic tracking-widest uppercase rounded-[28px] shadow-[0_15px_40px_rgba(239,68,68,0.4)] active:scale-95 transition-all"
-                     >
-                       INICIAR AFERIÇÃO
-                     </button>
-                   </motion.div>
-                 )}
-              </AnimatePresence>
-           </div>
         )}
       </main>
 
-      {/* Quick Switch Modal (Elite Style) */}
+      {/* Elite Quick Switch Modal */}
       <AnimatePresence>
         {isQuickSwitchOpen && (
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-2xl flex items-end justify-center p-4 overflow-hidden"
+            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-3xl flex items-end justify-center p-4"
             onClick={() => setIsQuickSwitchOpen(false)}
           >
-             {/* Background glow in modal */}
-            <div className="absolute top-0 w-full h-1 bg-brand-primary glow-red" />
-
             <motion.div 
               initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-              className="w-full max-w-md bg-[#0a0a0a] border-t border-white/5 rounded-t-[50px] p-10 space-y-8"
+              className="w-full max-w-md bg-[#0a0a0a] border-t border-white/10 rounded-t-[50px] p-10 space-y-8"
               onClick={e => e.stopPropagation()}
             >
-              <header className="flex justify-between items-center border-b border-white/5 pb-6">
-                <div>
-                   <h3 className="text-2xl font-display font-black italic text-white uppercase tracking-tighter">GARAGEM <span className="text-brand-primary">ELITE</span></h3>
-                   <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-[0.3em] mt-1">Selecionar Veículo para Prova</p>
-                </div>
-                <button onClick={() => setIsQuickSwitchOpen(false)} className="p-3 bg-white/5 rounded-2xl text-zinc-500 hover:text-white transition-colors">
-                  <X className="w-6 h-6" />
-                </button>
+              <header className="flex justify-between items-center">
+                 <h3 className="text-2xl font-display font-black italic text-white uppercase">GARAGEM <span className="text-brand-primary">ELITE</span></h3>
+                 <button onClick={() => setIsQuickSwitchOpen(false)} className="p-3 bg-white/5 rounded-2xl text-zinc-600">
+                   <X className="w-6 h-6" />
+                 </button>
               </header>
 
-              <div className="grid grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto pr-2 racing-scroll">
-                <button onClick={() => { setRunVehicleId('anonimo'); setIsQuickSwitchOpen(false); }} className={`flex flex-col gap-3 p-4 rounded-[32px] border transition-all ${runVehicleId === 'anonimo' ? 'bg-white/5 border-brand-primary shadow-[0_0_20px_rgba(239,68,68,0.1)]' : 'bg-zinc-950 shadow-none border-white/5'}`}>
+              <div className="grid grid-cols-2 gap-4 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+                <button onClick={() => { setRunVehicleId('anonimo'); setIsQuickSwitchOpen(false); }} className={`flex flex-col gap-3 p-4 rounded-[32px] border transition-all ${runVehicleId === 'anonimo' ? 'bg-white/5 border-brand-primary shadow-[0_0_20px_rgba(239,68,68,0.1)]' : 'bg-zinc-950 border-white/5'}`}>
                   <div className="aspect-square w-full rounded-2xl bg-zinc-900 flex flex-col items-center justify-center border border-white/5 gap-2">
-                    <EyeOff className="w-8 h-8 text-zinc-700" />
-                    <span className="text-[8px] text-zinc-700 font-black uppercase tracking-[0.2em]">Ghost Mode</span>
+                    <EyeOff className="w-6 h-6 text-zinc-700" />
+                    <span className="text-[8px] text-zinc-700 font-black uppercase tracking-widest">Modo Fantasma</span>
                   </div>
-                  <div className="text-center">
-                    <p className="text-[10px] font-black text-white uppercase italic tracking-tighter">Anônimo</p>
-                  </div>
+                  <p className="text-[10px] font-black text-white uppercase italic text-center">Anônimo</p>
                 </button>
                 {vehicles.map(v => (
-                  <button key={v.id} onClick={() => { setRunVehicleId(v.id || ''); setIsQuickSwitchOpen(false); }} className={`flex flex-col gap-3 p-4 rounded-[32px] border transition-all ${runVehicleId === v.id ? 'bg-white/5 border-brand-primary shadow-[0_0_20px_rgba(239,68,68,0.1)]' : 'bg-zinc-950 border-white/5 shadow-none'}`}>
+                  <button key={v.id} onClick={() => { setRunVehicleId(v.id || ''); setIsQuickSwitchOpen(false); }} className={`flex flex-col gap-3 p-4 rounded-[32px] border transition-all ${runVehicleId === v.id ? 'bg-white/5 border-brand-primary shadow-[0_0_20px_rgba(239,68,68,0.1)]' : 'bg-zinc-950 border-white/5'}`}>
                     <div className="aspect-square w-full rounded-2xl bg-zinc-900 overflow-hidden border border-white/5">
-                      {v.photoURL ? <img src={v.photoURL} className="w-full h-full object-cover" /> : (v.type === 'car' ? <Car className="w-10 h-10 text-zinc-800 m-auto mt-4" /> : <Navigation className="w-10 h-10 text-zinc-800 -rotate-90 m-auto mt-4" />)}
+                      {v.photoURL ? <img src={v.photoURL} className="w-full h-full object-cover" /> : (v.type === 'car' ? <Car className="w-8 h-8 text-zinc-800 m-auto mt-4" /> : <Navigation className="w-8 h-8 text-zinc-800 -rotate-90 m-auto mt-4" />)}
                     </div>
-                    <div className="text-center space-y-0.5">
+                    <div className="text-center">
                       <p className="text-[10px] font-black text-white uppercase italic truncate">{v.nickname}</p>
-                      <p className="text-[8px] text-zinc-500 font-black uppercase tracking-widest truncate">{v.brand}</p>
+                      <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-widest mt-0.5">{v.brand}</p>
                     </div>
                   </button>
                 ))}
@@ -4985,6 +5056,7 @@ function TimerElite(props: TimerProps) {
     </motion.div>
   );
 }
+
 
 
 
@@ -5076,7 +5148,12 @@ export default function App() {
             CapacitorApp.exitApp();
             return currentScreen;
           }
-          // Volta para a tela inicial em vez de fechar o app
+          
+          if (currentScreen === 'timer' || currentScreen === 'duel') {
+            reset();
+            setActiveConfig(null);
+          }
+          
           return 'home';
         });
       });
@@ -5105,6 +5182,14 @@ export default function App() {
   const isUserPremium = useMemo(() => {
     return isAdmin || userProfile?.isPremium;
   }, [isAdmin, userProfile]);
+
+  const [currentMissions, setCurrentMissions] = useState<any[]>([]);
+  const [pendingReward, setPendingReward] = useState<{
+    position: '1' | '2' | '3';
+    rewardAmount: number;
+    type: 'global' | 'regional';
+    month: string;
+  } | null>(null);
 
   const [isGuest, setIsGuest] = useState(false);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -5290,6 +5375,10 @@ export default function App() {
           }
 
           setUserProfile(userData || null);
+          if (userData) {
+            checkPeriodicMissions(userData);
+            checkMonthlyRewards(userData);
+          }
           setIsLoggingIn(false); 
 
           // Real-time vehicles sync
@@ -5363,6 +5452,169 @@ export default function App() {
       setUserProfile(prev => prev ? { ...prev, ...data } : null);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
+    }
+  };
+
+  const handleCompleteMission = async (missionId: string) => {
+    if (!user || !userProfile) return;
+    
+    // Check if already completed/claimed
+    const isClaimed = userProfile.completedMissions?.includes(missionId);
+    if (isClaimed) return;
+
+    try {
+      const ref = doc(db, 'users', user.uid);
+      const newProgress = { ...(userProfile.missionProgress || {}), [missionId]: true };
+      
+      await updateDoc(ref, { missionProgress: newProgress });
+      setUserProfile(prev => prev ? { ...prev, missionProgress: newProgress } : null);
+      
+      logRemote({ uid: user.uid, level: 'info', message: `Mission marked for claim: ${missionId}` });
+    } catch (e) {
+      console.error('Error completing mission:', e);
+    }
+  };
+
+  const checkMonthlyRewards = async (profile: UserProfile) => {
+    if (!user || isGuest) return;
+
+    const currentMonth = new Date().toISOString().substring(0, 7); // YYYY-MM
+    if (profile.lastRewardClaimMonth === currentMonth) return;
+
+    try {
+      // Calculate previous month range
+      const lastMonth = new Date();
+      lastMonth.setMonth(lastMonth.getMonth() - 1, 1);
+      lastMonth.setHours(0, 0, 0, 0);
+      const startOfLastMonth = lastMonth.getTime();
+
+      const endMonth = new Date();
+      endMonth.setDate(1);
+      endMonth.setHours(0, 0, 0, 0);
+      const startOfCurrentMonth = endMonth.getTime();
+
+      const lastMonthName = lastMonth.toLocaleString('pt-BR', { month: 'long' });
+
+      // Check Global Top 3 (0-100 and 201m)
+      const categories: ('0-100' | '201m')[] = ['0-100', '201m'];
+      
+      for (const cat of categories) {
+        const mode = cat === '201m' ? 'distance' : 'speed';
+        const target = cat === '201m' ? 201 : 100;
+
+        const q = query(
+          collection(db, 'rankings'),
+          where('mode', '==', mode),
+          where('target', '==', target),
+          where('timestamp', '>=', startOfLastMonth),
+          where('timestamp', '<', startOfCurrentMonth),
+          orderBy('time', 'asc'),
+          limit(3)
+        );
+
+        const snap = await getDocs(q);
+        const top3 = snap.docs.map(d => ({ uid: d.data().uid }));
+        
+        const myIndex = top3.findIndex(entry => entry.uid === user.uid);
+        if (myIndex !== -1) {
+          const pos = (myIndex + 1).toString() as '1' | '2' | '3';
+          const rewardBase = pos === '1' ? 1000 : pos === '2' ? 500 : 250;
+          
+          setPendingReward({
+            position: pos,
+            rewardAmount: rewardBase * 2, // Double for Global
+            type: 'global',
+            month: lastMonthName
+          });
+          return; // Show one at a time
+        }
+      }
+
+      // If also checking regional, we would need to filter by distances... 
+      // but usually regional rewards are also checked here if we have a stable way of defining "region" winners 
+      // For now, focusing on Global as requested for "double" and logic is similar.
+
+    } catch (e) {
+      console.error('Error checking monthly rewards:', e);
+    }
+  };
+
+  const handleClaimMonthlyReward = async () => {
+    if (!user || !userProfile || !pendingReward) return;
+
+    try {
+      const currentMonth = new Date().toISOString().substring(0, 7);
+      const newCoins = (userProfile.dragfireCoins || 0) + pendingReward.rewardAmount;
+      const ref = doc(db, 'users', user.uid);
+      
+      await updateDoc(ref, {
+        dragfireCoins: newCoins,
+        lastRewardClaimMonth: currentMonth
+      });
+
+      setUserProfile({ 
+        ...userProfile, 
+        dragfireCoins: newCoins, 
+        lastRewardClaimMonth: currentMonth 
+      });
+
+      logActivity('ranking_reward', {
+        position: pendingReward.position,
+        amount: pendingReward.rewardAmount,
+        month: pendingReward.month
+      });
+
+      setPendingReward(null);
+      alert(`Parabéns! Você resgatou ${pendingReward.rewardAmount} DC pelo seu pódio em ${pendingReward.month}!`);
+    } catch (e) {
+      console.error('Error claiming monthly reward:', e);
+    }
+  };
+
+  const checkPeriodicMissions = (profile: UserProfile) => {
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    
+    const updates: Partial<UserProfile> = {};
+    let hasChanges = false;
+
+    // Daily Login
+    if (profile.lastLoginDate !== todayStr) {
+      const currentProgress = profile.missionProgress || {};
+      updates.lastLoginDate = todayStr;
+      updates.missionProgress = { ...currentProgress, 'daily_login': true };
+      
+      // If it was daily login, we remove 'daily_login' from completedMissions 
+      // so they can claim it again today.
+      updates.completedMissions = (profile.completedMissions || []).filter(id => id !== 'daily_login');
+      hasChanges = true;
+    }
+
+    // Weekly Reset (Every Monday at 04:00)
+    const lastMonday = new Date();
+    lastMonday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+    lastMonday.setHours(4, 0, 0, 0);
+    
+    const lastResetStr = lastMonday.toISOString();
+    if (profile.lastWeeklyReset !== lastResetStr) {
+      updates.lastWeeklyReset = lastResetStr;
+      
+      // Reset progress and completion for weekly missions
+      const weeklyIds = ACHIEVEMENTS.filter(a => a.type === 'weekly').map(a => a.id);
+      
+      const currentMissions = profile.completedMissions || [];
+      updates.completedMissions = (updates.completedMissions || currentMissions).filter(id => !weeklyIds.includes(id));
+      
+      const currentProgress = updates.missionProgress || profile.missionProgress || {};
+      const newProgress = { ...currentProgress };
+      weeklyIds.forEach(id => delete newProgress[id]);
+      updates.missionProgress = newProgress;
+      
+      hasChanges = true;
+    }
+
+    if (hasChanges) {
+      handleUpdateProfile(updates);
     }
   };
 
@@ -5506,6 +5758,8 @@ export default function App() {
           vehicleName: v.nickname,
           description: `${v.brand} ${v.model} (${v.year})`
         });
+        
+        handleCompleteMission('register_vehicle');
         
         console.log('Vehicle creation successful, ID:', newDocRef.id);
       }
@@ -6060,53 +6314,6 @@ export default function App() {
               />
             )}
           </motion.div>
-        ) : screen === 'search' ? (
-          <motion.div
-            key="search"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            className="flex-1 flex flex-col overflow-hidden"
-          >
-            <SearchUsers 
-              currentUserId={user?.uid}
-              onViewProfile={(uid) => {
-                setSelectedProfileUid(uid);
-                setScreen('public-profile');
-              }}
-            />
-          </motion.div>
-        ) : screen === 'feed' ? (
-          <motion.div
-            key="feed"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            className="flex-1 flex flex-col overflow-hidden"
-          >
-            <Feed />
-          </motion.div>
-        ) : screen === 'public-profile' ? (
-          <motion.div
-            key="public-profile"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            className="flex-1 flex flex-col overflow-hidden"
-          >
-            <PublicProfile 
-              uid={selectedProfileUid || ''} 
-              currentUserId={user?.uid}
-              onBack={() => setScreen(history.length > 0 ? 'history' : 'home')} 
-              onEditVehicles={() => setScreen('vehicle-settings')}
-              onOpenStore={() => setScreen('theme-store')}
-              onViewVehicle={(v) => {
-                setCatalogVehicle(v);
-                setScreen('vehicle-catalog');
-              }}
-              isAdmin={isAdmin}
-            />
-          </motion.div>
         ) : screen === 'vehicle-catalog' && catalogVehicle ? (
           <motion.div
             key="vehicle-catalog"
@@ -6132,6 +6339,11 @@ export default function App() {
             onUpdate={(data) => {
               if (userProfile) setUserProfile({ ...userProfile, ...data });
             }}
+          />
+        ) : screen === 'missions' && userProfile ? (
+          <MissionsView 
+            profile={userProfile}
+            onUpdate={(data) => setUserProfile({ ...userProfile, ...data })}
           />
         ) : screen === 'history' ? (
           <motion.div
@@ -6205,14 +6417,14 @@ export default function App() {
                     DRAG<span className="text-brand-primary">FIRE</span>
                   </h1>
                 </div>
-                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1 whitespace-nowrap overflow-visible flex items-center gap-1.5">
-                  {isGuest ? 'Modo Visitante' : (
-                    <>
-                      {vehicle ? `${vehicle.nickname} • ${vehicle.model}` : user?.displayName || 'Piloto'}
-                      {userProfile?.handle && <span className="text-brand-primary italic">#{userProfile.handle}</span>}
-                    </>
+                <div className="flex flex-col">
+                  <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1 whitespace-nowrap overflow-visible flex items-center gap-1.5 leading-none">
+                    {isGuest ? 'Modo Visitante' : (vehicle ? `${vehicle.nickname} • ${vehicle.model}` : user?.displayName || 'Piloto')}
+                  </p>
+                  {!isGuest && userProfile?.handle && (
+                    <span className="text-brand-primary italic font-black text-[10px] mt-0.5 uppercase">#{userProfile.handle}</span>
                   )}
-                </p>
+                </div>
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -6234,36 +6446,36 @@ export default function App() {
             </header>
 
             {/* Home Content */}
-            <main className="flex-1 overflow-y-auto p-4 space-y-6 pb-24">
+            <main className="flex-1 overflow-y-auto p-4 space-y-3 pb-20">
               {/* 1. Main Features Grid (2x2) */}
               <section className="grid grid-cols-2 gap-3">
-                {/* 1.1 AI Photo Editor */}
+                {/* 1.1 Editor IA (Purple Neon) */}
                 <motion.div 
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setScreen('ai-editor')}
-                  className="relative group h-40 bg-zinc-900 rounded-[24px] border border-white/5 cursor-pointer overflow-hidden transition-all hover:border-brand-primary/40 shadow-xl"
+                  className="relative group h-32 bg-zinc-900 rounded-[24px] border border-white/5 cursor-pointer overflow-hidden transition-all hover:border-purple-500/40 shadow-xl"
                 >
                   <img src="/assets/ai_editor_banner.png" alt="IA" className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover:scale-110 transition-transform duration-700" />
                   <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent" />
-                  <div className="absolute top-3 right-3"><Sparkles className="w-7 h-7 text-brand-primary animate-pulse" /></div>
+                  <div className="absolute top-3 right-3"><Sparkles className="w-7 h-7 text-purple-500 animate-pulse" /></div>
                   <div className="absolute bottom-4 left-4 right-4">
-                    <span className="px-1.5 py-0.5 bg-brand-primary/20 backdrop-blur-md rounded border border-brand-primary/30 text-[7px] font-black text-brand-primary uppercase tracking-widest mb-1.5 inline-block">Mágica</span>
-                    <h4 className="text-sm font-display font-black italic text-white leading-tight uppercase tracking-tighter">Editor <span className="text-brand-primary font-bold">IA</span></h4>
+                    <span className="px-1.5 py-0.5 bg-purple-500/20 backdrop-blur-md rounded border border-purple-500/30 text-[7px] font-black text-purple-500 uppercase tracking-widest mb-1.5 inline-block">Mágica</span>
+                    <h4 className="text-sm font-display font-black italic text-white leading-tight uppercase tracking-tighter">Editor <span className="text-purple-500 font-bold">IA</span></h4>
                   </div>
                 </motion.div>
 
-                {/* 1.2 Assistente de Curvas */}
+                {/* 1.2 Assistente de Curvas (Yellow Elite) */}
                 <motion.div 
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setScreen('cornering-assistant')}
-                  className="relative group h-40 bg-zinc-900 rounded-[24px] border border-white/5 cursor-pointer overflow-hidden transition-all hover:border-brand-primary/40 shadow-xl"
+                  className="relative group h-32 bg-zinc-900 rounded-[24px] border border-white/5 cursor-pointer overflow-hidden transition-all hover:border-yellow-500/40 shadow-xl"
                 >
                   <img src="/assets/cornering_banner.png" alt="Curves" className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover:scale-110 transition-transform duration-700" />
                   <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent" />
-                  <div className="absolute top-3 right-3"><Navigation className="w-7 h-7 text-brand-primary animate-pulse -rotate-90" /></div>
+                  <div className="absolute top-3 right-3"><Navigation className="w-7 h-7 text-yellow-500 animate-pulse -rotate-90" /></div>
                   <div className="absolute bottom-4 left-4 right-4">
-                    <span className="px-1.5 py-0.5 bg-brand-primary/20 backdrop-blur-md rounded border border-brand-primary/30 text-[7px] font-black text-brand-primary uppercase tracking-widest mb-1.5 inline-block">Pro HUD</span>
-                    <h4 className="text-sm font-display font-black italic text-white leading-tight uppercase tracking-tighter">Assistente <span className="text-brand-primary font-bold">Curvas</span></h4>
+                    <span className="px-1.5 py-0.5 bg-yellow-500/20 backdrop-blur-md rounded border border-yellow-500/30 text-[7px] font-black text-yellow-500 uppercase tracking-widest mb-1.5 inline-block">Pro HUD</span>
+                    <h4 className="text-sm font-display font-black italic text-white leading-tight uppercase tracking-tighter">Assistente <span className="text-yellow-500 font-bold">Curvas</span></h4>
                   </div>
                 </motion.div>
 
@@ -6271,7 +6483,7 @@ export default function App() {
                 <motion.div 
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setShowPerformanceMenu(true)}
-                  className="relative group h-40 bg-zinc-900 rounded-[24px] border border-white/5 cursor-pointer overflow-hidden transition-all hover:border-brand-primary/40 shadow-xl"
+                  className="relative group h-32 bg-zinc-900 rounded-[24px] border border-white/5 cursor-pointer overflow-hidden transition-all hover:border-brand-primary/40 shadow-xl"
                 >
                   <img src="/assets/performance_banner.png" alt="Performance" className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover:scale-110 transition-transform duration-700" />
                   <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent" />
@@ -6282,18 +6494,18 @@ export default function App() {
                   </div>
                 </motion.div>
 
-                {/* 1.4 Postos e Preços */}
+                {/* 1.4 Postos e Preços (Emerald Green) */}
                 <motion.div 
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setScreen('fuel-stations')}
-                  className="relative group h-40 bg-zinc-900 rounded-[24px] border border-white/5 cursor-pointer overflow-hidden transition-all hover:border-brand-accent/40 shadow-xl"
+                  className="relative group h-32 bg-zinc-900 rounded-[24px] border border-white/5 cursor-pointer overflow-hidden transition-all hover:border-emerald-500/40 shadow-xl"
                 >
                   <img src="/assets/posto_banner.png" alt="Postos" className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover:scale-110 transition-transform duration-700" />
                   <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent" />
-                  <div className="absolute top-3 right-3"><Fuel className="w-7 h-7 text-brand-accent animate-pulse" /></div>
+                  <div className="absolute top-3 right-3"><Fuel className="w-7 h-7 text-emerald-500 animate-pulse" /></div>
                   <div className="absolute bottom-4 left-4 right-4">
-                    <span className="px-1.5 py-0.5 bg-brand-accent/20 backdrop-blur-md rounded border border-brand-accent/30 text-[7px] font-black text-brand-accent uppercase tracking-widest mb-1.5 inline-block">Economia</span>
-                    <h4 className="text-sm font-display font-black italic text-white leading-tight uppercase tracking-tighter">Postos <span className="text-brand-accent font-bold">Elite</span></h4>
+                    <span className="px-1.5 py-0.5 bg-emerald-500/20 backdrop-blur-md rounded border border-emerald-500/30 text-[7px] font-black text-emerald-500 uppercase tracking-widest mb-1.5 inline-block">Economia</span>
+                    <h4 className="text-sm font-display font-black italic text-white leading-tight uppercase tracking-tighter">Postos <span className="text-emerald-500 font-bold">Elite</span></h4>
                   </div>
                 </motion.div>
               </section>
@@ -6594,7 +6806,10 @@ export default function App() {
             exit={{ opacity: 0, x: 20 }}
             className="flex-1 flex flex-col overflow-hidden"
           >
-            <AIPhotoEditor onBack={() => setScreen('home')} />
+            <AIPhotoEditor 
+              onBack={() => setScreen('home')} 
+              onCompleteMission={handleCompleteMission}
+            />
           </motion.div>
         ) : screen === 'fuel-stations' ? (
           <motion.div
@@ -6604,7 +6819,10 @@ export default function App() {
             exit={{ opacity: 0, x: 20 }}
             className="flex-1 flex flex-col overflow-hidden"
           >
-            <GasStations onBack={() => setScreen('home')} />
+            <GasStations 
+              onBack={() => setScreen('home')} 
+              onCompleteMission={handleCompleteMission}
+            />
           </motion.div>
         ) : screen === 'anp-import' ? (
           <motion.div
@@ -6912,6 +7130,17 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+        {pendingReward && (
+          <PodiumRewardModal
+            isOpen={!!pendingReward}
+            onClose={() => setPendingReward(null)}
+            onClaim={handleClaimMonthlyReward}
+            position={pendingReward.position || '3'}
+            rewardAmount={pendingReward.rewardAmount}
+            type={pendingReward.type || 'global'}
+            month={pendingReward.month}
+          />
+        )}
       </div>
     </ErrorBoundary>
   );
@@ -7001,6 +7230,7 @@ function PublicProfileDetail({ uid, currentUserId, onBack, onUpdateProfile, onEd
   const [loading, setLoading] = useState(true);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [showThemeStore, setShowThemeStore] = useState(false);
+  const [activeTab, setActiveTab] = useState<'garage' | 'times' | 'albums'>('garage');
 
   const fetchProfile = async () => {
     setLoading(true);
@@ -7036,142 +7266,242 @@ function PublicProfileDetail({ uid, currentUserId, onBack, onUpdateProfile, onEd
     <div className={`flex-1 flex flex-col overflow-y-auto hide-scrollbar ${theme.backgroundClass} relative`}>
       {/* Neon Borders of the Pilot */}
       {profile.activeNeonColor && (
-        <div className="fixed inset-0 pointer-events-none z-50">
-           <div className="absolute left-0 top-0 bottom-0 w-1" style={{ backgroundColor: profile.activeNeonColor, boxShadow: `0 0 20px ${profile.activeNeonColor}` }} />
-           <div className="absolute right-0 top-0 bottom-0 w-1" style={{ backgroundColor: profile.activeNeonColor, boxShadow: `0 0 20px ${profile.activeNeonColor}` }} />
+        <div className="fixed inset-0 pointer-events-none z-[60]">
+           <div className="absolute left-0 top-0 bottom-0 w-1" style={{ 
+             backgroundColor: profile.activeNeonColor, 
+             boxShadow: `0 0 15px ${profile.activeNeonColor}` 
+           }} />
+           <div className="absolute right-0 top-0 bottom-0 w-1" style={{ 
+             backgroundColor: profile.activeNeonColor, 
+             boxShadow: `0 0 15px ${profile.activeNeonColor}` 
+           }} />
         </div>
       )}
 
-      {/* Dynamic Header */}
-      <div className={`relative pt-12 pb-10 px-6 border-b-2 ${theme.borderClass} ${theme.headerClass} overflow-hidden shadow-2xl`}>
+      {/* Dynamic Header (Banner) - Height Increased for larger exposure */}
+      <div className={`relative pt-16 pb-40 px-6 ${theme.headerClass} overflow-hidden shadow-2xl transition-all duration-500`}>
          {theme.bannerUrl && (
-           <img src={theme.bannerUrl} className="absolute inset-0 w-full h-full object-cover opacity-50" />
+           <motion.img 
+             initial={{ scale: 1.1, opacity: 0 }}
+             animate={{ scale: 1, opacity: 0.8 }}
+             src={theme.bannerUrl} 
+             className="absolute inset-0 w-full h-full object-cover" 
+           />
          )}
-         {/* Animated BG Accent */}
-         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 blur-[80px] rounded-full pointer-events-none -translate-y-1/2 translate-x-1/3" />
+         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
          
-         <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-20">
-            <button onClick={onBack} className="p-2.5 bg-black/40 backdrop-blur-md rounded-xl text-white/50 hover:text-white transition-all"><ChevronLeft className="w-6 h-6" /></button>
+         <div className="absolute top-6 left-6 right-6 flex items-center justify-between z-20">
+            <button onClick={onBack} className="p-3 bg-black/40 backdrop-blur-xl border border-white/5 rounded-2xl text-white/50 hover:text-white transition-all active:scale-90">
+              <ChevronLeft className="w-6 h-6" />
+            </button>
             <div className="flex items-center gap-2">
                {isOwner && (
                  <button 
                   onClick={() => setShowThemeStore(true)}
-                  className="p-3 bg-brand-primary/20 border border-brand-primary/30 rounded-2xl text-brand-primary hover:bg-brand-primary hover:text-white transition-all shadow-[0_10px_25px_rgba(239,68,68,0.3)] active:scale-95"
+                  className="p-3 bg-brand-primary border-2 border-white/20 rounded-2xl text-white shadow-xl active:scale-95"
                  >
                     <Palette className="w-6 h-6" />
                  </button>
                )}
+               <button className="p-3 bg-black/40 backdrop-blur-xl border border-white/5 rounded-2xl text-white/50">
+                 <Share2Icon className="w-5 h-5" />
+               </button>
             </div>
          </div>
 
-         <div className="flex flex-col items-center mt-6 text-center">
-            <div className={`w-32 h-32 rounded-[40px] p-1.5 border-4 ${theme.borderClass} mb-6 relative shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden scale-100 active:scale-105 transition-transform duration-500`}>
-               <div className="w-full h-full rounded-[36px] overflow-hidden">
+         </div>
+
+      {/* Compact Info Header */}
+      <div className="relative px-6 -mt-20 z-10">
+         <div className="flex flex-row items-start gap-5">
+            {/* Profile Photo & Refined Badge Wrapper */}
+            <motion.div 
+              initial={{ x: -20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              className="relative shrink-0"
+            >
+               <div className="w-24 h-24 rounded-[28px] overflow-hidden bg-zinc-950 border-4 border-zinc-950 shadow-2xl">
                  {profile.photoURL ? (
                    <img src={profile.photoURL} alt="" className="w-full h-full object-cover" />
                  ) : (
-                   <div className="w-full h-full bg-zinc-800 flex items-center justify-center text-4xl font-black">{profile.displayName?.[0]}</div>
+                   <div className="w-full h-full bg-zinc-800 flex items-center justify-center text-4xl font-black text-white/50">{profile.displayName?.[0]}</div>
                  )}
                </div>
                
-               {/* Badge System: Zap for ADMIN, Brand Badge for Users */}
-               {(uid === currentUserId && isAdmin) ? (
-                 <div className="absolute -bottom-1 -right-1 bg-brand-primary p-2 rounded-2xl border-4 border-zinc-950 shadow-xl z-30">
-                    <Zap className="w-5 h-5 text-white fill-current" />
-                 </div>
-               ) : profile.activeBadgeId ? (
-                 <div className="absolute -bottom-1 -right-1 w-10 h-10 rounded-2xl bg-black border-4 border-zinc-950 shadow-2xl flex items-center justify-center z-30 p-1.5">
-                   <img src={BADGES.find(b => b.id === profile.activeBadgeId)?.imageUrl} className="w-full h-full object-contain" />
-                 </div>
-               ) : profile.isPremium ? (
-                 <div className="absolute -bottom-1 -right-1 bg-brand-primary p-2 rounded-2xl border-4 border-zinc-950 shadow-xl z-30">
-                    <Sparkles className="w-5 h-5 text-white" />
-                 </div>
-               ) : null}
-            </div>
+               {/* Fixed Badge: Smaller & Clean Recorte (No Background) */}
+               <div className="absolute -bottom-2 -right-2 z-30 pointer-events-none">
+                  {profile.activeBadgeId ? (
+                    <div className="w-12 h-12 flex items-center justify-center bg-transparent overflow-visible">
+                       <img 
+                         src={BADGES.find(b => b.id === profile.activeBadgeId)?.imageUrl} 
+                         className="w-full h-full object-contain filter drop-shadow-[0_5px_10px_rgba(0,0,0,0.5)] mix-blend-screen contrast-125 brightness-110" 
+                         alt="Badge" 
+                       />
+                    </div>
+                  ) : (uid === currentUserId && isAdmin) ? (
+                    <div className="bg-brand-primary p-1.5 rounded-xl border-2 border-black shadow-xl ring-1 ring-brand-primary/20">
+                       <Zap className="w-4 h-4 text-white fill-current" />
+                    </div>
+                  ) : profile.isPremium ? (
+                    <div className="bg-brand-primary p-1.5 rounded-xl border-2 border-black shadow-xl">
+                       <Sparkles className="w-4 h-4 text-white" />
+                    </div>
+                  ) : null}
+               </div>
+            </motion.div>
 
-            <h2 className="text-3xl font-display font-black italic text-white uppercase tracking-tighter drop-shadow-xl">{profile.displayName}</h2>
-            <div className="flex items-center gap-3 mt-3 bg-black/30 px-4 py-1.5 rounded-full backdrop-blur-md border border-white/5">
-               <span className="text-[10px] font-black uppercase tracking-[0.2em] text-zinc-400">{profile.isPremium ? 'Piloto Elite' : 'Piloto Enthusiasta'}</span>
-               {profile.isPremium && <div className="h-1 w-1 bg-brand-primary rounded-full shadow-[0_0_8px_#ef4444]" />}
-               {profile.isPremium && <span className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-primary">Verified</span>}
+            {/* Compact Info Column */}
+            <div className="flex-1 min-w-0 flex flex-col pt-2">
+               <h2 className="text-xl font-display font-black italic text-white uppercase tracking-tighter leading-none mb-1">
+                 {profile.displayName}
+               </h2>
+               
+               {/* Title - Compact */}
+               <div className="mb-2">
+                  <span className="text-[7px] font-black uppercase tracking-[0.2em] text-brand-primary italic opacity-90">
+                    {profile.activeTitleId ? TITLES.find(t => t.id === profile.activeTitleId)?.name : (profile.isPremium ? 'Piloto Elite' : 'Piloto Enthusiasta')}
+                  </span>
+               </div>
+
+               {/* Instagram - Compact */}
+               {profile.instagram && (
+                 <div className="flex items-center gap-1.5 opacity-90 mb-3">
+                    <Instagram className="w-3 h-3 text-pink-500" />
+                    <span className="text-[10px] font-black text-white/70 italic tracking-tighter">@{profile.instagram.replace(/^@+/, '')}</span>
+                 </div>
+               )}
+
+               {/* Bottom Stats Row */}
+               <div className="flex items-center justify-between border-t border-white/5 pt-2">
+                  <div className="flex items-center gap-4">
+                    <div className="flex flex-col leading-none">
+                       <span className="text-xs font-display font-black italic text-white">{profile.followersCount || 0}</span>
+                       <span className="text-[6px] font-black uppercase text-zinc-600 tracking-widest mt-0.5 whitespace-nowrap">Seguidores</span>
+                    </div>
+                    {/* Handle directly next to stats */}
+                    {profile.handle && (
+                      <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest italic pt-1 border-l border-white/5 pl-4">#{profile.handle.toUpperCase()}</span>
+                    )}
+                  </div>
+               </div>
             </div>
          </div>
       </div>
-         {/* Stats Grid */}
-         <div className="grid grid-cols-3 gap-4">
-            {[ 
-              { label: 'Veículos', value: vehicles.length, icon: Car, color: 'text-blue-500' },
-              { label: 'DFCores', value: (profile.dfCoins || 0).toLocaleString(), icon: Trophy, color: 'text-yellow-500' },
-              { label: 'Atividade', value: 'High', icon: ActivityIcon, color: 'text-brand-primary' }
-            ].map((stat, i) => (
-              <div key={i} className="bg-zinc-900/50 backdrop-blur-xl border border-white/5 p-5 rounded-[32px] flex flex-col items-center gap-2 shadow-xl shadow-black/20 group hover:border-white/10 transition-colors">
-                 <div className={`p-2 rounded-xl bg-white/5 ${stat.color} opacity-40 group-hover:opacity-100 transition-opacity`}>
-                    <stat.icon className="w-4 h-4" />
-                 </div>
-                 <span className="text-xl font-display font-black italic text-white leading-none tracking-tight">{stat.value}</span>
-                 <span className="text-[8px] font-black uppercase text-zinc-500 tracking-[0.2em]">{stat.label}</span>
-              </div>
+
+
+
+
+      {/* Main Content Area */}
+      <div className="px-6 py-6 pb-24 space-y-12">
+         {/* Segmented Tab Bar */}
+         <div className="flex bg-black/40 backdrop-blur-xl border border-white/5 p-1 rounded-2xl">
+            {[
+              { id: 'garage', label: 'Garagem', icon: Car },
+              { id: 'times', label: 'Tempos', icon: History },
+              { id: 'albums', label: 'Álbuns', icon: ImageIcon }
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`flex-1 py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 ${activeTab === tab.id ? 'bg-brand-primary text-white shadow-lg shadow-brand-primary/20' : 'text-zinc-600'}`}
+              >
+                <tab.icon className="w-4 h-4" />
+                <span className="text-[10px] font-black uppercase tracking-widest">{tab.label}</span>
+              </button>
             ))}
          </div>
 
-         {/* Garage Section */}
-         <section>
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-4 bg-brand-primary rounded-full" />
-                <h3 className="text-[11px] font-black uppercase tracking-[0.4em] text-white/50 italic">Personal Garage</h3>
-              </div>
-              <span className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest">{vehicles.length} slots</span>
-            </div>
-            
-            <div className="grid grid-cols-1 gap-4">
-               {vehicles.map(v => (
-                 <button 
-                  key={v.id} 
-                  onClick={() => onEditVehicle(v)}
-                  className="w-full bg-zinc-900/60 backdrop-blur-xl border border-white/5 p-5 rounded-[32px] flex items-center justify-between group active:scale-[0.98] transition-all hover:bg-zinc-900 shadow-xl"
-                 >
-                    <div className="flex items-center gap-5">
-                       <div className="w-16 h-12 bg-black rounded-2xl border border-white/5 flex items-center justify-center overflow-hidden shadow-inner group-hover:border-brand-primary/30 transition-colors">
-                          <img src={v.photoURL} alt="" className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700" />
-                       </div>
-                       <div className="text-left">
-                          <h4 className="text-base font-black italic text-white uppercase tracking-tight group-hover:text-brand-primary transition-colors leading-none mb-1.5">{v.nickname || v.model}</h4>
-                          <div className="flex items-center gap-1.5">
-                             <BrandIcon brand={v.brand} className="w-4 h-4 grayscale opacity-40 group-hover:grayscale-0 group-hover:opacity-100" />
-                             <span className="text-[10px] text-zinc-500 font-black uppercase tracking-widest">{v.brand}</span>
-                          </div>
-                       </div>
-                    </div>
-                    <div className="h-10 w-10 flex items-center justify-center bg-white/5 rounded-2xl group-hover:bg-brand-primary transition-colors">
-                       <ChevronRight className="w-5 h-5 text-zinc-700 group-hover:text-white" />
-                    </div>
-                 </button>
-               ))}
+         <AnimatePresence mode="wait">
+            {activeTab === 'garage' && (
+              <motion.section 
+                key="garage"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                className="space-y-4"
+              >
+                <div className="grid grid-cols-2 gap-3 pb-8">
+                   {vehicles.map(v => (
+                     <button 
+                      key={v.id} 
+                      onClick={() => onEditVehicle(v)}
+                      className="w-full bg-zinc-900/40 backdrop-blur-md border border-white/5 rounded-[28px] flex flex-col group active:scale-[0.98] transition-all overflow-hidden"
+                     >
+                        {/* Image Top */}
+                        <div className="w-full h-28 bg-black/40 border-b border-white/5 flex items-center justify-center overflow-hidden shadow-inner relative">
+                           {v.photoURL ? (
+                             <img src={v.photoURL} alt="" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                           ) : (
+                             <Navigation className="w-6 h-6 text-zinc-800 -rotate-90" />
+                           )}
+                           <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-md p-1.5 rounded-lg border border-white/5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <BrandIcon brand={v.brand} className="w-3.5 h-3.5 grayscale" />
+                           </div>
+                        </div>
 
-               {isOwner && (
-                 <button 
-                  onClick={() => alert('Dica: Configure seus veículos no menu de configurações!')}
-                  className="w-full py-10 bg-zinc-900/20 border-2 border-dashed border-zinc-800 rounded-[32px] flex flex-col items-center justify-center gap-3 text-zinc-700 hover:text-white hover:border-zinc-500 transition-all group"
-                 >
-                    <div className="p-3 bg-zinc-800 rounded-2xl group-hover:bg-zinc-700 transition-colors">
-                       <Plus className="w-6 h-6" />
-                    </div>
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] italic">Manage Garage</span>
-                 </button>
-               )}
-            </div>
-         </section>
+                        {/* Content Bottom */}
+                        <div className="p-3 text-left">
+                           <h4 className="text-[11px] font-black italic text-white uppercase tracking-tight leading-none mb-1 truncate">{v.nickname || v.model}</h4>
+                           <div className="flex items-center gap-1 opacity-40">
+                              <span className="text-[8px] text-zinc-400 font-black uppercase tracking-wider truncate">{v.brand} {v.year}</span>
+                           </div>
+                        </div>
+                     </button>
+                   ))}
+                   
+                   {vehicles.length === 0 && (
+                     <div className="col-span-2 py-12 flex flex-col items-center justify-center text-zinc-700 bg-zinc-900/20 border border-dashed border-zinc-800 rounded-[32px]">
+                        <Car className="w-8 h-8 mb-2 opacity-20" />
+                        <p className="text-[9px] font-black uppercase tracking-widest">Nenhum veículo cadastrado</p>
+                     </div>
+                   )}
+                </div>
+              </motion.section>
+            )}
 
-         {/* Albums Section */}
-         <section className="pb-10">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-2 h-4 bg-brand-accent rounded-full" />
-              <h3 className="text-[11px] font-black uppercase tracking-[0.4em] text-white/50 italic">Pilot Highlights</h3>
-            </div>
-            <ProfileLibrary uid={uid} currentUserId={currentUserId} profile={profile} />
-         </section>
+            {activeTab === 'times' && (
+              <motion.section 
+                key="times"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+                className="space-y-6"
+              >
+                 <div className="grid grid-cols-2 gap-4">
+                   {[
+                     { label: '0-100 km/h', value: '--', unit: 's', color: 'text-brand-primary' },
+                     { label: '201 metros', value: '--', unit: 's', color: 'text-blue-500' },
+                     { label: 'Top Speed', value: '--', unit: 'km/h', color: 'text-brand-accent' },
+                     { label: 'Puxadas', value: '0', unit: '', color: 'text-yellow-500' }
+                   ].map((record, i) => (
+                     <div key={i} className="bg-zinc-900/40 p-5 rounded-[32px] border border-white/5 flex flex-col gap-1">
+                        <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">{record.label}</span>
+                        <div className="flex items-baseline gap-1">
+                           <span className="text-2xl font-display font-black italic text-white">{record.value}</span>
+                           <span className={`text-[10px] font-bold italic ${record.color} uppercase`}>{record.unit}</span>
+                        </div>
+                     </div>
+                   ))}
+                 </div>
+                 <div className="py-12 flex flex-col items-center justify-center text-zinc-700">
+                    <History className="w-8 h-8 mb-2 opacity-20" />
+                    <p className="text-[9px] font-black uppercase tracking-widest">Nenhum tempo registrado</p>
+                 </div>
+              </motion.section>
+            )}
+
+            {activeTab === 'albums' && (
+              <motion.section 
+                key="albums"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.98 }}
+              >
+                <ProfileLibrary uid={uid} currentUserId={currentUserId} profile={profile} />
+              </motion.section>
+            )}
+         </AnimatePresence>
+      </div>
 
       <AnimatePresence>
         {showThemeStore && (
@@ -7188,6 +7518,7 @@ function PublicProfileDetail({ uid, currentUserId, onBack, onUpdateProfile, onEd
     </div>
   );
 }
+
 
 
 function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle: Vehicle, onBack: () => void, isOwnCar: boolean, onEditVehicle: (v: Vehicle) => void }) {

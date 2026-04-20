@@ -186,24 +186,31 @@ export function ProfileLibrary({ uid, currentUserId, profile }: ProfileLibraryPr
         {loading ? (
           <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin text-zinc-600" /></div>
         ) : (
-          <div className="grid grid-cols-3 gap-1">
+          <div className="grid grid-cols-3 gap-2 pb-8">
             {albums.map(album => (
               <button 
                 key={album.id}
                 onClick={() => setSelectedAlbum(album)}
-                className="aspect-square relative group bg-zinc-900 overflow-hidden block"
+                className="aspect-square relative group bg-zinc-900/40 backdrop-blur-md border border-white/5 rounded-2xl overflow-hidden active:scale-[0.98] transition-all"
               >
                 {album.coverPhotoURL && (
-                  <img src={album.coverPhotoURL} className="w-full h-full object-cover transition-transform group-hover:scale-105" alt={album.name} referrerPolicy="no-referrer" />
+                  <img src={album.coverPhotoURL} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" alt={album.name} referrerPolicy="no-referrer" />
                 )}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex flex-col justify-end p-2 opacity-90">
-                   <p className="text-white text-[9px] font-black italic uppercase truncate">{album.name}</p>
+                
+                {/* Album Info Overlay - Mirrored from Garage style but smaller */}
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-2 pt-4">
+                   <p className="text-[8px] font-black italic text-white uppercase tracking-tight truncate leading-none mb-0.5">{album.name}</p>
+                   {album.photos.length > 1 && (
+                     <p className="text-[6px] font-black text-brand-primary uppercase tracking-widest">{album.photos.length} FOTOS</p>
+                   )}
                 </div>
-                {album.photos.length > 1 && (
-                  <div className="absolute top-1 right-1 bg-black/60 rounded-md px-1.5 py-0.5">
-                    <span className="text-[8px] font-bold text-white uppercase">{album.photos.length} Fotos</span>
-                  </div>
-                )}
+
+                {/* Badge Overlay for count */}
+                <div className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                   <div className="bg-black/60 backdrop-blur-md px-1.5 py-0.5 rounded-md border border-white/10 text-[6px] font-black text-white uppercase tracking-tighter">
+                      ALBUM
+                   </div>
+                </div>
               </button>
             ))}
           </div>

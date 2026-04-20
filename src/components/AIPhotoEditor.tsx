@@ -21,6 +21,7 @@ import { editCarImage } from '../services/geminiService';
 
 interface AIPhotoEditorProps {
   onBack: () => void;
+  onCompleteMission?: (missionId: string) => void;
 }
 
 const WATERMARK_INSTRUCTION = " Add a subtle, professional watermark text 'DRAGFIRE' in the bottom right corner of the image, using a modern, bold, and italic font style.";
@@ -130,7 +131,7 @@ const LOWERING_OPTIONS = [
   { id: 'slammed', label: 'Socada', instruction: 'Lower the car suspension significantly (slammed look), so the tires are very close to the fenders.' },
 ];
 
-export function AIPhotoEditor({ onBack }: AIPhotoEditorProps) {
+export function AIPhotoEditor({ onBack, onCompleteMission }: AIPhotoEditorProps) {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [editedImage, setEditedImage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -196,6 +197,7 @@ export function AIPhotoEditor({ onBack }: AIPhotoEditorProps) {
       // Add programmatic watermark for consistency
       const watermarked = await addWatermarkToImage(result);
       setEditedImage(watermarked);
+      if (onCompleteMission) onCompleteMission('ai_photo_edit');
     } catch (err) {
       setError("Ocorreu um erro ao processar a imagem. Tente novamente.");
       console.error(err);
