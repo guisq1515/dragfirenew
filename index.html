@@ -8,8 +8,37 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>DragFire - Performance Timer</title>
+    
+    <!-- Diagnostic script to catch early errors on older WebViews -->
+    <script>
+      window.onerror = function(msg, url, line, col, error) {
+        var extra = !col ? '' : '\ncolumn: ' + col;
+        extra += !error ? '' : '\nerror: ' + error;
+        var message = "Erro no Carregamento:\n" + msg + "\nurl: " + url + "\nline: " + line + extra;
+        
+        // Show a visible error on the screen instead of white page
+        var div = document.createElement('div');
+        div.style.position = 'fixed';
+        div.style.top = '0';
+        div.style.left = '0';
+        div.style.width = '100%';
+        div.style.height = '100%';
+        div.style.backgroundColor = '#000';
+        div.style.color = '#ff4444';
+        div.style.padding = '20px';
+        div.style.zIndex = '99999';
+        div.style.fontFamily = 'monospace';
+        div.style.fontSize = '12px';
+        div.style.overflow = 'auto';
+        div.innerHTML = '<h1>DragFire Error</h1><pre>' + message + '</pre><button onclick="location.reload()" style="padding:10px;background:#333;color:white;border:none;border-radius:5px">Recarregar</button>';
+        document.body.appendChild(div);
+        
+        return false;
+      };
+    </script>
+
     <!-- Google Maps SDK remains optional but recommended for browser-side features -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDWqsCxj7uc2Iu_J3JNPcgti5K7HNWjpY8&libraries=places"></script>
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDWqsCxj7uc2Iu_J3JNPcgti5K7HNWjpY8&libraries=places"></script>
   </head>
   <body>
     <div id="root"></div>

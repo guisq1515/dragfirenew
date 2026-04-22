@@ -98,6 +98,7 @@ import {
   Clock,
   Zap,
   Timer,
+  Car,
   AlertTriangle,
   CheckCircle2,
   X,
@@ -114,7 +115,6 @@ import {
   Star,
   Camera as CameraIcon,
   Trash2,
-  Car,
   Sparkles,
   MessageSquare,
   Bell,
@@ -827,6 +827,8 @@ function HistoryView({
           maxSpeed: r.maxSpeed,
           timestamp: r.timestamp,
           category: r.config.mode === 'speed' ? '0-100' : '201m',
+          mode: r.config.mode === 'speed' ? 'speed' : 'distance',
+          target: r.config.target,
           latitude: r.location.latitude,
           longitude: r.location.longitude,
           slope: r.slope || 0
@@ -1466,7 +1468,8 @@ function PublicProfile({
               <div className="absolute -bottom-4 -right-4 w-16 h-16 flex items-center justify-center z-30 pointer-events-none">
                 <img 
                   src={BADGES.find(b => b.id === profile.activeBadgeId)?.imageUrl} 
-                  className="w-full h-full object-contain filter drop-shadow-[0_8px_15px_rgba(0,0,0,0.6)]" 
+                  className="w-full h-full object-contain filter drop-shadow-[0_8px_15px_rgba(0,0,0,0.6)] contrast-[1.3] brightness-110" 
+                  style={{ filter: 'url(#remove-black-filter)' }}
                   alt="Pilot Badge"
                 />
               </div>
@@ -1677,7 +1680,7 @@ function RegionalRanking({
   onViewProfile: (uid: string) => void
 }) {
   const [rankings, setRankings] = useState<RankingEntry[]>([]);
-  const [filter, setFilter] = useState<'regional' | 'regional-100' | 'general'>('regional');
+  const [filter, setFilter] = useState<'regional' | 'regional-100' | 'general' | 'regional-201'>('regional-201');
   const [typeFilter, setTypeFilter] = useState<'all' | 'car' | 'motorcycle'>('all');
   const [loading, setLoading] = useState(true);
 
@@ -1785,49 +1788,82 @@ function RegionalRanking({
         </div>
       </div>
 
-      <div className="space-y-3">
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : filteredRankings.length === 0 ? (
-          <div className="text-center py-12 space-y-3">
-            <div className="w-12 h-12 bg-zinc-900 rounded-full flex items-center justify-center mx-auto">
-              <Trophy className="w-6 h-6 text-zinc-700" />
+        {/* Standard List Section with Top 3 Highlights */}
+        <div className="space-y-3">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <div className="w-8 h-8 border-2 border-brand-primary border-t-transparent rounded-full animate-spin" />
             </div>
-            <p className="text-zinc-500 text-xs font-bold uppercase">Nenhum tempo registrado nesta região</p>
-          </div>
-        ) : (
-          filteredRankings.map((entry, index) => (
-            <div 
-              key={entry.id} 
-              className="glass-panel rounded-2xl p-4 border-white/5 flex items-center gap-4 cursor-pointer active:scale-[0.98] transition-all"
-              onClick={() => onViewProfile(entry.uid)}
-            >
-              <div className="w-8 h-8 bg-zinc-900 rounded-lg flex items-center justify-center text-xs font-black italic text-brand-primary border border-brand-primary/20">
-                #{index + 1}
+          ) : filteredRankings.length === 0 ? (
+            <div className="text-center py-12 space-y-3">
+              <div className="w-12 h-12 bg-zinc-900 rounded-full flex items-center justify-center mx-auto">
+                <Trophy className="w-6 h-6 text-zinc-700" />
               </div>
-              <div className="w-10 h-10 rounded-full overflow-hidden border border-white/10">
-                {entry.userPhoto ? (
-                  <img src={entry.userPhoto} alt={entry.userName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                ) : (
-                  <div className="w-full h-full bg-zinc-800 flex items-center justify-center">
-                    <User className="w-5 h-5 text-zinc-600" />
-                  </div>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <h4 className="text-sm font-bold text-white truncate">{entry.userName}</h4>
-                <p className="text-[10px] text-zinc-500 font-bold uppercase truncate">{entry.vehicleName}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-xl font-display font-black text-brand-accent italic leading-none">{entry.time.toFixed(2)}s</p>
-                <p className="text-[9px] text-zinc-500 font-bold uppercase mt-1">{Math.round(entry.maxSpeed)} km/h</p>
-              </div>
+              <p className="text-zinc-500 text-xs font-bold uppercase">Nenhum tempo registrado nesta região</p>
             </div>
-          ))
-        )}
-      </div>
+          ) : (
+            filteredRankings.map((entry, index) => {
+               const pos = index + 1;
+               const isTop3 = pos <= 3;
+               const isGold = pos === 1;
+               const isSilver = pos === 2;
+               const isBronze = pos === 3;
+
+               return (
+                  <motion.div 
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    key={entry.id}
+                    onClick={() => onViewProfile(entry.uid)}
+                    className={`group relative flex items-center gap-4 p-4 rounded-2xl border transition-all active:scale-[0.98]
+                      ${isGold ? 'bg-gradient-to-r from-yellow-500/10 to-transparent border-yellow-500/30' : 
+                        isSilver ? 'bg-gradient-to-r from-zinc-400/10 to-transparent border-zinc-400/20' : 
+                        isBronze ? 'bg-gradient-to-r from-orange-700/10 to-transparent border-orange-700/20' :
+                        'bg-zinc-900/40 border-white/5 hover:bg-white/5'}`}
+                  >
+                     {/* Rank Position */}
+                     <div className="w-8 flex flex-col items-center justify-center">
+                        {isTop3 ? (
+                          <Trophy className={`w-5 h-5 fill-current ${isGold ? 'text-yellow-500' : isSilver ? 'text-zinc-400' : 'text-orange-600'}`} />
+                        ) : (
+                          <span className="text-zinc-500 font-display font-black italic text-xs">#{pos}</span>
+                        )}
+                     </div>
+
+                     {/* Photo */}
+                     <div className={`relative shrink-0 w-11 h-11 rounded-xl overflow-hidden border transition-colors bg-zinc-950
+                        ${isGold ? 'border-yellow-500' : isSilver ? 'border-zinc-400' : isBronze ? 'border-orange-700' : 'border-white/10'}`}>
+                        {entry.userPhoto ? (
+                          <img src={entry.userPhoto} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <User className="w-5 h-5 text-zinc-800 m-auto" />
+                        )}
+                     </div>
+
+                     {/* Pilot & Vehicle Info */}
+                     <div className="flex-1 min-w-0">
+                        <h4 className={`font-black uppercase italic truncate tracking-tight ${isGold ? 'text-yellow-500 text-xs' : 'text-white text-[11px]'}`}>
+                          {entry.userName}
+                        </h4>
+                        <p className="text-[9px] text-zinc-500 font-bold uppercase truncate flex items-center gap-1.5 mt-0.5">
+                           <Car className="w-2.5 h-2.5 opacity-40" />
+                           {entry.vehicleName}
+                        </p>
+                     </div>
+
+                     {/* Time Results */}
+                     <div className="text-right">
+                        <p className={`font-display font-black italic transition-colors leading-none
+                           ${isGold ? 'text-xl text-yellow-500' : 'text-lg text-white'}`}>
+                           {entry.time.toFixed(2)}s
+                        </p>
+                        <p className="text-[8px] text-zinc-600 font-bold uppercase mt-1">{Math.round(entry.maxSpeed)} KM/H</p>
+                     </div>
+                  </motion.div>
+               );
+            })
+          )}
+        </div>
 
       <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-4 flex items-start gap-3">
         <AlertCircle className="w-5 h-5 text-brand-primary shrink-0 mt-0.5" />
@@ -1850,7 +1886,7 @@ function RegionalRankingElite({
 }) {
   const [rankings, setRankings] = useState<RankingEntry[]>([]);
   const [filter, setFilter] = useState<'regional' | 'regional-100' | 'general'>('regional');
-  const [category, setCategory] = useState<'0-100' | '201m'>('0-100');
+  const [category, setCategory] = useState<'0-100' | '201m'>('201m');
   const [typeFilter, setTypeFilter] = useState<'all' | 'car' | 'motorcycle'>('all');
   const [loading, setLoading] = useState(true);
 
@@ -1865,8 +1901,7 @@ function RegionalRankingElite({
 
     const q = query(
       collection(db, 'rankings'), 
-      where('mode', '==', mode),
-      where('target', '==', target),
+      where('category', '==', category),
       where('timestamp', '>=', startOfMonth.getTime()),
       orderBy('time', 'asc'), 
       limit(100)
@@ -1947,126 +1982,88 @@ function RegionalRankingElite({
             </div>
           </div>
 
-          {/* Podium Section */}
-          {!loading && top3.length > 0 && (
-            <div className="flex items-end justify-center gap-2 pt-6 h-64">
-                {/* 2nd Place */}
-                {top3[1] && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex-1 flex flex-col items-center gap-2"
-                    onClick={() => onViewProfile(top3[1].uid)}
-                  >
-                    <div className="relative">
-                      <div className="w-16 h-16 rounded-3xl border-2 border-zinc-400 p-1 bg-zinc-900 group shadow-lg">
-                         <img src={top3[1].userPhoto || 'https://via.placeholder.com/150'} className="w-full h-full object-cover rounded-2xl" />
-                      </div>
-                      <div className="absolute -bottom-2 -right-2 w-6 h-6 bg-zinc-400 rounded-full flex items-center justify-center text-[10px] font-black text-zinc-900 border-2 border-zinc-900">2</div>
-                    </div>
-                    <div className="text-center pt-2">
-                       <p className="text-[10px] font-black text-white italic truncate max-w-[80px] leading-tight">{top3[1].userName}</p>
-                       <p className="text-xl font-display font-black italic text-zinc-400">{top3[1].time.toFixed(2)}s</p>
-                    </div>
-                    <div className="w-full h-24 bg-zinc-800/40 border-t border-zinc-700/50 rounded-t-2xl" />
-                  </motion.div>
-                )}
-
-                {/* 1st Place */}
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="flex-1 flex flex-col items-center gap-2 -mb-4 z-10"
-                  onClick={() => onViewProfile(top3[0].uid)}
-                >
-                  <div className="relative">
-                    <div className="absolute -top-6 left-1/2 -translate-x-1/2">
-                       <Trophy className="w-8 h-8 text-yellow-500 drop-shadow-[0_0_10px_rgba(234,179,8,0.5)] fill-current" />
-                    </div>
-                    <div className="w-20 h-20 rounded-3xl border-4 border-yellow-500 p-1 bg-gradient-to-br from-yellow-500/20 to-transparent shadow-[0_0_30px_rgba(234,179,8,0.2)]">
-                       <img src={top3[0].userPhoto || 'https://via.placeholder.com/150'} className="w-full h-full object-cover rounded-2xl" />
-                    </div>
-                    <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center text-xs font-black text-zinc-900 border-4 border-zinc-900">1</div>
-                  </div>
-                  <div className="text-center pt-2">
-                     <p className="text-[12px] font-black text-white italic truncate max-w-[100px] leading-tight">{top3[0].userName}</p>
-                     <p className="text-2xl font-display font-black italic text-yellow-500 glow-yellow">{top3[0].time.toFixed(2)}s</p>
-                  </div>
-                  <div className="w-full h-32 bg-gradient-to-t from-zinc-800/60 to-zinc-800/80 border-t-2 border-yellow-500/50 rounded-t-3xl shadow-[0_-10px_30px_rgba(234,179,8,0.1)]" />
-                </motion.div>
-
-                {/* 3rd Place */}
-                {top3[2] && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex-1 flex flex-col items-center gap-2"
-                    onClick={() => onViewProfile(top3[2].uid)}
-                  >
-                    <div className="relative">
-                      <div className="w-16 h-16 rounded-3xl border-2 border-orange-700/50 p-1 bg-zinc-900">
-                         <img src={top3[2].userPhoto || 'https://via.placeholder.com/150'} className="w-full h-full object-cover rounded-2xl" />
-                      </div>
-                      <div className="absolute -bottom-2 -right-2 w-6 h-6 bg-orange-700 rounded-full flex items-center justify-center text-[10px] font-black text-white border-2 border-zinc-900">3</div>
-                    </div>
-                    <div className="text-center pt-2">
-                       <p className="text-[10px] font-black text-white italic truncate max-w-[80px] leading-tight">{top3[2].userName}</p>
-                       <p className="text-xl font-display font-black italic text-orange-600">{top3[2].time.toFixed(2)}s</p>
-                    </div>
-                    <div className="w-full h-20 bg-zinc-800/40 border-t border-zinc-700/50 rounded-t-2xl" />
-                  </motion.div>
-                )}
-            </div>
-          )}
-
-          {/* List Section with Luxury Design */}
-          <div className="space-y-4">
+          {/* Unified List Section with Top 3 Highlights */}
+          <div className="space-y-3">
              {loading ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-4">
                    <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
                    <p className="text-[10px] text-zinc-600 font-black uppercase tracking-[0.4em]">Sincronizando Satélites</p>
                 </div>
-             ) : others.length === 0 && top3.length === 0 ? (
+             ) : filteredRankings.length === 0 ? (
                <div className="text-center py-20 bg-white/5 rounded-[40px] border border-white/5">
                  <Trophy className="w-8 h-8 text-zinc-800 mx-auto mb-3" />
                  <p className="text-zinc-600 text-[10px] font-black uppercase tracking-widest">Pista Vazia</p>
                </div>
              ) : (
-                others.map((entry, index) => {
-                   const pos = index + 4;
+                filteredRankings.map((entry, index) => {
+                   const pos = index + 1;
+                   const isTop3 = pos <= 3;
+                   const isGold = pos === 1;
+                   const isSilver = pos === 2;
+                   const isBronze = pos === 3;
+
                    return (
                       <motion.div 
                         initial={{ opacity: 0, x: -10 }}
                         animate={{ opacity: 1, x: 0 }}
                         key={entry.id}
                         onClick={() => onViewProfile(entry.uid)}
-                        className="group relative bg-[#121212]/50 backdrop-blur-xl border border-white/5 rounded-[28px] p-4 flex items-center gap-4 hover:bg-white/5 transition-all active:scale-[0.98]"
+                        className={`group relative flex items-center gap-4 p-4 rounded-[28px] border transition-all active:scale-[0.98]
+                          ${isGold ? 'bg-gradient-to-r from-yellow-500/20 via-yellow-500/5 to-transparent border-yellow-500/30 shadow-[0_0_30px_rgba(234,179,8,0.1)]' : 
+                            isSilver ? 'bg-gradient-to-r from-zinc-400/10 to-transparent border-zinc-400/20' : 
+                            isBronze ? 'bg-gradient-to-r from-orange-700/10 to-transparent border-orange-700/20' :
+                            'bg-[#121212]/50 backdrop-blur-xl border-white/5 hover:bg-white/5'}`}
                       >
-                         <div className="w-8 flex flex-col items-center">
-                            <span className="text-zinc-600 font-display font-black italic text-xs">#{pos}</span>
+                         {/* Rank Position */}
+                         <div className="w-8 flex flex-col items-center justify-center relative">
+                            {isTop3 ? (
+                              <Trophy className={`w-5 h-5 fill-current ${isGold ? 'text-yellow-500 drop-shadow-[0_0_8px_rgba(234,179,8,0.5)]' : isSilver ? 'text-zinc-400' : 'text-orange-600'}`} />
+                            ) : (
+                              <span className="text-zinc-600 font-display font-black italic text-xs tracking-tighter">#{pos}</span>
+                            )}
                          </div>
-                         <div className="w-12 h-12 rounded-2xl overflow-hidden border border-white/10 group-hover:border-brand-primary/50 transition-colors bg-zinc-950">
+
+                         {/* Photo */}
+                         <div className={`relative shrink-0 ${isTop3 ? 'w-14 h-14' : 'w-12 h-12'} rounded-2xl overflow-hidden border-2 transition-colors bg-zinc-950
+                            ${isGold ? 'border-yellow-500' : isSilver ? 'border-zinc-400' : isBronze ? 'border-orange-700' : 'border-white/10 group-hover:border-brand-primary/50'}`}>
                             {entry.userPhoto ? (
                               <img src={entry.userPhoto} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                             ) : (
-                              <User className="w-5 h-5 text-zinc-800 m-auto mt-3.5" />
+                              <User className="w-6 h-6 text-zinc-800 m-auto" />
                             )}
                          </div>
+
+                         {/* Pilot & Vehicle Info */}
                          <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 min-w-0">
-                               <h4 className="text-xs font-black text-white uppercase italic truncate">{entry.userName}</h4>
-                               {entry.vehicleType === 'motorcycle' && <Navigation className="w-2.5 h-2.5 text-brand-secondary -rotate-90" />}
+                               <h4 className={`font-black uppercase italic truncate tracking-tight ${isGold ? 'text-yellow-500 text-sm' : 'text-white text-xs'}`}>
+                                 {entry.userName}
+                               </h4>
+                               {entry.vehicleType === 'motorcycle' && <Navigation className="w-3 h-3 text-brand-secondary -rotate-90" />}
                             </div>
-                            <p className="text-[8px] text-zinc-500 font-black tracking-widest uppercase truncate">{entry.vehicleName}</p>
+                            <p className="text-[9px] text-zinc-400 font-black tracking-widest uppercase truncate flex items-center gap-2">
+                               <Car className="w-3 h-3 opacity-40" />
+                               {entry.vehicleName || 'Veículo Desconhecido'}
+                            </p>
                          </div>
+
+                         {/* Time Results */}
                          <div className="text-right">
-                             <p className="text-lg font-display font-black text-white italic group-hover:text-brand-primary transition-colors">{entry.time.toFixed(2)}s</p>
-                             <div className="flex items-center gap-1 justify-end opacity-50">
-                                <span className="text-[8px] font-black text-zinc-500">{Math.round(entry.maxSpeed)} KM/H</span>
-                             </div>
+                            <p className={`font-display font-black italic transition-colors leading-none mb-1
+                               ${isGold ? 'text-2xl text-yellow-500 glow-yellow' : 'text-xl text-white group-hover:text-brand-primary'}`}>
+                               {entry.time.toFixed(2)}s
+                            </p>
+                            <div className="flex items-center gap-1 justify-end opacity-60">
+                               <span className="text-[9px] font-black text-zinc-500">{Math.round(entry.maxSpeed)} KM/H</span>
+                            </div>
                          </div>
-                         {/* Subtle Shadow Glow */}
-                         <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-transparent via-brand-primary/5 to-transparent rounded-full" />
+
+                         {/* High-End Decor Lines for Top 3 */}
+                         {isTop3 && (
+                           <div className={`absolute top-0 right-0 w-32 h-32 opacity-20 pointer-events-none overflow-hidden rounded-tr-[28px]`}>
+                              <div className={`absolute -top-16 -right-16 w-32 h-32 rotate-45 ${isGold ? 'bg-yellow-500' : isSilver ? 'bg-zinc-400' : 'bg-orange-700'}`} />
+                           </div>
+                         )}
                       </motion.div>
                    )
                 })
@@ -2930,44 +2927,87 @@ function VehicleSettings({
       setUploadStatus('[S1] Abrindo Galeria...');
       
       const photo = await Camera.getPhoto({
-        quality: 80,
+        quality: 60,
         allowEditing: false,
         resultType: CameraResultType.DataUrl,
         source: CameraSource.Photos,
-        width: 1024,
-        height: 1024
+        width: 800,
+        height: 800
       });
 
       if (!photo.dataUrl) throw new Error('Câmera não retornou os dados da imagem.');
-      await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'PHOTO_DATA_RECEIVED', details: { format: photo.format } });
+      await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'PHOTO_DATA_RECEIVED', details: { format: photo.format, size_est: photo.dataUrl.length } });
       
       setUploadStatus('[S2] Preparando Foto...');
       const fileName = `main_${Date.now()}.jpg`;
       const path = `vehicles/${auth.currentUser.uid}/${formData.id || 'new'}/${fileName}`;
       const storageRef = ref(storage, path);
       
+      setUploadProgress(15);
+      setUploadStatus('[S3] Convertendo Binário...');
+      
+      // Manual Base64 to Blob conversion (more stable on some Androids than fetch)
+      const base64Data = photo.dataUrl.split(',')[1];
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'image/jpeg' });
+      
       setUploadProgress(30);
-      setUploadStatus('[S3] Enviando para Nuvem...');
-      await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'STORAGE_UPLOAD_START', details: { path } });
+      setUploadStatus('[S4] Iniciando Transferência...');
+      await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'STORAGE_UPLOAD_START_RESUMABLE', details: { path, size: blob.size } });
       
-      await uploadString(storageRef, photo.dataUrl, 'data_url');
+      const uploadTask = uploadBytesResumable(storageRef, blob, { contentType: 'image/jpeg' });
       
-      setUploadStatus('[S4] Finalizando...');
-      setUploadProgress(90);
-      
-      const downloadURL = await getDownloadURL(storageRef);
-      setFormData({ ...formData, photoURL: downloadURL });
-      
-      await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'UPLOAD_MAIN_SUCCESS', details: { url: downloadURL } });
-      
-      setUploadStatus('Sucesso!');
-      setUploadProgress(100);
-      
-      setTimeout(() => {
-        setIsUploading(false);
-        setUploadProgress(0);
-        setUploadStatus('');
-      }, 1000);
+      return new Promise<void>((resolve, reject) => {
+        // Safety timeout: 120 seconds
+        const timeout = setTimeout(() => {
+          uploadTask.cancel();
+          const err = new Error('Tempo limite excedido (120s). Verifique sua conexão.');
+          logRemote({ uid: auth.currentUser!.uid, level: 'error', message: 'UPLOAD_TIMEOUT', details: { size: blob.size } });
+          reject(err);
+        }, 120000);
+
+        uploadTask.on('state_changed',
+          (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            setUploadProgress(30 + (progress * 0.6));
+            setUploadStatus(`Enviando... ${Math.round(progress)}%`);
+          },
+          async (error) => {
+            clearTimeout(timeout);
+            console.error('Upload error:', error);
+            await logRemote({ uid: auth.currentUser!.uid, level: 'error', message: 'UPLOAD_MAIN_ERROR_TASK', details: { code: error.code, message: error.message } });
+            reject(error);
+          },
+          async () => {
+            clearTimeout(timeout);
+            setUploadStatus('[S5] Finalizando...');
+            setUploadProgress(95);
+            
+            try {
+              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              setFormData({ ...formData, photoURL: downloadURL });
+              await logRemote({ uid: auth.currentUser!.uid, level: 'info', message: 'UPLOAD_MAIN_SUCCESS', details: { url: downloadURL } });
+              setUploadStatus('Sucesso!');
+              setUploadProgress(100);
+              
+              setTimeout(() => {
+                setIsUploading(false);
+                setUploadProgress(0);
+                setUploadStatus('');
+                resolve();
+              }, 1000);
+            } catch (err: any) {
+              await logRemote({ uid: auth.currentUser!.uid, level: 'error', message: 'GET_URL_ERROR', details: { message: err.message } });
+              reject(err);
+            }
+          }
+        );
+      });
     } catch (error: any) {
       console.error('Photo Error:', error);
       await logRemote({ 
@@ -3006,41 +3046,63 @@ function VehicleSettings({
       if (Capacitor.isNativePlatform() && !e) {
         setUploadStatus('[S1] Capturando Foto...');
         const photo = await Camera.getPhoto({
-          quality: 80,
+          quality: 60,
           allowEditing: false,
           resultType: CameraResultType.DataUrl,
           source: CameraSource.Photos,
-          width: 1024,
-          height: 1024
+          width: 800,
+          height: 800
         });
         
         if (!photo.dataUrl) throw new Error('Câmera não retornou os dados da imagem.');
         await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'EXTRA_PHOTO_DATA_RECEIVED', details: { format: photo.format } });
         
-        setUploadStatus('[S2] Enviando Foto Extra...');
-        setUploadProgress(40);
+        setUploadStatus('[S2] Preparando Binário...');
+        setUploadProgress(20);
         
-        await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'EXTRA_STORAGE_UPLOAD_START', details: { path } });
-        await uploadString(storageRef, photo.dataUrl, 'data_url');
+        // Convert to blob for robust upload
+        const response = await fetch(photo.dataUrl);
+        const blob = await response.blob();
         
-        setUploadStatus('[S3] Finalizando...');
-        setUploadProgress(90);
+        await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'EXTRA_STORAGE_UPLOAD_START_RESUMABLE', details: { path, size: blob.size } });
         
-        const downloadURL = await getDownloadURL(storageRef);
-        setFormData({
-          ...formData,
-          photoURLs: [...currentPhotos, downloadURL]
+        const uploadTask = uploadBytesResumable(storageRef, blob, { contentType: 'image/jpeg' });
+        
+        return new Promise<void>((resolve, reject) => {
+          uploadTask.on('state_changed',
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              setUploadProgress(30 + (progress * 0.6));
+              setUploadStatus(`Enviando Extra... ${Math.round(progress)}%`);
+            },
+            async (error) => {
+              console.error('Extra upload error:', error);
+              await logRemote({ uid: auth.currentUser!.uid, level: 'error', message: 'UPLOAD_EXTRA_ERROR_TASK', details: { code: error.code, message: error.message } });
+              reject(error);
+            },
+            async () => {
+              setUploadStatus('Finalizando...');
+              setUploadProgress(95);
+              
+              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+              setFormData({
+                ...formData,
+                photoURLs: [...currentPhotos, downloadURL]
+              });
+              
+              await logRemote({ uid: auth.currentUser!.uid, level: 'info', message: 'EXTRA_UPLOAD_SUCCESS', details: { url: downloadURL } });
+              
+              setUploadStatus('Sucesso!');
+              setUploadProgress(100);
+              setTimeout(() => {
+                setIsUploading(false);
+                setUploadProgress(0);
+                setUploadStatus('');
+                resolve();
+              }, 1000);
+            }
+          );
         });
-        
-        await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'EXTRA_UPLOAD_SUCCESS', details: { url: downloadURL } });
-        
-        setUploadStatus('Sucesso!');
-        setUploadProgress(100);
-        setTimeout(() => {
-          setIsUploading(false);
-          setUploadProgress(0);
-          setUploadStatus('');
-        }, 1000);
       } else if (e) {
         const file = e.target.files?.[0];
         if (!file) throw new Error('Nenhum arquivo selecionado.');
@@ -5246,7 +5308,9 @@ export default function App() {
   const [destination, setDestination] = useState<string | null>(null);
   const { 
     nextCurve, 
+    posteriorCurve,
     upcomingNodes, 
+    lookAheadDistance,
     isRouteMode, 
     currentRoadName 
   } = useCorneringAssistant(
@@ -5256,7 +5320,10 @@ export default function App() {
     currentSpeed, 
     user?.uid,
     isGuest,
-    { baseDist: telemetryConfig.lookAheadBaseDistance || 500 },
+    { 
+      baseDist: telemetryConfig.lookAheadBaseDistance || 1200,
+      maxDist: 2500 
+    },
     destination
   );
 
@@ -5504,8 +5571,7 @@ export default function App() {
 
         const q = query(
           collection(db, 'rankings'),
-          where('mode', '==', mode),
-          where('target', '==', target),
+          where('category', '==', cat),
           where('timestamp', '>=', startOfLastMonth),
           where('timestamp', '<', startOfCurrentMonth),
           orderBy('time', 'asc'),
@@ -5968,6 +6034,8 @@ export default function App() {
               maxSpeed: lastResult.maxSpeed,
               timestamp: lastResult.timestamp,
               category: isStandard0to100 ? '0-100' : '201m',
+              mode: isStandard0to100 ? 'speed' : 'distance',
+              target: isStandard0to100 ? 100 : 201,
               latitude: lastResult.location.latitude,
               longitude: lastResult.location.longitude,
               slope: lastResult.slope || 0,
@@ -6693,12 +6761,13 @@ export default function App() {
           >
             <CorneringAssistantHUD 
               nextCurve={nextCurve}
+              posteriorCurve={posteriorCurve}
               upcomingNodes={upcomingNodes}
               currentLat={currentLat}
               currentLng={currentLng}
               currentHeading={currentHeading}
               speedKmh={currentSpeed}
-              lookAheadDistance={telemetryConfig.lookAheadBaseDistance || 500}
+              lookAheadDistance={lookAheadDistance}
               destination={destination}
               setDestination={setDestination}
               isRouteMode={isRouteMode}
@@ -7142,6 +7211,18 @@ export default function App() {
           />
         )}
       </div>
+      
+      {/* Global SVG Filters for UI Processing */}
+      <svg width="0" height="0" style={{ position: 'absolute', pointerEvents: 'none' }}>
+        <defs>
+          <filter id="remove-black-filter" colorInterpolationFilters="sRGB">
+            <feColorMatrix type="matrix" values="1 0 0 0 0
+                                                 0 1 0 0 0
+                                                 0 0 1 0 0
+                                                 1 1 1 0 -1" />
+          </filter>
+        </defs>
+      </svg>
     </ErrorBoundary>
   );
 }
@@ -7334,7 +7415,8 @@ function PublicProfileDetail({ uid, currentUserId, onBack, onUpdateProfile, onEd
                     <div className="w-12 h-12 flex items-center justify-center bg-transparent overflow-visible">
                        <img 
                          src={BADGES.find(b => b.id === profile.activeBadgeId)?.imageUrl} 
-                         className="w-full h-full object-contain filter drop-shadow-[0_5px_10px_rgba(0,0,0,0.5)] mix-blend-screen contrast-125 brightness-110" 
+                         className="w-full h-full object-contain filter drop-shadow-[0_5px_10px_rgba(0,0,0,0.5)] contrast-[1.3] brightness-110" 
+                         style={{ filter: 'url(#remove-black-filter)' }}
                          alt="Badge" 
                        />
                     </div>

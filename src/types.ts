@@ -42,6 +42,8 @@ export interface RankingEntry {
   maxSpeed: number;
   timestamp: number;
   category: '0-100' | '201m' | '402m';
+  mode: 'speed' | 'distance';
+  target: number;
   latitude: number;
   longitude: number;
   slope: number;

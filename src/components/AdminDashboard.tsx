@@ -553,7 +553,7 @@ export function AdminDashboard({
                   </div>
 
                   <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                    {Object.values(profiles).map((profile) => (
+                    {(Object.values(profiles) as TelemetryProfile[]).map((profile) => (
                       <button
                         key={profile.id} onClick={() => selectProfile(profile.id)}
                         className={`flex-shrink-0 px-4 py-3 rounded-2xl border transition-all flex flex-col gap-1 min-w-[120px] ${selectedProfileId === profile.id ? 'border-brand-primary bg-brand-primary/10' : 'bg-zinc-950/50 border-white/5'}`}

@@ -12,6 +12,7 @@ export interface ProfileThemeDef {
   borderClass: string;
   bannerUrl?: string;
   neonColor?: string;
+  isMoto?: boolean;
 }
 
 export interface StoreItem {
@@ -204,12 +205,89 @@ export const PROFILE_THEMES: ProfileThemeDef[] = [
     accentBg: 'bg-blue-600',
     cardBg: 'bg-blue-900/20',
     borderClass: 'border-blue-500/30',
-    bannerUrl: '/assets/banner_yamaha.png'
+    bannerUrl: '/assets/banner_yamaha.png',
+    isMoto: true
+  },
+  {
+    id: 'moto_kawasaki',
+    name: 'Team Green (Kawasaki)',
+    isBrand: true,
+    isMoto: true,
+    price: 1290,
+    priceLabel: '🪙 1290 DC',
+    backgroundClass: 'bg-emerald-950/20',
+    headerClass: 'bg-gradient-to-br from-lime-600/40 to-black',
+    accentText: 'text-lime-400', 
+    accentBg: 'bg-lime-600',
+    cardBg: 'bg-emerald-900/30',
+    borderClass: 'border-lime-500/30',
+    bannerUrl: '/assets/banner_kawasaki.png'
+  },
+  {
+    id: 'moto_harley',
+    name: 'Freedom (Harley-Davidson)',
+    isBrand: true,
+    isMoto: true,
+    price: 1490,
+    priceLabel: '🪙 1490 DC',
+    backgroundClass: 'bg-orange-950/20',
+    headerClass: 'bg-gradient-to-t from-black to-orange-900/40',
+    accentText: 'text-orange-500', 
+    accentBg: 'bg-orange-600',
+    cardBg: 'bg-zinc-900',
+    borderClass: 'border-orange-600/20',
+    bannerUrl: '/assets/banner_harley.png'
+  },
+  {
+    id: 'moto_royal',
+    name: 'Classic (Royal Enfield)',
+    isBrand: true,
+    isMoto: true,
+    price: 990,
+    priceLabel: '🪙 990 DC',
+    backgroundClass: 'bg-stone-950',
+    headerClass: 'bg-gradient-to-b from-stone-800 to-stone-950',
+    accentText: 'text-amber-700', 
+    accentBg: 'bg-amber-800',
+    cardBg: 'bg-stone-900',
+    borderClass: 'border-amber-900/20',
+    bannerUrl: '/assets/banner_royal.png'
+  },
+  {
+    id: 'moto_honda_racing',
+    name: 'HRC Racing (Honda Moto)',
+    isBrand: true,
+    isMoto: true,
+    price: 1290,
+    priceLabel: '🪙 1290 DC',
+    backgroundClass: 'bg-zinc-950',
+    headerClass: 'bg-gradient-to-tr from-red-600/30 via-white/5 to-blue-600/30',
+    accentText: 'text-red-500', 
+    accentBg: 'bg-red-600',
+    cardBg: 'bg-zinc-900',
+    borderClass: 'border-blue-500/20',
+    bannerUrl: '/assets/banner_honda_moto.png'
+  },
+  {
+    id: 'moto_suzuki',
+    name: 'Speed (Suzuki)',
+    isBrand: true,
+    isMoto: true,
+    price: 1290,
+    priceLabel: '🪙 1290 DC',
+    backgroundClass: 'bg-blue-950/20',
+    headerClass: 'bg-gradient-to-br from-blue-600/40 to-slate-900',
+    accentText: 'text-blue-300', 
+    accentBg: 'bg-blue-500',
+    cardBg: 'bg-slate-900',
+    borderClass: 'border-blue-400/20',
+    bannerUrl: '/assets/banner_suzuki.png'
   },
   {
     id: 'moto_ducati',
     name: 'Rosso Corsa (Ducati)',
     isBrand: true,
+    isMoto: true,
     price: 1490,
     priceLabel: '🪙 1490 DC',
     backgroundClass: 'bg-red-950/20',
@@ -224,6 +302,7 @@ export const PROFILE_THEMES: ProfileThemeDef[] = [
     id: 'motogp_pro',
     name: 'MotoGP Pro',
     isBrand: true,
+    isMoto: true,
     price: 1590,
     priceLabel: '🪙 1590 DC',
     backgroundClass: 'bg-stone-950',
@@ -238,6 +317,7 @@ export const PROFILE_THEMES: ProfileThemeDef[] = [
     id: 'grau_244',
     name: 'Cultura 244 (Grau)',
     isBrand: true,
+    isMoto: true,
     price: 990,
     priceLabel: '🪙 990 DC',
     backgroundClass: 'bg-zinc-950',

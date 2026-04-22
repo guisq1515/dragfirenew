@@ -4,6 +4,7 @@ import { fetchRoutePoints } from '../services/googleMapsService';
 
 interface UseCorneringAssistant {
   nextCurve: CurveData | null;
+  posteriorCurve: CurveData | null;
   upcomingNodes: RoadNode[];
   isLoading: boolean;
   lookAheadDistance: number;
@@ -27,7 +28,7 @@ export function useCorneringAssistant(
   },
   externalDestination?: string | null
 ) {
-  const [nextCurve, setNextCurve] = useState<CurveData | null>(null);
+  const [curves, setCurves] = useState<CurveData[]>([]);
   const [upcomingNodes, setUpcomingNodes] = useState<RoadNode[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [destination, setDestination] = useState<string | null>(externalDestination || null);
@@ -44,9 +45,9 @@ export function useCorneringAssistant(
   }, [externalDestination]);
 
   // Default values for look-ahead
-  const baseDist = config?.baseDist ?? 800; // Aumentado de 500
-  const speedFactor = config?.speedFactor ?? 8; // Aumentado de 5
-  const maxDist = config?.maxDist ?? 2000; // Aumentado de 1500
+  const baseDist = config?.baseDist ?? 2000; 
+  const speedFactor = config?.speedFactor ?? 12; 
+  const maxDist = config?.maxDist ?? 4000; 
 
   // Dynamic distance calculation
   const lookAheadDistance = Math.min(maxDist, baseDist + (speedKmh * speedFactor));
@@ -70,10 +71,9 @@ export function useCorneringAssistant(
       return;
     }
 
-    // Default Scanner: Check if we moved enough to warrant a check (50m)
-    // Thanks to TopologicalRegion cache, this is now computationally free if inside the region.
+    // Default Scanner: Check if we moved enough to warrant a check (30m for better resolution)
     const shouldFetch = !lastFetchRef.current || 
-      curveService.haversineDistance(lat, lng, lastFetchRef.current.lat, lastFetchRef.current.lng) > 50;
+      curveService.haversineDistance(lat, lng, lastFetchRef.current.lat, lastFetchRef.current.lng) > 30;
 
     if (shouldFetch) {
       const updateGeometry = async () => {
@@ -92,18 +92,19 @@ export function useCorneringAssistant(
   // 2. Perform Curve Analysis
   useEffect(() => {
     if (!upcomingNodes.length || lat === null || lng === null) {
-      setNextCurve(null);
+      setCurves([]);
       return;
     }
 
-    // Analyze next curve based on current position and heading
-    const analysis = curveService.findNextCurve(lat, lng, heading, upcomingNodes, lookAheadDistance);
-    setNextCurve(analysis);
+    // Analyze upcoming curves based on current position and heading
+    const foundCurves = curveService.findUpcomingCurves(lat, lng, heading, upcomingNodes, lookAheadDistance);
+    setCurves(foundCurves);
 
   }, [lat, lng, heading, upcomingNodes, lookAheadDistance]);
 
   return { 
-    nextCurve, 
+    nextCurve: curves[0] || null, 
+    posteriorCurve: curves[1] || null,
     upcomingNodes, 
     isLoading, 
     lookAheadDistance, 

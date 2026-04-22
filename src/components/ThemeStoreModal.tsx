@@ -16,7 +16,7 @@ export function ThemeStoreModal({
   onUpdate: (data: Partial<UserProfile>) => void;
 }) {
   const [activeTab, setActiveTab] = useState<'themes' | 'badges' | 'neon' | 'titles'>('themes');
-  const [themeCategory, setThemeCategory] = useState<'all' | 'normal' | 'brands'>('all');
+  const [themeCategory, setThemeCategory] = useState<'all' | 'normal' | 'brands' | 'motos'>('all');
   const [loadingItemId, setLoadingItemId] = useState<string | null>(null);
 
   const unlockedThemes = profile.unlockedThemes || ['default'];
@@ -32,8 +32,9 @@ export function ThemeStoreModal({
   // Filter themes and sort them (equipped/unlocked first)
   const filteredThemes = PROFILE_THEMES.filter(t => {
     if (themeCategory === 'all') return true;
-    if (themeCategory === 'normal') return !t.isBrand && t.id !== 'default';
-    if (themeCategory === 'brands') return t.isBrand;
+    if (themeCategory === 'normal') return !t.isBrand && !t.isMoto && t.id !== 'default';
+    if (themeCategory === 'brands') return t.isBrand && !t.isMoto;
+    if (themeCategory === 'motos') return !!t.isMoto;
     return true;
   });
 
@@ -226,7 +227,8 @@ export function ThemeStoreModal({
                 {[
                   { id: 'all', label: 'Todos' },
                   { id: 'normal', label: 'Geral' },
-                  { id: 'brands', label: 'Marcas' }
+                  { id: 'brands', label: 'Marcas' },
+                  { id: 'motos', label: 'Motos' }
                 ].map(cat => (
                   <button
                     key={cat.id}
@@ -304,9 +306,14 @@ export function ThemeStoreModal({
 
                      return (
                        <div key={badge.id} className="bg-zinc-900/50 backdrop-blur-md border border-white/5 rounded-2xl p-4 flex items-center gap-4 group hover:border-brand-primary/30 transition-all">
-                          <div className="w-12 h-12 rounded-xl bg-black flex items-center justify-center overflow-hidden border border-white/5 p-1">
-                            <img src={badge.imageUrl} className="w-10 h-10 object-contain" alt="" />
-                          </div>
+                           <div className="w-12 h-12 rounded-xl bg-black/40 flex items-center justify-center overflow-hidden border border-white/5 p-1">
+                             <img 
+                               src={badge.imageUrl} 
+                               className="w-10 h-10 object-contain contrast-[1.2] brightness-110" 
+                               style={{ filter: 'url(#remove-black-filter)' }}
+                               alt="" 
+                             />
+                           </div>
                           <div className="flex-1 min-w-0">
                              <h3 className="font-black italic text-white text-xs uppercase truncate leading-none mb-1.5">{badge.name}</h3>
                              <p className="text-[7px] text-zinc-500 font-black tracking-widest uppercase">Elite Badge</p>

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "qt17dR4H2vX69fSEGOxR",
+    "timestamp": "2026-04-20T20:05:01.635Z",
+    "details": {
+      "path": "vehicles/ZQ7ZTpZLHIfHSyC1O73BnaGgmS23/UVmaSi36R56YWqyRH9xo/main_1776715501504.jpg"
+    },
+    "version": "v1.9.31-ELITE-STABLE",
+    "level": "info",
+    "message": "STORAGE_UPLOAD_START",
+    "platform": "android",
+    "uid": "ZQ7ZTpZLHIfHSyC1O73BnaGgmS23"
+  },
+  {
+    "id": "GbGRsdri2eQWy1vzqvJV",
+    "details": {
+      "format": "jpeg"
+    },
+    "timestamp": "2026-04-20T20:05:01.566Z",
+    "version": "v1.9.31-ELITE-STABLE",
+    "platform": "android",
+    "level": "info",
+    "message": "PHOTO_DATA_RECEIVED",
+    "uid": "ZQ7ZTpZLHIfHSyC1O73BnaGgmS23"
+  },
+  {
+    "id": "3o1CviBnVTzJILn6fMPb",
+    "uid": "ZQ7ZTpZLHIfHSyC1O73BnaGgmS23",
+    "platform": "android",
+    "message": "UPLOAD_MAIN_START",
+    "level": "info",
+    "version": "v1.9.31-ELITE-STABLE",
+    "details": {
+      "vehicleId": "UVmaSi36R56YWqyRH9xo"
+    },
+    "timestamp": "2026-04-20T20:04:37.170Z"
+  }
+]

@@ -23,6 +23,7 @@ import { CurveData, RoadNode } from '../services/CurveAnalysisService';
 
 interface CorneringAssistantHUDProps {
   nextCurve: CurveData | null;
+  posteriorCurve: CurveData | null;
   upcomingNodes: RoadNode[];
   currentLat: number | null;
   currentLng: number | null;
@@ -38,6 +39,7 @@ interface CorneringAssistantHUDProps {
 
 export function CorneringAssistantHUD({
   nextCurve,
+  posteriorCurve,
   upcomingNodes,
   currentLat,
   currentLng,
@@ -59,30 +61,33 @@ export function CorneringAssistantHUD({
 
   const getSeverityBaseColor = (severity?: string) => {
     switch (severity) {
-      case 'hard': return '#ef4444'; // Red
-      case 'hairpin': return '#ef4444'; // Red (User specifically wanted Red for closed)
-      case 'medium': return '#eab308'; // Yellow
+      case 'straight': return '#22c55e'; // Green
       case 'soft': return '#22c55e'; // Green
+      case 'medium': return '#eab308'; // Yellow
+      case 'hard': return '#ef4444'; // Red
+      case 'hairpin': return '#ef4444'; // Red
       default: return '#06b6d4'; // Cyan
     }
   };
 
   const getSeverityBgClass = (severity?: string) => {
     switch (severity) {
-      case 'hard': return 'bg-red-950/40 border-red-500/30';
-      case 'hairpin': return 'bg-purple-950/40 border-purple-500/30';
-      case 'medium': return 'bg-yellow-950/40 border-yellow-500/30';
+      case 'straight': return 'bg-emerald-950/40 border-emerald-500/30';
       case 'soft': return 'bg-emerald-950/40 border-emerald-500/30';
+      case 'medium': return 'bg-yellow-950/40 border-yellow-500/30';
+      case 'hard': return 'bg-red-950/40 border-red-500/30';
+      case 'hairpin': return 'bg-red-950/60 border-red-600/50';
       default: return 'bg-zinc-900/50 border-white/10';
     }
   };
 
   const getSeverityLabel = (severity: string) => {
     switch (severity) {
+      case 'straight': return 'Pista Livre / Reta';
+      case 'soft': return 'Curva Suave';
+      case 'medium': return 'Curva Médiana';
       case 'hard': return 'Curva Fechada';
       case 'hairpin': return 'Grampo 180°';
-      case 'medium': return 'Curva Médiana';
-      case 'soft': return 'Curva Leve';
       default: return 'Curva Rápida';
     }
   };
@@ -95,124 +100,85 @@ export function CorneringAssistantHUD({
     }
   };
 
-  // --- SVG Projector Helpers ---
-  const renderCurveProjector = (curve: CurveData) => {
-    const points = curve.points;
-    if (points.length < 2) return null;
-
+  // --- PREDEFINED PLATE LOGIC ---
+  const renderPredefinedPlate = (curve: CurveData, size: 'normal' | 'small' = 'normal') => {
     const color = getSeverityBaseColor(curve.severity);
-    
-    // Normalize points relative to first point for drawing
-    const first = points[0];
-    const pathData = points.map((p, i) => {
-      // Scale: 1 unit = ~0.5 meters (rough)
-      const x = 120 + (p.lng - first.lng) * 40000;
-      const y = 200 - (p.lat - first.lat) * 40000;
-      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-    }).join(' ');
-
-    return (
-      <div className="relative w-72 h-72 flex items-center justify-center">
-         {/* Perspective Background Lines */}
-         <div className="absolute inset-0 opacity-10 flex flex-col justify-between p-10 pointer-events-none">
-            <div className="h-px w-full bg-white/20" />
-            <div className="h-px w-full bg-white/40" />
-            <div className="h-px w-full bg-white/60" />
-            <div className="h-px w-full bg-white/80" />
-         </div>
-
-         <svg viewBox="0 0 240 240" className="w-full h-full drop-shadow-[0_0_20px_rgba(255,255,255,0.2)]">
-            <defs>
-               <linearGradient id="curveGradient" x1="0%" y1="100%" x2="0%" y2="0%">
-                  <stop offset="0%" stopColor={color} stopOpacity="0.2" />
-                  <stop offset="100%" stopColor={color} stopOpacity="1" />
-               </linearGradient>
-            </defs>
-            <motion.path 
-              d={pathData}
-              fill="none"
-              stroke="url(#curveGradient)"
-              strokeWidth="10"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              initial={{ pathLength: 0, opacity: 0 }}
-              animate={{ pathLength: 1, opacity: 1 }}
-              transition={{ duration: 0.8, ease: "easeOut" }}
-            />
-            {/* Motion Dots */}
-            <motion.circle r="4" fill="#fff" initial={{ offset: 0 }} animate={{ offset: 1 }} transition={{ repeat: Infinity, duration: 2 }}>
-               <animateMotion dur="2s" repeatCount="indefinite" path={pathData} />
-            </motion.circle>
-         </svg>
-      </div>
-    );
-  };
-
-  const renderCurveSign = (curve: CurveData) => {
+    const isNormal = size === 'normal';
     const isLeft = curve.direction === 'left';
-    const angle = curve.angle;
-    const color = getSeverityBaseColor(curve.severity);
-    const isNear = curve.distance <= 100;
+    const isStraight = curve.severity === 'straight';
+
+    // SVG paths for specific types
+    let path = "M 50 80 L 50 20"; // Default Straight
+    let arrowHead = "M 40 30 L 50 20 L 60 30";
+    
+    if (isStraight) {
+       path = "M 50 85 L 50 15";
+       arrowHead = "M 40 30 L 50 15 L 60 30";
+    } else if (curve.severity === 'soft') {
+       path = isLeft ? "M 50 85 C 50 50, 45 40, 30 30" : "M 50 85 C 50 50, 55 40, 70 30";
+       arrowHead = isLeft ? "M 32 42 L 30 30 L 42 32" : "M 58 32 L 70 30 L 68 42";
+    } else if (curve.severity === 'medium') {
+       path = isLeft ? "M 50 85 C 50 50, 40 45, 20 40" : "M 50 85 C 50 50, 60 45, 80 40";
+       arrowHead = isLeft ? "M 25 50 L 20 40 L 30 35" : "M 70 35 L 80 40 L 75 50";
+    } else if (curve.severity === 'hard' || curve.severity === 'hairpin') {
+       path = isLeft ? "M 50 85 L 50 40 L 20 40" : "M 50 85 L 50 40 L 80 40";
+       arrowHead = isLeft ? "M 28 50 L 20 40 L 28 30" : "M 72 30 L 80 40 L 72 50";
+       if (curve.severity === 'hairpin') {
+          path = isLeft ? "M 50 85 L 50 30 C 50 15, 20 15, 20 30 L 20 60" : "M 50 85 L 50 30 C 50 15, 80 15, 80 30 L 80 60";
+          arrowHead = isLeft ? "M 12 52 L 20 60 L 28 52" : "M 72 52 L 80 60 L 88 52";
+       }
+    }
 
     return (
-      <div className="relative w-64 h-64 flex items-center justify-center">
-         {/* Diamond Road Sign Shape - FULL BACKGROUND COLOR */}
+      <div className={`relative ${isNormal ? 'w-56 h-56' : 'w-24 h-24'} flex items-center justify-center`}>
          <motion.div 
             initial={{ rotate: 45, scale: 0.8 }}
-            animate={{ 
-              scale: isNear ? [1, 1.1, 1] : 1,
-              backgroundColor: color 
-            }}
-            transition={{
-              scale: isNear ? { repeat: Infinity, duration: 1 } : { duration: 0.3 }
-            }}
-            className={`absolute w-56 h-56 border-4 border-white/20 rounded-3xl shadow-[0_0_60px_rgba(0,0,0,0.6)]`}
-            style={{ backgroundColor: color }}
+            animate={{ scale: 1, backgroundColor: color }}
+            className={`absolute ${isNormal ? 'w-48 h-48 border-4' : 'w-20 h-20 border-2'} border-white/20 rounded-[2.5rem] shadow-2xl`}
          />
          
-         {/* Dynamic Arrow - White for contrast against colored background */}
-         <svg viewBox="0 0 100 100" className={`w-40 h-40 relative z-10 ${isLeft ? 'scale-x-[-1]' : ''}`}>
-           <motion.path 
-             d={`M 30 70 Q 30 30 ${30 + Math.min(50, angle/2)} 30`}
-             fill="none"
-             stroke="#fff"
-             strokeWidth="12"
-             strokeLinecap="round"
-             initial={{ pathLength: 0 }}
-             animate={{ pathLength: 1 }}
-             style={{ filter: `drop-shadow(0 0 8px rgba(0,0,0,0.3))` }}
-           />
-           <motion.path 
-             d={`M ${30 + Math.min(50, angle/2) - 8} 22 L ${30 + Math.min(50, angle/2) + 8} 30 L ${30 + Math.min(50, angle/2) - 8} 38`}
-             fill="none"
-             stroke="#fff"
-             strokeWidth="12"
-             strokeLinecap="round"
-             initial={{ opacity: 0 }}
-             animate={{ opacity: 1 }}
-             transition={{ delay: 0.2 }}
-           />
+         <svg viewBox="0 0 100 100" className={`${isNormal ? 'w-32 h-32' : 'w-14 h-14'} relative z-10`}>
+            <motion.path 
+              d={path}
+              fill="none"
+              stroke="#fff"
+              strokeWidth={isNormal ? "12" : "14"}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              initial={{ pathLength: 0 }}
+              animate={{ pathLength: 1 }}
+              transition={{ duration: 0.5 }}
+            />
+            <motion.path 
+              d={arrowHead}
+              fill="none"
+              stroke="#fff"
+              strokeWidth={isNormal ? "12" : "14"}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
+            />
          </svg>
 
-         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-8">
-            <span className="text-4xl font-black italic text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">{angle}°</span>
-         </div>
-
-         {isNear && (
-           <motion.div 
-             initial={{ opacity: 0, scale: 0.5 }}
-             animate={{ opacity: 1, scale: 1 }}
-             className="absolute -top-12 bg-white text-black px-4 py-1.5 rounded-full font-black italic text-xs uppercase tracking-widest shadow-2xl z-20"
-           >
-              REDUZA AGORA
-           </motion.div>
+         {isNormal && !isStraight && (
+           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-8">
+              <span className="text-3xl font-black italic text-white drop-shadow-lg">{curve.angle}°</span>
+           </div>
+         )}
+         
+         {isNormal && isStraight && (
+           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 translate-y-8">
+              <span className="text-xl font-black italic text-white drop-shadow-lg uppercase tracking-tighter">RETA</span>
+           </div>
          )}
       </div>
     );
   };
 
   return (
-    <div className={`fixed inset-0 z-[100] flex flex-col font-display overflow-hidden transition-all duration-700 ${isMirrored ? 'scale-x-[-1]' : ''} ${nextCurve ? getSeverityBgClass(nextCurve.severity).split(' ')[0] : 'bg-zinc-950'}`}>
+    <div className={`fixed inset-0 z-[200] flex flex-col font-display overflow-hidden transition-all duration-700 ${isMirrored ? 'scale-x-[-1]' : ''} ${nextCurve ? getSeverityBgClass(nextCurve.severity).split(' ')[0] : 'bg-zinc-950'}`}>
       {/* Background Stylized Lines */}
       <div className="absolute inset-0 opacity-5 pointer-events-none">
         <div className={`absolute inset-0 bg-radial-gradient transition-colors duration-1000 ${nextCurve ? `from-${getSeverityBaseColor(nextCurve.severity)}/20` : 'from-brand-primary/20'} to-transparent`} />
@@ -252,6 +218,11 @@ export function CorneringAssistantHUD({
             {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
           </button>
 
+          <div className="bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl flex items-center gap-2">
+             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+             <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest">Cache Offline</span>
+          </div>
+
           <button 
             onClick={() => setDisplayMode(displayMode === 'sign' ? 'vector' : 'sign')}
             className={`p-3 rounded-xl border border-white/10 bg-white/5 text-zinc-400 transition-all active:scale-95`}
@@ -287,14 +258,14 @@ export function CorneringAssistantHUD({
         </div>
       </div>
 
-      {/* Distance Progress Bar (500m to 0m) */}
+      {/* Distance Progress Bar */}
       <div className="px-6 mt-4">
         <div className="h-2 bg-white/5 rounded-full overflow-hidden border border-white/5 backdrop-blur-md relative">
           {nextCurve && (
             <motion.div 
               initial={{ width: '0%' }}
               animate={{ 
-                width: `${Math.max(0, Math.min(100, (1 - nextCurve.distance / 500) * 100))}%`,
+                width: `${Math.max(0, Math.min(100, (1 - nextCurve.distance / lookAheadDistance) * 100))}%`,
                 backgroundColor: getSeverityBaseColor(nextCurve.severity),
                 boxShadow: `0 0 15px ${getSeverityBaseColor(nextCurve.severity)}88`
               }}
@@ -305,7 +276,7 @@ export function CorneringAssistantHUD({
           <div className="absolute left-[80%] top-0 bottom-0 w-0.5 bg-white/20" />
         </div>
         <div className="flex justify-between mt-1 px-1">
-           <span className="text-[7px] font-black text-zinc-600 uppercase tracking-widest">500m</span>
+           <span className="text-[7px] font-black text-zinc-600 uppercase tracking-widest">{Math.round(lookAheadDistance)}m</span>
            <span className="text-[7px] font-black text-white/40 uppercase tracking-widest">Alerta (100m)</span>
            <span className="text-[7px] font-black text-zinc-600 uppercase tracking-widest">Curva</span>
         </div>
@@ -313,6 +284,22 @@ export function CorneringAssistantHUD({
 
       {/* MAIN VISUAL DISPLAY */}
       <motion.div className="flex-1 flex flex-col items-center justify-center relative z-10">
+        {/* Posterior Curve Preview (Top Left) - Moved Higher & Cleaner */}
+        <AnimatePresence>
+          {posteriorCurve && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="absolute -top-10 left-6 z-30 flex flex-col items-center"
+            >
+              <div className="scale-75 origin-top">
+                {renderPredefinedPlate(posteriorCurve, 'small')}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <AnimatePresence mode="wait">
           {nextCurve ? (
             <motion.div
@@ -322,17 +309,17 @@ export function CorneringAssistantHUD({
               exit={{ opacity: 0, y: -40, scale: 1.1 }}
               className="flex flex-col items-center"
             >
-              {displayMode === 'vector' ? renderCurveProjector(nextCurve) : renderCurveSign(nextCurve)}
+              {renderPredefinedPlate(nextCurve)}
 
               {/* Curve Info */}
-              <div className="mt-8 text-center space-y-2">
-                <div className={`text-4xl font-black uppercase tracking-tight italic ${nextCurve.severity === 'soft' ? 'text-emerald-500' : getSeverityBgClass(nextCurve.severity).split(' ')[1].replace('border-', 'text-')}`}>
+              <div className="mt-4 text-center space-y-1">
+                <div className={`text-2xl font-black uppercase tracking-tight italic ${nextCurve.severity === 'soft' || nextCurve.severity === 'straight' ? 'text-emerald-500' : getSeverityBgClass(nextCurve.severity).split(' ')[1].replace('border-', 'text-')}`}>
                   {getSeverityLabel(nextCurve.severity)}
                 </div>
                 <div className="flex flex-col items-center">
-                  <div className="text-7xl font-black text-white italic tracking-tighter leading-none flex items-baseline">
+                  <div className="text-6xl font-black text-white italic tracking-tighter leading-none flex items-baseline">
                     {nextCurve.distance}
-                    <span className="text-2xl text-zinc-600 ml-2 font-black uppercase NOT-italic tracking-widest">m</span>
+                    <span className="text-xl text-zinc-600 ml-1.5 font-black uppercase NOT-italic tracking-widest">m</span>
                   </div>
                 </div>
               </div>
@@ -343,20 +330,10 @@ export function CorneringAssistantHUD({
               animate={{ opacity: 1 }}
               className="flex flex-col items-center gap-6"
             >
-              <div className="relative">
-                <Activity className="w-20 h-20 text-zinc-800 animate-pulse" />
-                <div className="absolute inset-0 bg-cyan-500/10 rounded-full blur-xl animate-ping" />
-              </div>
+              <Activity className="w-20 h-20 text-zinc-800 animate-pulse" />
               <div className="text-center">
                 <div className="text-xs font-black text-zinc-650 uppercase tracking-[0.6em] mb-2 leading-loose">
-                  {upcomingNodes.length > 0 ? 'Pista Livre: Escaneando' : 'Aguardando Geometria'}
-                </div>
-                <div className="h-1 w-48 bg-zinc-900 rounded-full overflow-hidden">
-                  <motion.div 
-                    animate={upcomingNodes.length > 0 ? { opacity: [0.3, 1, 0.3] } : { x: [-192, 192] }}
-                    transition={{ duration: upcomingNodes.length > 0 ? 1 : 2, repeat: Infinity, ease: "linear" }}
-                    className={`w-full h-full bg-gradient-to-r ${upcomingNodes.length > 0 ? 'from-emerald-500 via-emerald-400 to-emerald-500' : 'from-transparent via-cyan-500 to-transparent'}`}
-                  />
+                  Mapeando Via...
                 </div>
               </div>
             </motion.div>
@@ -378,21 +355,32 @@ export function CorneringAssistantHUD({
               <svg 
                 className="absolute inset-0 w-full h-full"
                 viewBox="0 0 100 100"
-                style={{ rotate: `${-(currentHeading || 0)}deg` }}
               >
-                <motion.polyline
-                  points={upcomingNodes.map((n, i) => {
-                    const x = 50 + (n.lng - currentLng) * 15000;
-                    const y = 50 - (n.lat - currentLat) * 15000;
-                    return `${x},${y}`;
-                  }).join(' ')}
-                  fill="none"
-                  stroke={isRouteMode ? "#22c55e" : "#ef4444"}
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <circle cx="50" cy="50" r="3" fill="#fff" className="animate-pulse" />
+                {/* Fixed Rotation Logic: Rotate the PATH around the center, not the SVG container */}
+                <g style={{ transform: `rotate(${-(currentHeading || 0)}deg)`, transformOrigin: '50% 50%', transition: 'transform 0.5s ease-out' }}>
+                  {(() => {
+                    // MapScale adjusted for better visibility (less zoom)
+                    const mapScale = 4000; 
+                    return (
+                      <motion.polyline
+                        points={upcomingNodes.map((n, i) => {
+                          const x = 50 + (n.lng - currentLng) * mapScale;
+                          const y = 50 - (n.lat - currentLat) * mapScale;
+                          return `${x},${y}`;
+                        }).join(' ')}
+                        fill="none"
+                        stroke={isRouteMode ? "#22c55e" : "#ef4444"}
+                        strokeWidth="6"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        style={{ filter: 'drop-shadow(0 0 5px rgba(0,0,0,0.5))' }}
+                      />
+                    );
+                  })()}
+                </g>
+                {/* Driver remains fixed in the center, facing "Up" */}
+                <circle cx="50" cy="50" r="4" fill="#fff" className="animate-pulse shadow-lg" />
+                <path d="M 50 45 L 47 52 L 53 52 Z" fill="#fff" style={{ transform: 'rotate(0deg)', transformOrigin: '50% 50%' }} />
               </svg>
             )}
           </div>
