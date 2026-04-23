@@ -40,7 +40,8 @@ import {
   writeBatch,
   updateDoc,
   disableNetwork,
-  enableNetwork
+  enableNetwork,
+  increment
 } from 'firebase/firestore';
 import { 
   ref, 
@@ -1340,8 +1341,13 @@ function PublicProfile({
     const followId = `${currentUserId}_${uid}`;
     try {
       if (isFollowing) {
-        await deleteDoc(doc(db, 'follows', followId));
+        const batch = writeBatch(db);
+        batch.delete(doc(db, 'follows', followId));
+        batch.update(doc(db, 'users', uid), { followersCount: increment(-1) });
+        batch.update(doc(db, 'users', currentUserId), { followingCount: increment(-1) });
+        await batch.commit();
         setIsFollowing(false);
+        setProfile(prev => prev ? { ...prev, followersCount: (prev.followersCount || 0) - 1 } : null);
       } else if (isRequested) {
         await deleteDoc(doc(db, 'follow_requests', followId));
         setIsRequested(false);
@@ -1354,12 +1360,17 @@ function PublicProfile({
           });
           setIsRequested(true);
         } else {
-          await setDoc(doc(db, 'follows', followId), {
+          const batch = writeBatch(db);
+          batch.set(doc(db, 'follows', followId), {
             followerId: currentUserId,
             followingId: uid,
             timestamp: Date.now()
           });
+          batch.update(doc(db, 'users', uid), { followersCount: increment(1) });
+          batch.update(doc(db, 'users', currentUserId), { followingCount: increment(1) });
+          await batch.commit();
           setIsFollowing(true);
+          setProfile(prev => prev ? { ...prev, followersCount: (prev.followersCount || 0) + 1 } : null);
         }
       }
     } catch (error) {
@@ -1514,27 +1525,41 @@ function PublicProfile({
             </div>
             
             {currentUserId !== uid && (
-              <button 
-                onClick={handleFollow}
-                className={`w-full py-2.5 rounded-xl font-black uppercase tracking-widest text-[9px] transition-all flex items-center justify-center gap-2 ${isFollowing || isRequested ? 'bg-zinc-800 text-zinc-400 border border-white/5' : 'bg-brand-primary text-white shadow-lg shadow-red-600/20'}`}
-              >
-                {isFollowing ? (
-                  <>
-                    <UserMinus className="w-3.5 h-3.5" />
-                    Seguindo
-                  </>
-                ) : isRequested ? (
-                  <>
-                    <Clock className="w-3.5 h-3.5" />
-                    Solicitado
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="w-3.5 h-3.5" />
-                    Seguir
-                  </>
+              <div className="flex gap-2 w-full">
+                <button 
+                  onClick={handleFollow}
+                  className={`flex-1 py-2.5 rounded-xl font-black uppercase tracking-widest text-[9px] transition-all flex items-center justify-center gap-2 active:scale-95 ${
+                    isFollowing 
+                      ? 'bg-zinc-800 text-zinc-400 border border-white/5' 
+                      : isRequested 
+                        ? 'bg-zinc-900 text-zinc-500 border border-dashed border-white/10'
+                        : 'bg-brand-primary text-white shadow-[0_8px_20px_rgba(239,68,68,0.3)] hover:shadow-brand-primary/40'
+                  }`}
+                >
+                  {isFollowing ? (
+                    <>
+                      <UserMinus className="w-3.5 h-3.5" />
+                      Seguindo
+                    </>
+                  ) : isRequested ? (
+                    <>
+                      <Clock className="w-3.5 h-3.5" />
+                      Solicitado
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-3.5 h-3.5" />
+                      Seguir
+                    </>
+                  )}
+                </button>
+                
+                {isFollowing && (
+                  <button className="px-3 bg-zinc-800 border border-white/5 rounded-xl text-zinc-400 active:scale-95 transition-all">
+                    <MessageSquare className="w-4 h-4" />
+                  </button>
                 )}
-              </button>
+              </div>
             )}
           </div>
         </div>
@@ -1694,7 +1719,7 @@ function RegionalRanking({
       collection(db, 'rankings'), 
       where('category', '==', filter.includes('201') || filter === 'regional-201' ? '201m' : '0-100'),
       where('timestamp', '>=', startOfMonth.getTime()),
-      orderBy('time', 'asc'), 
+      orderBy('performanceScore', 'desc'), 
       limit(100)
     );
     
@@ -1851,13 +1876,13 @@ function RegionalRanking({
                         </p>
                      </div>
 
-                     {/* Time Results */}
+                     {/* Score & Time Results */}
                      <div className="text-right">
                         <p className={`font-display font-black italic transition-colors leading-none
                            ${isGold ? 'text-xl text-yellow-500' : 'text-lg text-white'}`}>
-                           {entry.time.toFixed(2)}s
+                           {entry.performanceScore?.toFixed(0) || '0'} <span className="text-[8px] uppercase tracking-tighter">pts</span>
                         </p>
-                        <p className="text-[8px] text-zinc-600 font-bold uppercase mt-1">{Math.round(entry.maxSpeed)} KM/H</p>
+                        <p className="text-[10px] text-zinc-400 font-bold uppercase mt-1">{entry.time.toFixed(2)}s • {Math.round(entry.maxSpeed)} KM/H</p>
                      </div>
                   </motion.div>
                );
@@ -1903,7 +1928,7 @@ function RegionalRankingElite({
       collection(db, 'rankings'), 
       where('category', '==', category),
       where('timestamp', '>=', startOfMonth.getTime()),
-      orderBy('time', 'asc'), 
+      orderBy('performanceScore', 'desc'), 
       limit(100)
     );
     
@@ -2047,14 +2072,15 @@ function RegionalRankingElite({
                             </p>
                          </div>
 
-                         {/* Time Results */}
+                         {/* Score & Time Results */}
                          <div className="text-right">
                             <p className={`font-display font-black italic transition-colors leading-none mb-1
                                ${isGold ? 'text-2xl text-yellow-500 glow-yellow' : 'text-xl text-white group-hover:text-brand-primary'}`}>
-                               {entry.time.toFixed(2)}s
+                               {entry.performanceScore?.toFixed(0) || '0'} <span className="text-[8px] uppercase tracking-tighter">pts</span>
                             </p>
-                            <div className="flex items-center gap-1 justify-end opacity-60">
-                               <span className="text-[9px] font-black text-zinc-500">{Math.round(entry.maxSpeed)} KM/H</span>
+                            <div className="flex flex-col items-end opacity-60">
+                               <span className="text-[10px] font-black text-zinc-400">{entry.time.toFixed(2)}s</span>
+                               <span className="text-[8px] font-bold text-zinc-500">{Math.round(entry.maxSpeed)} KM/H</span>
                             </div>
                          </div>
 
@@ -4533,7 +4559,16 @@ function TimerClassic(props: TimerProps) {
                   <Flag className="w-16 h-16 text-brand-accent" />
                 </div>
                 
-                <h3 className="text-brand-accent font-black uppercase tracking-tighter text-xl italic mb-4">RESULTADO</h3>
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="text-brand-accent font-black uppercase tracking-tighter text-xl italic">RESULTADO</h3>
+                    <p className="text-[8px] font-mono text-brand-accent/60 font-bold uppercase tracking-widest">{lastResult.runSerial || 'DF-A1B2'}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Pontuação</span>
+                    <span className="text-2xl font-display font-black text-white italic">{lastResult.performanceScore || 0} <span className="text-[10px] text-zinc-600">PTS</span></span>
+                  </div>
+                </div>
                 
                 {vehicles.find(v => v.id === runVehicleId) && (
                   <div className="mb-4 p-3 bg-brand-accent/5 border border-brand-accent/20 rounded-xl flex items-center gap-3">
@@ -4769,6 +4804,7 @@ function TimerElite(props: TimerProps) {
   } = props;
 
   const activeVehicle = vehicles.find(v => v.id === runVehicleId);
+  const [resultTab, setResultTab] = useState<'summary' | 'telemetry' | 'map'>('summary');
 
   return (
     <motion.div 
@@ -4956,7 +4992,7 @@ function TimerElite(props: TimerProps) {
                                </h4>
                                <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-[0.2em] mt-0.5">
                                   {isReady ? 'O cronômetro iniciará ao detectar movimento' : 'O teste começa com o carro parado'}
-                               </p>
+                                </p>
                             </div>
                           </motion.div>
                         ) : (
@@ -5019,53 +5055,150 @@ function TimerElite(props: TimerProps) {
              </div>
           </div>
         ) : (
-          /* Racing Results Screen (Elite) - Now more compact to fit one screen */
+          /* Racing Results Screen (Elite) - Tabbed Layout */
           <motion.div 
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-            className="flex-1 flex flex-col racing-scroll px-1 pb-4"
+            className="flex-1 flex flex-col px-1 pb-4 overflow-hidden"
           >
-             <div className="flex-1 relative p-6 rounded-[32px] bg-gradient-to-br from-zinc-900 to-black border border-white/5 overflow-hidden mb-4 shadow-2xl flex flex-col">
+             <div className="flex-1 relative rounded-[32px] bg-gradient-to-br from-zinc-900 to-black border border-white/5 overflow-hidden mb-4 shadow-2xl flex flex-col">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-brand-primary/10 blur-[50px] pointer-events-none" />
                 
-                <header className="flex justify-between items-center mb-6">
-                   <div>
-                      <h3 className="text-xl font-display font-black italic text-white uppercase tracking-tighter">RESULTADO <span className="text-brand-primary">ELITE</span></h3>
-                   </div>
-                   <div className="bg-white/5 p-2 rounded-xl border border-white/10">
-                      <Trophy className="w-5 h-5 text-brand-primary" />
-                   </div>
-                </header>
-
-                <div className="flex flex-col gap-6 mb-6">
-                   <div className="flex flex-col">
-                      <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Velocidade Final</span>
-                      <p className="text-6xl font-display font-black text-white italic leading-none">
-                        {Math.round(lastResult.maxSpeed)}<span className="text-xl ml-1 text-red-600">KM/H</span>
-                      </p>
-                   </div>
-                   <div className="flex flex-col border-t border-white/5 pt-4">
-                      <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Duração</span>
-                      <p className="text-4xl font-display font-black text-brand-accent italic leading-none">
-                        {lastResult.time.toFixed(2)}<span className="text-base ml-1">SEG</span>
-                      </p>
-                   </div>
+                {/* Elite Tabs */}
+                <div className="flex p-2 bg-black/40 backdrop-blur-xl border-b border-white/5">
+                   {(['summary', 'telemetry', 'map'] as const).map(tab => (
+                      <button
+                        key={tab}
+                        onClick={() => setResultTab(tab)}
+                        className={`flex-1 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${resultTab === tab ? 'bg-brand-primary text-white shadow-lg shadow-red-600/20' : 'text-zinc-600 hover:text-zinc-400'}`}
+                      >
+                         {tab === 'summary' ? 'Resumo' : tab === 'telemetry' ? 'Telemetria' : 'Percurso'}
+                      </button>
+                   ))}
                 </div>
 
-                <div className="flex-1 space-y-4 pt-4 border-t border-white/5 overflow-y-auto custom-scrollbar">
-                   <span className="text-[8px] font-black text-zinc-500 uppercase tracking-[0.3em]">Intervalos</span>
-                   <div className="grid grid-cols-2 gap-2">
-                      {calculateIntervals(lastResult.path, [20, 60, 100, 160]).map(interval => (
-                        <div key={interval.target} className="flex flex-col p-3 bg-white/5 rounded-2xl border border-white/5">
-                           <span className="text-[7px] font-black text-zinc-400 uppercase tracking-widest">0-{interval.target} KM/H</span>
-                           <span className="text-xl font-display font-black text-white italic">{interval.time.toFixed(2)}s</span>
-                        </div>
-                      ))}
-                   </div>
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                   {resultTab === 'summary' && (
+                      <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
+                         <div className="flex justify-between items-start">
+                            <div className="flex flex-col">
+                               <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-1">Registro da Puxada</span>
+                               <span className="text-xs font-mono text-brand-primary font-bold">{lastResult.runSerial || 'DF-PREVIEW'}</span>
+                            </div>
+                            <div className="text-right">
+                               <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-1">Pontuação</span>
+                               <span className="text-xl font-display font-black text-white italic">{lastResult.performanceScore || 0} <span className="text-[10px] text-zinc-500">PTS</span></span>
+                            </div>
+                         </div>
+
+                         <div className="grid grid-cols-2 gap-8">
+                            <div className="flex flex-col">
+                               <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Velocidade Final</span>
+                               <p className="text-5xl font-display font-black text-white italic leading-none mt-1">
+                                 {Math.round(lastResult.maxSpeed)}<span className="text-lg ml-1 text-red-600">KM/H</span>
+                               </p>
+                            </div>
+                            <div className="flex flex-col">
+                               <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Duração</span>
+                               <p className="text-5xl font-display font-black text-brand-accent italic leading-none mt-1">
+                                 {lastResult.time.toFixed(2)}<span className="text-lg ml-1">SEG</span>
+                               </p>
+                            </div>
+                         </div>
+
+                         <div className="grid grid-cols-2 gap-4">
+                            <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+                               <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block mb-2">Potência Est.</span>
+                               <span className="text-2xl font-display font-black text-white italic">{lastResult.estimatedPowerCV || 0} <span className="text-xs text-zinc-500">CV</span></span>
+                            </div>
+                            <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+                               <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block mb-2">Inclinação Média</span>
+                               <span className={`text-2xl font-display font-black italic ${Math.abs(lastResult.slope || 0) > 1.0 ? 'text-yellow-500' : 'text-white'}`}>
+                                  {lastResult.slope?.toFixed(1)}%
+                               </span>
+                            </div>
+                         </div>
+
+                         <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                               <span className="text-[8px] font-black text-zinc-500 uppercase tracking-[0.3em]">Intervalos de Velocidade</span>
+                               <button onClick={() => setResultTab('telemetry')} className="text-[8px] font-black text-brand-primary uppercase tracking-widest flex items-center gap-1">
+                                  Ver Telemetria <ChevronRight className="w-2.5 h-2.5" />
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                               {calculateIntervals(lastResult.path, [20, 40, 60, 80, 100, 120, 160, 200]).map(interval => (
+                                 <div key={interval.target} className="flex justify-between items-center p-3 bg-white/5 rounded-xl border border-white/5">
+                                    <span className="text-[8px] font-bold text-zinc-400 uppercase">0-{interval.target}</span>
+                                    <span className="text-sm font-display font-black text-white italic">{interval.time.toFixed(2)}s</span>
+                                 </div>
+                               ))}
+                            </div>
+                         </div>
+
+                         {/* Mini Telemetry Preview */}
+                         <div className="mt-4 pt-4 border-t border-white/5">
+                            <div className="h-32 opacity-60">
+                               <PerformanceChart result={lastResult} isPremium={true} />
+                            </div>
+                         </div>
+                      </motion.div>
+                   )}
+
+                   {resultTab === 'telemetry' && (
+                      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="h-full flex flex-col">
+                         <div className="flex-1 min-h-[300px]">
+                            <PerformanceChart 
+                              result={lastResult} 
+                              opponentResult={activeChallenge?.result} 
+                              isPremium={true} 
+                            />
+                         </div>
+                         <div className="mt-4 p-4 rounded-2xl bg-zinc-950 border border-white/5">
+                            <h4 className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-3">Análise de G-Force</h4>
+                            <div className="flex justify-between items-center">
+                               <div className="flex flex-col">
+                                  <span className="text-[7px] text-zinc-600 uppercase font-bold">Pico Lateral</span>
+                                  <span className="text-lg font-display font-black text-white italic">1.12G</span>
+                               </div>
+                               <div className="flex flex-col text-right">
+                                  <span className="text-[7px] text-zinc-600 uppercase font-bold">Pico Longitudinal</span>
+                                  <span className="text-lg font-display font-black text-brand-primary italic">{lastResult.maxG?.toFixed(2)}G</span>
+                               </div>
+                            </div>
+                         </div>
+                      </motion.div>
+                   )}
+
+                   {resultTab === 'map' && (
+                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col">
+                         <div className="flex-1 rounded-[24px] overflow-hidden border border-white/5 shadow-2xl min-h-[400px]">
+                            <RunMap result={lastResult} />
+                         </div>
+                         <div className="mt-4 flex items-center justify-between px-2">
+                            <div className="flex flex-col">
+                               <span className="text-[7px] text-zinc-600 uppercase font-bold tracking-widest">Localização</span>
+                               <span className="text-[9px] font-bold text-zinc-400 uppercase">{lastResult.location?.latitude.toFixed(4)}, {lastResult.location?.longitude.toFixed(4)}</span>
+                            </div>
+                            <div className="flex flex-col text-right">
+                               <span className="text-[7px] text-zinc-600 uppercase font-bold tracking-widest">Distância Total</span>
+                               <span className="text-[9px] font-bold text-zinc-400 uppercase">{Math.round(lastResult.distance)} Metros</span>
+                            </div>
+                         </div>
+                      </motion.div>
+                   )}
                 </div>
 
-                <button onClick={reset} className="mt-4 w-full py-4 bg-zinc-800 text-white font-black italic uppercase tracking-widest rounded-2xl active:scale-95 transition-all text-[10px]">
-                   NOVO TESTE
-                </button>
+                <div className="p-6 bg-black/60 border-t border-white/5 flex gap-3">
+                   <button 
+                     onClick={reset} 
+                     className="flex-1 py-4 bg-brand-primary text-white font-display font-black italic uppercase tracking-[0.2em] rounded-2xl active:scale-95 transition-all text-[11px] shadow-lg shadow-red-600/20"
+                   >
+                      REPETIR TESTE
+                   </button>
+                   <button className="px-6 py-4 bg-zinc-800 text-white rounded-2xl active:scale-95 transition-all">
+                      <Share2Icon className="w-5 h-5" />
+                   </button>
+                </div>
              </div>
           </motion.div>
         )}
@@ -5270,6 +5403,7 @@ export default function App() {
   const [runVehicleId, setRunVehicleId] = useState<string | null>(null);
   const [isQuickSwitchOpen, setIsQuickSwitchOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [powerReferences, setPowerReferences] = useState<PowerReference[]>([]);
 
   const handleEdit = (v: Vehicle) => {
     setEditingVehicle(v);
@@ -5312,7 +5446,9 @@ export default function App() {
     upcomingNodes, 
     lookAheadDistance,
     isRouteMode, 
-    currentRoadName 
+    currentRoadName,
+    snappedLocation,
+    smoothLocation
   } = useCorneringAssistant(
     currentLat, 
     currentLng, 
@@ -5369,6 +5505,18 @@ export default function App() {
     testConnection();
   }, [user]);
 
+  // Power References Listener
+  useEffect(() => {
+    const q = query(collection(db, 'power_references'), limit(100));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const refs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as PowerReference));
+      setPowerReferences(refs);
+    }, (error) => {
+      console.warn("Error fetching power references:", error);
+    });
+    return () => unsubscribe();
+  }, []);
+
   // Auth Listener
   useEffect(() => {
     let unsubscribeVehicles: (() => void) | null = null;
@@ -5406,6 +5554,8 @@ export default function App() {
                   termsAccepted: false,
                   termsVersion: TERMS_VERSION,
                   isPremium: false,
+                  followersCount: 0,
+                  followingCount: 0,
                   createdAt: new Date().toISOString()
                 };
                 await setDoc(userRef, userData);
@@ -5956,13 +6106,17 @@ export default function App() {
             }
             
             const activeVehicle = runVehicleId === 'anonimo' ? null : (vehicles.find(v => v.id === runVehicleId) || vehicle);
+            const weightForEstimation = activeVehicle?.weight || 1500;
             
             let estimatedPowerCV = 0;
-            if (isUserPremium && lastResult.time > 0) {
-              const weightForEstimation = activeVehicle?.weight || 1500;
-              // Basic physics estimation with current test data
-              estimatedPowerCV = powerService.estimateHorsepower(lastResult, weightForEstimation, []);
+            let performanceScore = 0;
+            if (lastResult.time > 0) {
+              estimatedPowerCV = powerService.estimateHorsepower(lastResult, weightForEstimation, powerReferences);
+              performanceScore = powerService.calculateScore(estimatedPowerCV, weightForEstimation, lastResult.time);
             }
+
+            // Generate a short user-friendly serial for this run (e.g. DF-A1B2)
+            const runSerial = `DF-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
             const selectedVehicle = activeVehicle;
 
@@ -5971,7 +6125,9 @@ export default function App() {
               uid: user.uid,
               vehicleId: selectedVehicle?.id || null,
               vehicleName: selectedVehicle ? `${selectedVehicle.nickname} (${selectedVehicle.model})` : 'Piloto Anônimo',
-              estimatedPowerCV
+              estimatedPowerCV,
+              performanceScore,
+              runSerial
             };
              await addDoc(collection(db, 'runs'), runData);
              lastSavedRunIdRef.current = lastResult.id;
@@ -6002,48 +6158,45 @@ export default function App() {
               time: `${lastResult.time.toFixed(2)}s`
             });
             
-            console.log("Run saved to Firestore successfully");
-          } catch (err) {
-            handleFirestoreError(err, OperationType.WRITE, 'runs');
+            console.log("Run saved to Firestore successfully with Score:", performanceScore);
+
+            // --- RANKING SYNC ---
+            const isStandard0to100 = lastResult.config.mode === 'speed' && lastResult.config.target === 100;
+            const isStandard201m = lastResult.config.mode === 'distance' && lastResult.config.target === 201;
+
+            if (
+              (isStandard0to100 || isStandard201m) && 
+              lastResult.location &&
+              (lastResult.avgAccuracy ?? 100) < 25 && // Relaxed for more inclusion
+              (lastResult.maxG ?? 0) < 4.5 && // Relaxed
+              lastResult.time > 1.0
+            ) {
+                const rankingData: Omit<RankingEntry, 'id'> = {
+                  uid: user.uid,
+                  userName: user.displayName || 'Piloto',
+                  userPhoto: user.photoURL || undefined,
+                  vehicleName: selectedVehicle ? `${selectedVehicle.nickname} (${selectedVehicle.model})` : 'Veículo não vinculado',
+                  vehicleType: selectedVehicle?.type || 'car',
+                  time: lastResult.time,
+                  maxSpeed: lastResult.maxSpeed,
+                  timestamp: lastResult.timestamp,
+                  category: isStandard0to100 ? '0-100' : '201m',
+                  mode: isStandard0to100 ? 'speed' : 'distance',
+                  target: isStandard0to100 ? 100 : 201,
+                  latitude: lastResult.location.latitude,
+                  longitude: lastResult.location.longitude,
+                  slope: lastResult.slope || 0,
+                  performanceScore,
+                  runSerial,
+                  vehicleId: selectedVehicle?.id || undefined
+                };
+              await addDoc(collection(db, 'rankings'), rankingData);
+            }
+          } catch (e) {
+            console.error("Error in saveRun:", e);
           }
         };
-        
         saveRun();
-
-        // Save to rankings if it's a valid standard run
-        const isStandard0to100 = lastResult.config.mode === 'speed' && lastResult.config.target === 100;
-        const isStandard201m = lastResult.config.mode === 'distance' && lastResult.config.target === 201;
-
-        if (
-          (isStandard0to100 || isStandard201m) && 
-          lastResult.isValidSlope && 
-          lastResult.location &&
-          (lastResult.avgAccuracy ?? 100) < 18 && // Relaxed slightly for more inclusion
-          (lastResult.maxG ?? 0) < 3.8 &&
-          lastResult.time > 1.2
-        ) {
-            const selectedVehicle = runVehicleId === 'anonimo' ? null : (vehicles.find(v => v.id === runVehicleId) || vehicle);
-
-            const rankingData: Omit<RankingEntry, 'id'> = {
-              uid: user.uid,
-              userName: user.displayName || 'Piloto',
-              userPhoto: user.photoURL || undefined,
-              vehicleName: selectedVehicle ? `${selectedVehicle.nickname} (${selectedVehicle.model})` : 'Veículo não vinculado',
-              vehicleType: selectedVehicle?.type || 'car',
-              time: lastResult.time,
-              maxSpeed: lastResult.maxSpeed,
-              timestamp: lastResult.timestamp,
-              category: isStandard0to100 ? '0-100' : '201m',
-              mode: isStandard0to100 ? 'speed' : 'distance',
-              target: isStandard0to100 ? 100 : 201,
-              latitude: lastResult.location.latitude,
-              longitude: lastResult.location.longitude,
-              slope: lastResult.slope || 0,
-              vehicleId: selectedVehicle?.id || undefined
-            };
-          addDoc(collection(db, 'rankings'), rankingData)
-            .catch(err => handleFirestoreError(err, OperationType.WRITE, 'rankings'));
-        }
       } else if (isGuest) {
         // Save to localStorage for guest users
         try {
@@ -6773,6 +6926,8 @@ export default function App() {
               isRouteMode={isRouteMode}
               onBack={() => setScreen('home')}
               currentRoadName={currentRoadName}
+              snappedLocation={snappedLocation}
+              smoothLocation={smoothLocation}
             />
           </motion.div>
         ) : screen === 'duel-result' && activeChallenge ? (
@@ -7312,6 +7467,8 @@ function PublicProfileDetail({ uid, currentUserId, onBack, onUpdateProfile, onEd
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [showThemeStore, setShowThemeStore] = useState(false);
   const [activeTab, setActiveTab] = useState<'garage' | 'times' | 'albums'>('garage');
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [isRequested, setIsRequested] = useState(false);
 
   const fetchProfile = async () => {
     setLoading(true);
@@ -7325,6 +7482,15 @@ function PublicProfileDetail({ uid, currentUserId, onBack, onUpdateProfile, onEd
         const vQuery = query(collection(db, 'vehicles'), where('uid', '==', uid));
         const vSnap = await getDocs(vQuery);
         setVehicles(vSnap.docs.map(d => ({ id: d.id, ...d.data() } as Vehicle)));
+
+        // Fetch follow status
+        if (currentUserId) {
+          const followDoc = await getDoc(doc(db, 'follows', `${currentUserId}_${uid}`));
+          setIsFollowing(followDoc.exists());
+
+          const requestDoc = await getDoc(doc(db, 'follow_requests', `${currentUserId}_${uid}`));
+          setIsRequested(requestDoc.exists());
+        }
       }
     } catch (e) {
       console.error(e);
@@ -7335,7 +7501,49 @@ function PublicProfileDetail({ uid, currentUserId, onBack, onUpdateProfile, onEd
 
   useEffect(() => {
     fetchProfile();
-  }, [uid]);
+  }, [uid, currentUserId]);
+
+  const handleFollow = async () => {
+    if (!currentUserId || !profile) return;
+    const followId = `${currentUserId}_${uid}`;
+    try {
+      if (isFollowing) {
+        const batch = writeBatch(db);
+        batch.delete(doc(db, 'follows', followId));
+        batch.update(doc(db, 'users', uid), { followersCount: increment(-1) });
+        batch.update(doc(db, 'users', currentUserId), { followingCount: increment(-1) });
+        await batch.commit();
+        setIsFollowing(false);
+        setProfile(prev => prev ? { ...prev, followersCount: (prev.followersCount || 0) - 1 } : null);
+      } else if (isRequested) {
+        await deleteDoc(doc(db, 'follow_requests', followId));
+        setIsRequested(false);
+      } else {
+        if (profile.isPrivate) {
+          await setDoc(doc(db, 'follow_requests', followId), {
+            followerId: currentUserId,
+            followingId: uid,
+            timestamp: Date.now()
+          });
+          setIsRequested(true);
+        } else {
+          const batch = writeBatch(db);
+          batch.set(doc(db, 'follows', followId), {
+            followerId: currentUserId,
+            followingId: uid,
+            timestamp: Date.now()
+          });
+          batch.update(doc(db, 'users', uid), { followersCount: increment(1) });
+          batch.update(doc(db, 'users', currentUserId), { followingCount: increment(1) });
+          await batch.commit();
+          setIsFollowing(true);
+          setProfile(prev => prev ? { ...prev, followersCount: (prev.followersCount || 0) + 1 } : null);
+        }
+      }
+    } catch (error) {
+      console.error("Error toggling follow:", error);
+    }
+  };
 
   if (loading) return <div className="flex-1 flex items-center justify-center bg-zinc-950"><div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" /></div>;
   if (!profile) return <div className="flex-1 flex flex-col items-center justify-center bg-zinc-950 text-zinc-500 p-8 text-center"><p>Ops! Perfil não encontrado.</p><button onClick={onBack} className="mt-4 text-brand-primary font-bold uppercase tracking-widest text-[10px]">Voltar</button></div>;
@@ -7453,8 +7661,8 @@ function PublicProfileDetail({ uid, currentUserId, onBack, onUpdateProfile, onEd
                  </div>
                )}
 
-               {/* Bottom Stats Row */}
-               <div className="flex items-center justify-between border-t border-white/5 pt-2">
+               {/* Bottom Stats Row & Follow Action */}
+               <div className="flex items-center justify-between border-t border-white/5 pt-2 gap-4">
                   <div className="flex items-center gap-4">
                     <div className="flex flex-col leading-none">
                        <span className="text-xs font-display font-black italic text-white">{profile.followersCount || 0}</span>
@@ -7465,6 +7673,28 @@ function PublicProfileDetail({ uid, currentUserId, onBack, onUpdateProfile, onEd
                       <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest italic pt-1 border-l border-white/5 pl-4">#{profile.handle.toUpperCase()}</span>
                     )}
                   </div>
+
+                  {currentUserId !== uid && (
+                     <div className="flex gap-1">
+                       <button 
+                         onClick={handleFollow}
+                         className={`px-6 py-2 rounded-xl font-black uppercase tracking-widest text-[8px] transition-all flex items-center justify-center gap-1.5 active:scale-95 ${
+                           isFollowing 
+                             ? 'bg-zinc-800 text-zinc-400 border border-white/5' 
+                             : isRequested 
+                               ? 'bg-zinc-900 text-zinc-500 border border-dashed border-white/10'
+                               : 'bg-brand-primary text-white shadow-lg shadow-brand-primary/20 hover:shadow-brand-primary/40'
+                         }`}
+                       >
+                         {isFollowing ? 'Seguindo' : isRequested ? 'Solicitado' : 'Seguir'}
+                       </button>
+                       {isFollowing && (
+                          <button className="p-2 bg-zinc-800 border border-white/5 rounded-xl text-zinc-400">
+                            <MessageSquare className="w-3 h-3" />
+                          </button>
+                       )}
+                     </div>
+                  )}
                </div>
             </div>
          </div>

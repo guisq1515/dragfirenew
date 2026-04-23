@@ -1,3 +1,3 @@
-export const APP_VERSION = 'v1.9.60-LEGACY-PRO';
-export const APP_DATE = '2026-04-21';
-export const VERSION_NOTES = 'Geometria: Reconstrução completa de avenidas e expansão do minimapa para 250 nós.';
+export const APP_VERSION = 'v2.0.1-CORE-FIX';
+export const APP_DATE = '2026-04-22';
+export const VERSION_NOTES = 'Correção Crítica: Polyfill queueMicrotask injetado no Core (index.html) para compatibilidade total com multimídias antigas.';

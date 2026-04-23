@@ -8,6 +8,25 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>DragFire - Performance Timer</title>
+
+    <!-- Legacy Polyfills for Android Head Units -->
+    <script>
+      (function() {
+        if (typeof window.queueMicrotask !== 'function') {
+          window.queueMicrotask = function(callback) {
+            Promise.resolve()
+              .then(callback)
+              .catch(function(e) {
+                setTimeout(function() { throw e; }, 0);
+              });
+          };
+          console.log('Polyfill: queueMicrotask initialized');
+        }
+        if (typeof globalThis === 'undefined') {
+          window.globalThis = window;
+        }
+      })();
+    </script>
     
     <!-- Diagnostic script to catch early errors on older WebViews -->
     <script>

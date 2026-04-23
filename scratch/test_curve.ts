@@ -9,4 +9,4 @@ const nodes = [
   { lat: 0.002, lng: 0.003 }
 ];
 
-console.log(curveService.findNextCurve(0, 0, 0, nodes, 1000));
+console.log(curveService.findUpcomingCurves(0, 0, 0, nodes, 1000));

@@ -7,9 +7,9 @@ export interface RoadNode {
 
 export interface CurveData {
   angle: number;
-  severity: 'soft' | 'medium' | 'hard' | 'hairpin';
+  severity: 'soft' | 'medium' | 'hard' | 'hairpin' | 'straight' | 'chicane' | 's-curve';
   distance: number;
-  direction: 'left' | 'right';
+  direction: 'left' | 'right' | 'straight' | 'both';
   points: RoadNode[];
 }
 
@@ -24,6 +24,9 @@ export interface TopologicalRegion {
 class CurveAnalysisService {
   private regions: TopologicalRegion[] = [];
   private isOfflineEnabled = true;
+  private activeWayId: number | null = null;
+  private activeRoadName: string | null = null;
+  private activeNodes: RoadNode[] = [];
 
   constructor() {
     this.loadCachedRegions();
@@ -59,16 +62,17 @@ class CurveAnalysisService {
    * Gets road geometry, downloading a massive 5km region topographically if needed.
    * Resolves completely offline if within cached regions.
    */
-  async getRoadGeometry(lat: number, lng: number): Promise<{ nodes: RoadNode[], roadName: string | null }> {
-    // 5km diameter check (2500m radius)
-    let activeRegion = this.regions.find(r => this.haversineDistance(lat, lng, r.lat, r.lng) < 3500);
+  async getRoadGeometry(lat: number, lng: number, heading: number | null = null, speedKmh: number = 0): Promise<{ nodes: RoadNode[], roadName: string | null }> {
+    // 20km diameter check (10000m radius for triggering new fetch)
+    // We stay in the active region if within 10km of its center
+    let activeRegion = this.regions.find(r => this.haversineDistance(lat, lng, r.lat, r.lng) < 10000);
 
     if (!activeRegion) {
       try {
-        // Fetch 5000 meters (5km) for massive offline coverage!
-        const radius = 5000;
+        // Fetch massive 20km region for total offline security!
+        const radius = 20000;
         const query = `
-          [out:json][timeout:30];
+          [out:json][timeout:60];
           (
             way["highway"](around:${radius},${lat},${lng});
           );
@@ -98,40 +102,82 @@ class CurveAnalysisService {
           this.saveRegions();
         }
       } catch (error) {
-        console.error('Offline Mode: Using best available data or empty.');
+        console.warn('Offline Mode: Fetch failed, looking for any available cached region...');
+        activeRegion = this.regions.find(r => this.haversineDistance(lat, lng, r.lat, r.lng) < 20000);
       }
     }
 
     if (activeRegion) {
-      return this.stitchLocalRoad(lat, lng, activeRegion);
+      return this.stitchLocalRoad(lat, lng, heading, speedKmh, activeRegion);
     }
     return { nodes: [], roadName: null };
   }
 
-  private stitchLocalRoad(lat: number, lng: number, region: TopologicalRegion): { nodes: RoadNode[], roadName: string | null } {
+  private stitchLocalRoad(lat: number, lng: number, heading: number | null, speedKmh: number, region: TopologicalRegion): { nodes: RoadNode[], roadName: string | null } {
     const { ways, nodesMap } = region;
-    if (ways.length === 0) return { nodes: [], roadName: null };
-
-    // Find the way closest to the current position
     let bestWay = ways[0];
     let minWayDist = Infinity;
+    const HEADING_TOLERANCE = 45; // degrees
 
     ways.forEach(w => {
-      if (w.nodes) {
-        w.nodes.forEach((id: number) => {
-          const node = nodesMap[id];
-          if (node) {
-            const d = this.haversineDistance(lat, lng, node.lat, node.lng);
-            if (d < minWayDist) {
-              minWayDist = d;
-              bestWay = w;
-            }
-          }
-        });
+      // Find distance to this way
+      let d = Infinity;
+      let wayBearing = 0;
+      
+      for (let i = 0; i < w.nodes.length - 1; i++) {
+        const n1 = nodesMap[w.nodes[i]];
+        const n2 = nodesMap[w.nodes[i + 1]];
+        if (!n1 || !n2) continue;
+        
+        const dist = this.haversineDistance(lat, lng, n1.lat, n1.lng);
+        if (dist < d) {
+          d = dist;
+          // Calculate bearing of this segment
+          const dLat = n2.lat - n1.lat;
+          const dLng = n2.lng - n1.lng;
+          wayBearing = (Math.atan2(dLng, dLat) * 180 / Math.PI + 360) % 360;
+        }
+      }
+
+      // Heading-Aware Penalty: If moving fast, penalize roads with different orientation
+      let penalty = 0;
+      if (heading !== null && speedKmh > 20) {
+        let diff = Math.abs(heading - wayBearing);
+        if (diff > 180) diff = 360 - diff;
+        
+        // Also check opposite direction (two-way roads)
+        let diffOpposite = Math.abs(heading - ((wayBearing + 180) % 360));
+        if (diffOpposite > 180) diffOpposite = 360 - diffOpposite;
+        
+        const minDiff = Math.min(diff, diffOpposite);
+        if (minDiff > HEADING_TOLERANCE) {
+          penalty = minDiff * 2; // Strong penalty for roads in wrong direction
+        }
+      }
+
+      const score = d + penalty;
+      if (score < minWayDist) {
+        minWayDist = score;
+        bestWay = w;
       }
     });
 
     const roadName = bestWay.tags?.name;
+    const wayId = bestWay.id;
+
+    // Hysteresis: If we have an active way and the closest way is just a jitter, stay on active
+    if (this.activeWayId && wayId !== this.activeWayId && minWayDist < 15) {
+       // Only switch if the new way is actually better and we are somewhat far from the old one
+       // Or if the road name changed significantly
+       if (roadName !== this.activeRoadName) {
+          this.activeWayId = wayId;
+          this.activeRoadName = roadName;
+       }
+    } else {
+       this.activeWayId = wayId;
+       this.activeRoadName = roadName;
+    }
+
     let orderedNodes = [...bestWay.nodes];
     
     // Aggressively join ALL segments of the SAME road name in the entire region
@@ -174,7 +220,51 @@ class CurveAnalysisService {
     const fallbackName = roadName || (bestWay.tags?.highway ? `Via ${bestWay.tags.highway.charAt(0).toUpperCase() + bestWay.tags.highway.slice(1)}` : 'Via Desconhecida');
     const roadNodes = orderedNodes.map((id: number) => nodesMap[id]).filter(Boolean);
     
+    this.activeNodes = roadNodes;
     return { nodes: roadNodes, roadName: fallbackName };
+  }
+
+  /**
+   * Snaps a GPS point to the nearest segment of the currently active road nodes.
+   * This prevents "lane jumping" and visual jitter in the minimap.
+   */
+  snapToRoad(lat: number, lng: number): RoadNode {
+    if (this.activeNodes.length < 2) return { lat, lng };
+
+    let bestPoint = { lat, lng };
+    let minSnapDist = Infinity;
+
+    for (let i = 0; i < this.activeNodes.length - 1; i++) {
+      const p1 = this.activeNodes[i];
+      const p2 = this.activeNodes[i + 1];
+      
+      const snapped = this.projectPointOnSegment({ lat, lng }, p1, p2);
+      const d = this.haversineDistance(lat, lng, snapped.lat, snapped.lng);
+      
+      if (d < minSnapDist) {
+        minSnapDist = d;
+        bestPoint = snapped;
+      }
+    }
+
+    // Only snap if we are within 25 meters of the road (Waze-like tolerance)
+    return minSnapDist < 25 ? bestPoint : { lat, lng };
+  }
+
+  private projectPointOnSegment(p: RoadNode, a: RoadNode, b: RoadNode): RoadNode {
+    const atob = { lat: b.lat - a.lat, lng: b.lng - a.lng };
+    const atop = { lat: p.lat - a.lat, lng: p.lng - a.lng };
+    const len2 = atob.lat * atob.lat + atob.lng * atob.lng;
+    
+    if (len2 === 0) return a;
+    
+    let t = (atop.lat * atob.lat + atop.lng * atob.lng) / len2;
+    t = Math.max(0, Math.min(1, t));
+    
+    return {
+      lat: a.lat + t * atob.lat,
+      lng: a.lng + t * atob.lng
+    };
   }
 
   /**
@@ -205,11 +295,11 @@ class CurveAnalysisService {
   /**
    * Analyzes upcoming nodes to find the next significant curves
    */
-  findUpcomingCurves(currentLat: number, currentLng: number, currentHeading: number | null, nodes: RoadNode[], lookAheadMeters: number): CurveData[] {
+  findUpcomingCurves(currentLat: number, currentLng: number, currentHeading: number | null, nodes: RoadNode[], lookAheadMeters: number, speedKmh: number = 0): CurveData[] {
     if (nodes.length < 5) return [];
 
     const foundCurves: CurveData[] = [];
-    const MAX_CURVES = 2;
+    const MAX_CURVES = 3;
 
     // 1. Find the "current" index by proximity
     let closestIdx = 0;
@@ -268,17 +358,43 @@ class CurveAnalysisService {
         j += traverseStride;
       }
 
-      const threshold = distanceToScanStart > 1500 ? 8 : 15; 
+      const threshold = speedKmh > 100 ? 10 : (distanceToScanStart > 1500 ? 8 : 15); 
       
       if (Math.abs(cumulativeAngle) > threshold) {
         let severity: CurveData['severity'] = 'medium';
         const absoluteAngle = Math.abs(cumulativeAngle);
         
-        if (absoluteAngle > 95) severity = 'hairpin';
-        else if (absoluteAngle > 55) severity = 'hard';
-        else if (absoluteAngle < 35) severity = 'soft';
+        // Context-Aware Severity: Thresholds drop as speed increases
+        const speedFactor = Math.max(1, speedKmh / 60);
+        const dynamicAngle = absoluteAngle * speedFactor;
 
-        // Capturar MUITO mais pontos para mostrar a via inteira no minimapa (250 pontos)
+        if (dynamicAngle > 140) severity = 'hairpin';
+        else if (dynamicAngle > 90) severity = 'hard';
+        else if (dynamicAngle < 40) severity = 'soft';
+
+        // Detecção de Combo (S-Curve / Chicane)
+        let direction: CurveData['direction'] = cumulativeAngle > 0 ? 'right' : 'left';
+        
+        // Look ahead for counter-curve within 80 meters
+        let k = j;
+        let counterDist = 0;
+        let counterAngle = 0;
+        while ((traverseStride > 0 ? k < nodes.length - 2 : k > 1) && counterDist < 80) {
+           const nK = k + traverseStride;
+           const nNK = k + 2 * traverseStride;
+           counterDist += this.haversineDistance(nodes[k].lat, nodes[k].lng, nodes[nK].lat, nodes[nK].lng);
+           counterAngle += this.calculateAngle(nodes[k], nodes[nK], nodes[nNK]);
+           
+           // If we find a significant angle in the opposite direction
+           if (Math.abs(counterAngle) > 20 && Math.sign(counterAngle) !== Math.sign(cumulativeAngle)) {
+              severity = 's-curve';
+              direction = 'both';
+              j = k; // Jump to end of combo
+              break;
+           }
+           k += traverseStride;
+        }
+
         const extendedPoints = traverseStride > 0 
           ? nodes.slice(i, i + 250) 
           : nodes.slice(Math.max(0, i - 250), i + 1).reverse();
@@ -287,7 +403,7 @@ class CurveAnalysisService {
           angle: Math.round(absoluteAngle),
           severity,
           distance: Math.round(distanceToScanStart),
-          direction: cumulativeAngle > 0 ? 'right' : 'left',
+          direction,
           points: extendedPoints
         });
 

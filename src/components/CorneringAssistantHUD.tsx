@@ -35,6 +35,8 @@ interface CorneringAssistantHUDProps {
   isRouteMode: boolean;
   onBack: () => void;
   currentRoadName: string | null;
+  snappedLocation: RoadNode | null;
+  smoothLocation?: { lat: number, lng: number, heading: number } | null;
 }
 
 export function CorneringAssistantHUD({
@@ -50,7 +52,9 @@ export function CorneringAssistantHUD({
   setDestination,
   isRouteMode,
   onBack,
-  currentRoadName
+  currentRoadName,
+  snappedLocation,
+  smoothLocation
 }: CorneringAssistantHUDProps) {
   const [isMirrored, setIsMirrored] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -58,6 +62,22 @@ export function CorneringAssistantHUD({
   const [isOfflineMode, setIsOfflineMode] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [displayMode, setDisplayMode] = useState<'vector' | 'sign'>('sign');
+  const [usingCache, setUsingCache] = useState(false);
+
+  useEffect(() => {
+    // Detect if we are using cached geometry
+    const cached = localStorage.getItem('dragfire_active_geometry');
+    if (cached && upcomingNodes.length > 0) {
+      try {
+        const { nodes } = JSON.parse(cached);
+        if (nodes.length === upcomingNodes.length && nodes[0]?.lat === upcomingNodes[0]?.lat) {
+           setUsingCache(true);
+        } else {
+           setUsingCache(false);
+        }
+      } catch(e) {}
+    }
+  }, [upcomingNodes]);
 
   const getSeverityBaseColor = (severity?: string) => {
     switch (severity) {
@@ -65,8 +85,10 @@ export function CorneringAssistantHUD({
       case 'soft': return '#22c55e'; // Green
       case 'medium': return '#eab308'; // Yellow
       case 'hard': return '#ef4444'; // Red
-      case 'hairpin': return '#ef4444'; // Red
-      default: return '#06b6d4'; // Cyan
+      case 'hairpin': return '#7f1d1d'; // Dark Red
+      case 's-curve': return '#a855f7'; // Purple (Combo)
+      case 'chicane': return '#ec4899'; // Pink (Combo)
+      default: return '#3b82f6'; // Blue
     }
   };
 
@@ -88,6 +110,8 @@ export function CorneringAssistantHUD({
       case 'medium': return 'Curva Médiana';
       case 'hard': return 'Curva Fechada';
       case 'hairpin': return 'Grampo 180°';
+      case 's-curve': return 'Sequência Curvas S';
+      case 'chicane': return 'Chicane Técnica';
       default: return 'Curva Rápida';
     }
   };
@@ -127,6 +151,10 @@ export function CorneringAssistantHUD({
           path = isLeft ? "M 50 85 L 50 30 C 50 15, 20 15, 20 30 L 20 60" : "M 50 85 L 50 30 C 50 15, 80 15, 80 30 L 80 60";
           arrowHead = isLeft ? "M 12 52 L 20 60 L 28 52" : "M 72 52 L 80 60 L 88 52";
        }
+    } else if (curve.severity === 's-curve' || curve.severity === 'chicane') {
+        // S-Curve drawing (Combo)
+        path = isLeft ? "M 50 85 C 50 60, 20 60, 20 45 C 20 30, 80 30, 80 15" : "M 50 85 C 50 60, 80 60, 80 45 C 80 30, 20 30, 20 15";
+        arrowHead = isLeft ? "M 70 25 L 80 15 L 90 25" : "M 10 25 L 20 15 L 30 25";
     }
 
     return (
@@ -218,9 +246,11 @@ export function CorneringAssistantHUD({
             {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
           </button>
 
-          <div className="bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-xl flex items-center gap-2">
-             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-             <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest">Cache Offline</span>
+          <div className={`${usingCache ? 'bg-orange-500/10 border-orange-500/20' : 'bg-emerald-500/10 border-emerald-500/20'} px-3 py-1.5 rounded-xl flex items-center gap-2 transition-colors`}>
+             <div className={`w-1.5 h-1.5 rounded-full ${usingCache ? 'bg-orange-500' : 'bg-emerald-500'} animate-pulse`} />
+             <span className={`text-[8px] font-black ${usingCache ? 'text-orange-400' : 'text-emerald-400'} uppercase tracking-widest`}>
+                {usingCache ? 'Modo Offline' : 'Cache Ativo'}
+             </span>
           </div>
 
           <button 
@@ -361,11 +391,15 @@ export function CorneringAssistantHUD({
                   {(() => {
                     // MapScale adjusted for better visibility (less zoom)
                     const mapScale = 4000; 
+                    // Use snapped location for centering if available, fallback to raw GPS
+                    const centerLat = smoothLocation?.lat || snappedLocation?.lat || currentLat;
+                    const centerLng = smoothLocation?.lng || snappedLocation?.lng || currentLng;
+
                     return (
                       <motion.polyline
                         points={upcomingNodes.map((n, i) => {
-                          const x = 50 + (n.lng - currentLng) * mapScale;
-                          const y = 50 - (n.lat - currentLat) * mapScale;
+                          const x = 50 + (n.lng - centerLng) * mapScale;
+                          const y = 50 - (n.lat - centerLat) * mapScale;
                           return `${x},${y}`;
                         }).join(' ')}
                         fill="none"

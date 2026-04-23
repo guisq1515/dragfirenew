@@ -27,6 +27,8 @@ export interface RunResult {
     longitude: number;
   } | null;
   estimatedPowerCV?: number; // Estimated engine horsepower
+  performanceScore?: number;  // Normalised score (compensated for slope)
+  runSerial?: string;        // Short unique ID for user reference
   vehicleId?: string;       // Associated vehicle
   vehicleName?: string;     // Associated vehicle name
 }
@@ -47,6 +49,8 @@ export interface RankingEntry {
   latitude: number;
   longitude: number;
   slope: number;
+  performanceScore?: number;
+  runSerial?: string;
   vehicleId?: string;
 }
 
@@ -88,6 +92,7 @@ export interface UserProfile {
   isVerified?: boolean;
   isPrivate?: boolean;
   followingCount?: number;
+  followersCount?: number;
   isAdmin?: boolean;
   handle?: string;
   privacySettings?: {
