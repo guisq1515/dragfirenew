@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -132,7 +132,7 @@ import {
   Settings2,
   Palette,
   Award,
-  Target, Palmtree, Coffee, Waves, Tent, Mountain, Compass } from 'lucide-react';
+  Target, Palmtree, Coffee, Waves, Tent, Mountain, Compass, ShieldAlert } from 'lucide-react';
 import { PerformanceChart } from './components/PerformanceChart';
 import { TripAnalysis } from './components/TripAnalysis';
 import { ProfileLibrary } from './components/ProfileLibrary';
@@ -225,66 +225,6 @@ class ErrorBoundary extends React.Component<any, any> {
   }
 }
 
-// --- Brand Logo Component ---
-const DragFireLogo = ({ size = 'medium', className = '' }: { size?: 'small' | 'medium' | 'large', className?: string }) => {
-  const sizes = {
-    small: 'h-6',
-    medium: 'h-10',
-    large: 'h-24'
-  };
-
-  return (
-    <div className={`flex items-center gap-3 ${className}`}>
-      <div className={`relative ${sizes[size]} aspect-square`}>
-        {/* Flame Icon */}
-        <div className="absolute -top-1 -right-1 w-1/2 h-1/2 overflow-visible">
-          <svg viewBox="0 0 24 24" className="w-full h-full text-brand-primary drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]">
-            <path fill="currentColor" d="M12,18.5C10.07,18.5 8.5,16.93 8.5,15C8.5,13.07 10.07,11.5 12,11.5C13.93,11.5 15.5,13.07 15.5,15C15.5,16.93 13.93,18.5 12,18.5M12,2C12,2 17,7 17,11C17,14 14.5,16.5 12,16.5C9.5,16.5 7,14 7,11C7,7 12,2 12,2Z" />
-          </svg>
-        </div>
-        {/* DF Letters */}
-        <svg viewBox="0 0 100 100" className="w-full h-full">
-          <defs>
-            <linearGradient id="df-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" style={{ stopColor: '#ffffff', stopOpacity: 1 }} />
-              <stop offset="100%" style={{ stopColor: '#e2e2e2', stopOpacity: 1 }} />
-            </linearGradient>
-          </defs>
-          <path 
-            d="M20 20 L50 20 Q70 20 70 40 L70 60 Q70 80 50 80 L20 80 Z" 
-            fill="none" 
-            stroke="white" 
-            strokeWidth="8" 
-            className="drop-shadow-[0_0_5px_rgba(255,255,255,0.3)]"
-          />
-          <text 
-            x="32" y="65" 
-            fontFamily="font-display, sans-serif" 
-            fontWeight="900" 
-            fontStyle="italic" 
-            fontSize="45" 
-            fill="white"
-          >D</text>
-          <path 
-            d="M60 30 L90 30 L90 40 L75 40 L75 50 L85 50 L85 60 L75 60 L75 80" 
-            fill="none" 
-            stroke="#ef4444" 
-            strokeWidth="8"
-            strokeLinecap="round"
-          />
-        </svg>
-      </div>
-      {(size === 'medium' || size === 'large') && (
-        <div className="flex flex-col">
-          <div className="flex items-baseline gap-1">
-            <span className={`font-display font-black italic text-white uppercase tracking-tighter ${size === 'large' ? 'text-4xl' : 'text-xl'}`}>DRAG</span>
-            <span className={`font-display font-black italic text-brand-primary uppercase tracking-tighter ${size === 'large' ? 'text-4xl' : 'text-xl'}`}>FIRE</span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
 
 // --- Brand Icon Component [NEW] ---
 const BrandIcon = ({ brand, className = '' }: { brand: string, className?: string }) => {
@@ -447,7 +387,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 const TERMS_VERSION = '1.0.0';
 const ADMIN_EMAILS = ['guisq1515@gmail.com'];
 
-type Screen = 'home' | 'timer' | 'challenge' | 'duel-result' | 'settings' | 'login' | 'terms' | 'vehicle-settings' | 'profile-settings' | 'theme-store' | 'regional-ranking' | 'history' | 'gps-guide' | 'custom-setup' | 'trip-view' | 'fuel-calculator' | 'public-profile' | 'feed' | 'search' | 'ai-editor' | 'fuel-stations' | 'anp-import' | 'admin-dashboard' | 'cornering-assistant' | 'vehicle-catalog' | 'missions' | 'trip-explorer' | 'curve-radar';
+type Screen = 'home' | 'timer' | 'challenge' | 'duel-result' | 'settings' | 'login' | 'terms' | 'vehicle-settings' | 'profile-settings' | 'theme-store' | 'regional-ranking' | 'history' | 'gps-guide' | 'custom-setup' | 'trip-view' | 'fuel-calculator' | 'public-profile' | 'feed' | 'search' | 'ai-editor' | 'fuel-stations' | 'anp-import' | 'admin-dashboard' | 'cornering-assistant' | 'vehicle-catalog' | 'missions' | 'trip-explorer' | 'curve-radar' | 'banned';
 
 function GPSGuide({ onBack }: { onBack: () => void }) {
   const tips = [
@@ -743,10 +683,10 @@ function HistoryItem({ run, isPremium, onDelete }: HistoryItemProps) {
                         <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1 font-display">Potência (CV)</span>
                         {!isPremium ? (
                           <div className="flex items-center gap-1.5 text-yellow-500/40">
-                            <div className="flex flex-col items-center">
-                               <DragFireLogo size="small" />
-                            </div>
-                            <span className="text-[8px] font-black uppercase tracking-tighter">Premium</span>
+                             <div className="p-1.5 bg-yellow-500/10 rounded-lg">
+                                <Zap className="w-3 h-3 fill-current" />
+                             </div>
+                             <span className="text-[8px] font-black uppercase tracking-tighter">Premium</span>
                           </div>
                         ) : (
                           <p className="text-[8px] font-black text-brand-primary uppercase italic leading-none animate-pulse">
@@ -1727,7 +1667,7 @@ function RegionalRanking({
     const q = query(
       collection(db, 'rankings'), 
       where('category', '==', filter.includes('201') || filter === 'regional-201' ? '201m' : '0-100'),
-      where('timestamp', '>=', Timestamp.fromMillis(startOfMonth.getTime())),
+      where('timestamp', '>=', startOfMonth.getTime()),
       orderBy('performanceScore', 'desc'), 
       limit(100)
     );
@@ -1936,7 +1876,7 @@ function RegionalRankingElite({
     const q = query(
       collection(db, 'rankings'), 
       where('category', '==', category),
-      where('timestamp', '>=', Timestamp.fromMillis(startOfMonth.getTime())),
+      where('timestamp', '>=', startOfMonth.getTime()),
       orderBy('performanceScore', 'desc'), 
       limit(100)
     );
@@ -2957,6 +2897,12 @@ function VehicleSettings({
     try {
       if (!auth.currentUser) throw new Error('Usuário nà£o autenticado.');
       
+      // Forçar pedido de permissão no Android 13+
+      const permission = await Camera.checkPermissions();
+      if (permission.photos !== 'granted' || permission.camera !== 'granted') {
+        await Camera.requestPermissions({ permissions: ['photos', 'camera'] });
+      }
+
       await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'UPLOAD_MAIN_START', details: { vehicleId: formData.id } });
       
       setUploadStatus('[S1] Abrindo Galeria...');
@@ -2991,45 +2937,38 @@ function VehicleSettings({
       const byteArray = new Uint8Array(byteNumbers);
       const blob = new Blob([byteArray], { type: 'image/jpeg' });
       
-      setUploadProgress(30);
+      setUploadProgress(40);
       setUploadStatus('[S4] Iniciando Transferência...');
-      await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'STORAGE_UPLOAD_START_RESUMABLE', details: { path, size: blob.size } });
+      await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'STORAGE_UPLOAD_START_STRING', details: { path, format: photo.format } });
       
-      const uploadTask = uploadBytesResumable(storageRef, blob, { contentType: 'image/jpeg' });
+      const uploadTask = uploadBytesResumable(storageRef, byteArray, { contentType: 'image/jpeg' });
       
       return new Promise<void>((resolve, reject) => {
-        // Safety timeout: 120 seconds
         const timeout = setTimeout(() => {
           uploadTask.cancel();
-          const err = new Error('Tempo limite excedido (120s). Verifique sua conexà£o.');
-          logRemote({ uid: auth.currentUser!.uid, level: 'error', message: 'UPLOAD_TIMEOUT', details: { size: blob.size } });
-          reject(err);
+          reject(new Error('Tempo limite excedido (120s). Verifique sua conexão.'));
         }, 120000);
 
         uploadTask.on('state_changed',
           (snapshot) => {
             const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            setUploadProgress(30 + (progress * 0.6));
+            setUploadProgress(40 + (progress * 0.55));
             setUploadStatus(`Enviando... ${Math.round(progress)}%`);
           },
           async (error) => {
             clearTimeout(timeout);
             console.error('Upload error:', error);
-            await logRemote({ uid: auth.currentUser!.uid, level: 'error', message: 'UPLOAD_MAIN_ERROR_TASK', details: { code: error.code, message: error.message } });
             reject(error);
           },
           async () => {
             clearTimeout(timeout);
             setUploadStatus('[S5] Finalizando...');
             setUploadProgress(95);
-            
             try {
               const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
               setFormData({ ...formData, photoURL: downloadURL });
-              await logRemote({ uid: auth.currentUser!.uid, level: 'info', message: 'UPLOAD_MAIN_SUCCESS', details: { url: downloadURL } });
               setUploadStatus('Sucesso!');
               setUploadProgress(100);
-              
               setTimeout(() => {
                 setIsUploading(false);
                 setUploadProgress(0);
@@ -3037,7 +2976,6 @@ function VehicleSettings({
                 resolve();
               }, 1000);
             } catch (err: any) {
-              await logRemote({ uid: auth.currentUser!.uid, level: 'error', message: 'GET_URL_ERROR', details: { message: err.message } });
               reject(err);
             }
           }
@@ -3065,6 +3003,12 @@ function VehicleSettings({
     setUploadProgress(1);
 
     try {
+      // Forçar pedido de permissão no Android 13+
+      const permission = await Camera.checkPermissions();
+      if (permission.photos !== 'granted' || permission.camera !== 'granted') {
+        await Camera.requestPermissions({ permissions: ['photos', 'camera'] });
+      }
+
       setUploadStatus('[S1] Abrindo Galeria...');
       const currentPhotos = formData.photoURLs || [];
       if (currentPhotos.length >= 6) {
@@ -3099,15 +3043,24 @@ function VehicleSettings({
         const response = await fetch(photo.dataUrl);
         const blob = await response.blob();
         
-        await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'EXTRA_STORAGE_UPLOAD_START_RESUMABLE', details: { path, size: blob.size } });
+        const base64Data = photo.dataUrl.split(',')[1];
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
         
-        const uploadTask = uploadBytesResumable(storageRef, blob, { contentType: 'image/jpeg' });
+        setUploadStatus('[S4] Enviando...');
+        setUploadProgress(40);
+        
+        const uploadTask = uploadBytesResumable(storageRef, byteArray, { contentType: 'image/jpeg' });
         
         return new Promise<void>((resolve, reject) => {
           uploadTask.on('state_changed',
             (snapshot) => {
               const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-              setUploadProgress(30 + (progress * 0.6));
+              setUploadProgress(40 + (progress * 0.55));
               setUploadStatus(`Enviando Extra... ${Math.round(progress)}%`);
             },
             async (error) => {
@@ -5451,11 +5404,14 @@ export default function App() {
     nextCurve, 
     posteriorCurve,
     upcomingNodes, 
+    allRegionalWays,
+    isLoading,
     lookAheadDistance,
     isRouteMode, 
     currentRoadName,
     snappedLocation,
-    smoothLocation
+    smoothLocation,
+    imu
   } = useCorneringAssistant(
     currentLat, 
     currentLng, 
@@ -5568,6 +5524,8 @@ export default function App() {
                   email: firebaseUser.email
                 });
                 setScreen('terms');
+              } else if (userData?.isBanned) {
+                setScreen('banned');
               } else if (!userData?.termsAccepted || userData?.termsVersion !== TERMS_VERSION) {
                 setScreen('terms');
               } else {
@@ -6393,27 +6351,67 @@ export default function App() {
           ) : screen === 'login' ? (
             <div 
               key="login"
-              className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-black relative overflow-hidden"
+              className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#050505] relative overflow-hidden"
             >
-              {/* Animated Background Glows */}
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[200%] aspect-square bg-brand-primary/5 blur-[120px] rounded-full pointer-events-none" />
-              <div className="absolute bottom-0 right-0 w-[50%] aspect-square bg-brand-primary/10 blur-[100px] rounded-full pointer-events-none" />
+              {/* Dynamic Background Image */}
+              <div className="absolute inset-0 z-0">
+                <img 
+                  src="assets/banner_horizon.png" 
+                  className="w-full h-full object-cover opacity-20 blur-[2px]"
+                  alt="" 
+                />
+                <div className="absolute inset-0 bg-gradient-to-b from-[#050505] via-transparent to-[#050505]" />
+                <div className="absolute inset-0 bg-gradient-to-r from-[#050505] via-transparent to-[#050505]" />
+              </div>
+
+              {/* Animated Mesh Glows */}
+              <motion.div 
+                animate={{ 
+                  scale: [1, 1.2, 1],
+                  opacity: [0.3, 0.5, 0.3]
+                }}
+                transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute top-[-20%] left-[-10%] w-[80%] aspect-square bg-brand-primary/20 blur-[120px] rounded-full pointer-events-none z-0" 
+              />
+              <motion.div 
+                animate={{ 
+                  scale: [1.2, 1, 1.2],
+                  opacity: [0.2, 0.4, 0.2]
+                }}
+                transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+                className="absolute bottom-[-10%] right-[-5%] w-[60%] aspect-square bg-red-900/20 blur-[100px] rounded-full pointer-events-none z-0" 
+              />
               
               <motion.div 
-                initial={{ opacity: 0, scale: 0.9, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                className="mb-16 relative z-10 flex flex-col items-center"
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, ease: "easeOut" }}
+                className="mb-12 relative z-10 flex flex-col items-center"
               >
-                <DragFireLogo size="large" className="mb-8" />
-                <h2 className="text-zinc-500 font-bold uppercase tracking-[0.3em] text-[10px]">AFERIà‡àƒO DE PERFORMACE</h2>
+                <div className="space-y-2">
+                  <h1 className="text-4xl font-display font-black italic text-white uppercase tracking-tighter leading-none">
+                    DRAG<span className="text-brand-primary">FIRE</span>
+                  </h1>
+                  <h1 className="text-3xl font-display font-black italic text-white/90 uppercase tracking-[0.2em] leading-none">
+                    PERFORMANCE
+                  </h1>
+                  <div className="flex items-center gap-3 justify-center pt-2">
+                    <div className="h-px w-8 bg-gradient-to-r from-transparent to-zinc-800" />
+                    <h2 className="text-zinc-500 font-bold uppercase tracking-[0.4em] text-[8px] whitespace-nowrap">
+                      Aferição de Performance
+                    </h2>
+                    <div className="h-px w-8 bg-gradient-to-l from-transparent to-zinc-800" />
+                  </div>
+                </div>
               </motion.div>
 
               <div className="w-full max-w-xs space-y-4 relative z-10">
                 <button 
                   onClick={handleLogin}
                   disabled={isLoggingIn}
-                  className="w-full py-4 bg-white text-black hover:bg-zinc-200 rounded-2xl font-black italic text-lg transition-all active:scale-95 flex items-center justify-center gap-3 shadow-xl disabled:opacity-50"
+                  className="group w-full py-4 bg-white text-black rounded-2xl font-black italic text-lg transition-all active:scale-95 flex items-center justify-center gap-4 shadow-[0_20px_40px_rgba(255,255,255,0.1)] hover:bg-zinc-100 disabled:opacity-50 overflow-hidden relative"
                 >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-shimmer" />
                   {isLoggingIn ? (
                     <div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin" />
                   ) : (
@@ -6426,15 +6424,22 @@ export default function App() {
                 
                 <button 
                   onClick={handleGuestLogin}
-                  className="w-full py-3 bg-zinc-950 text-white/40 hover:text-white rounded-2xl font-bold text-sm border border-white/5 transition-all active:scale-95"
+                  className="w-full py-4 bg-white/5 backdrop-blur-md text-white/60 hover:text-white hover:bg-white/10 rounded-2xl font-black italic text-[11px] tracking-widest border border-white/10 transition-all active:scale-95 uppercase"
                 >
-                  ENTRAR COMO VISITANTE
+                  Entrar como Visitante
                 </button>
+
+                <p className="text-[7px] font-black text-zinc-600 uppercase tracking-widest pt-2">
+                  Junte-se a +10.000 pilotos entusiastas
+                </p>
               </div>
 
-              <div className="absolute bottom-10 left-0 right-0 px-8 opacity-20 z-10">
-                <p className="text-[8px] font-black tracking-[0.5em] text-white/50 mb-1">DESIGNED FOR SPEED</p>
-                <p className="text-[10px] font-mono text-white/50">v{APP_VERSION}-ELITE</p>
+              <div className="absolute bottom-10 left-0 right-0 px-8 opacity-40 z-10 flex flex-col items-center gap-1">
+                <p className="text-[7px] font-black tracking-[0.8em] text-white/40 uppercase">Elite Racing Tech</p>
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-brand-primary rounded-full animate-pulse" />
+                  <p className="text-[9px] font-mono text-zinc-500">v{APP_VERSION}-ELITE</p>
+                </div>
               </div>
             </div>
         ) : screen === 'terms' ? (
@@ -6568,15 +6573,40 @@ export default function App() {
         ) : screen === 'trip-explorer' && userProfile ? (
             <TripExplorer 
               onBack={() => setScreen('home')}
-              userLocation={userLocation}
+              userLocation={lastPosition}
               userId={user?.uid}
               isGuest={isGuest}
             />
           ) : screen === 'curve-radar' && userProfile ? (
             <CurveRadar 
               onBack={() => setScreen('home')}
-              userLocation={userLocation}
+              userLocation={lastPosition}
+              userId={user?.uid}
+              isGuest={isGuest}
             />
+          ) : screen === 'banned' ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-zinc-950 text-white h-screen">
+              <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center mb-6 animate-pulse">
+                <ShieldAlert className="w-10 h-10 text-red-500" />
+              </div>
+              <h2 className="text-2xl font-display font-black italic mb-2 uppercase tracking-tighter">Conta Suspensa</h2>
+              <p className="text-zinc-400 text-sm mb-8 max-w-xs">
+                Sua conta foi suspensa por violar nossos termos de uso ou diretrizes da comunidade.
+              </p>
+              {userProfile?.banReason && (
+                <div className="bg-zinc-900 p-4 rounded-xl border border-white/5 text-left w-full max-w-sm mb-8">
+                  <p className="text-[10px] font-mono text-zinc-500 uppercase mb-2">Motivo da Suspensão</p>
+                  <p className="text-xs font-mono text-red-400">{userProfile.banReason}</p>
+                </div>
+              )}
+              <button 
+                onClick={handleLogout}
+                className="w-full max-w-xs py-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl font-display font-black italic text-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                <LogOut className="w-5 h-5" />
+                SAIR DO APP
+              </button>
+            </div>
           ) : screen === 'missions' && userProfile ? (
             <MissionsView 
               profile={userProfile}
@@ -6997,6 +7027,10 @@ export default function App() {
               currentRoadName={currentRoadName}
               snappedLocation={snappedLocation}
               smoothLocation={smoothLocation}
+              isLoading={isLoading}
+              allRegionalWays={allRegionalWays}
+              imu={imu}
+              minimapZoomMultiplier={telemetryConfig.minimapZoomMultiplier}
             />
           </motion.div>
         ) : screen === 'duel-result' && activeChallenge ? (
@@ -7618,6 +7652,30 @@ function PublicProfileDetail({ uid, currentUserId, onBack, onUpdateProfile, onEd
   if (!profile) return <div className="flex-1 flex flex-col items-center justify-center bg-zinc-950 text-zinc-500 p-8 text-center"><p>Ops! Perfil nà£o encontrado.</p><button onClick={onBack} className="mt-4 text-brand-primary font-bold uppercase tracking-widest text-[10px]">Voltar</button></div>;
 
   const theme = getThemeById(profile.activeThemeId || 'default');
+  const handleToggleBan = async () => {
+    if (!profile || !isAdmin) return;
+    
+    const newStatus = !profile.isBanned;
+    let reason = '';
+    
+    if (newStatus) {
+      reason = prompt('Motivo do banimento:') || 'Violação dos termos de uso';
+    }
+    
+    try {
+      await setDoc(doc(db, 'users', uid), { 
+        isBanned: newStatus,
+        banReason: newStatus ? reason : null
+      }, { merge: true });
+      
+      setProfile(prev => prev ? { ...prev, isBanned: newStatus, banReason: reason } : null);
+      alert(newStatus ? 'Usuário banido com sucesso.' : 'Banimento removido.');
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao processar banimento.');
+    }
+  };
+
   const isOwner = uid === currentUserId;
 
   return (
@@ -7659,6 +7717,14 @@ function PublicProfileDetail({ uid, currentUserId, onBack, onUpdateProfile, onEd
                   className="p-3 bg-brand-primary border-2 border-white/20 rounded-2xl text-white shadow-xl active:scale-95"
                  >
                     <Palette className="w-6 h-6" />
+                 </button>
+               )}
+               {!isOwner && isAdmin && (
+                 <button 
+                   onClick={handleToggleBan}
+                   className={`p-3 rounded-2xl text-white shadow-xl active:scale-95 transition-all ${profile?.isBanned ? 'bg-green-600' : 'bg-red-600'}`}
+                 >
+                   {profile?.isBanned ? <ShieldCheck className="w-6 h-6" /> : <ShieldAlert className="w-6 h-6" />}
                  </button>
                )}
                <button className="p-3 bg-black/40 backdrop-blur-xl border border-white/5 rounded-2xl text-white/50">
@@ -8280,13 +8346,13 @@ function CurveRadar({ onBack, userLocation, userId, isGuest }: { onBack: () => v
 
 function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle: any, onBack: () => void, isOwnCar: boolean, onEditVehicle: (v: any) => void }) {
   const stats = {
-    topSpeed: vehicle.topSpeed || 240,
-    torque: vehicle.torque || 270,
+    topSpeed: vehicle.maxSpeed || (vehicle.type === 'motorcycle' ? 180 : 240),
+    torque: vehicle.torque || (vehicle.type === 'motorcycle' ? 40 : 270),
     gForce: vehicle.maxG || 0.85,
-    power: vehicle.power || 180,
-    weight: vehicle.weight || 1350,
-    engine: vehicle.engine || '1.8 TFSI (180CV)',
-    stage: vehicle.stage || 'STAGE 1'
+    power: vehicle.hp || (vehicle.type === 'motorcycle' ? 30 : 180),
+    weight: vehicle.weight || (vehicle.type === 'motorcycle' ? 160 : 1350),
+    engine: vehicle.engine || (vehicle.type === 'motorcycle' ? '400cc Single' : '1.8 TFSI (180CV)'),
+    stage: vehicle.stage || 'STOCK'
   };
 
   return (
@@ -8304,7 +8370,7 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle:
 
       <main className="flex-1 flex flex-col px-4 pb-4 overflow-hidden">
         {/* Hero Card - More Compact */}
-        <div className="relative aspect-[16/9] rounded-[32px] overflow-hidden border border-white/10 shadow-xl mb-4 shrink-0">
+        <div className="relative aspect-[4/3] rounded-[32px] overflow-hidden border border-white/10 shadow-xl mb-2 shrink-0">
           <img 
             src={vehicle.photoURL || 'https://images.unsplash.com/photo-1614162692292-7ac56d7f7f1e?auto=format&fit=crop&q=80'} 
             className="w-full h-full object-cover" 
@@ -8312,21 +8378,13 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle:
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
           
-          {/* Top Glass Badge - Smaller */}
-          <div className="absolute top-4 left-4 right-4 flex items-start justify-between">
-            <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-2 flex items-center gap-3">
-              <div className="text-[8px] font-black text-white italic uppercase tracking-tighter pr-3 border-r border-white/10">
+          {/* Top Glass Badge - More Compact & Higher */}
+          <div className="absolute top-2 left-4 right-4 flex items-start justify-between">
+            <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl py-1.5 px-2.5 flex items-center gap-2">
+              <div className="text-[8px] font-black text-white italic uppercase tracking-tighter pr-2 border-r border-white/10">
                 DRAG<span className="text-brand-primary">FIRE</span>
               </div>
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 flex items-center justify-center opacity-70">
-                   <svg viewBox="0 0 100 40" className="w-full h-full fill-white">
-                     <circle cx="20" cy="20" r="15" fill="none" stroke="currentColor" strokeWidth="4"/>
-                     <circle cx="40" cy="20" r="15" fill="none" stroke="currentColor" strokeWidth="4"/>
-                     <circle cx="60" cy="20" r="15" fill="none" stroke="currentColor" strokeWidth="4"/>
-                     <circle cx="80" cy="20" r="15" fill="none" stroke="currentColor" strokeWidth="4"/>
-                   </svg>
-                </div>
                 <div className="flex flex-col">
                   <span className="text-[8px] font-black text-white uppercase leading-none">{vehicle.brand}</span>
                   <span className="text-[6px] font-bold text-zinc-400 uppercase tracking-widest leading-none">{vehicle.nickname || vehicle.model}</span>
@@ -8334,14 +8392,14 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle:
               </div>
             </div>
             
-            <button className="p-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-full text-white">
-              <Share2Icon className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="absolute bottom-4 right-6">
-            <div className="bg-brand-primary/90 px-3 py-1 rounded-full">
-              <span className="text-[8px] font-black text-white italic uppercase tracking-widest">{stats.stage}</span>
+            <div className="flex items-center gap-2">
+              {/* Stage moved here - More compact */}
+              <div className="bg-brand-primary/90 px-2.5 py-1 rounded-full backdrop-blur-md border border-white/10 shadow-lg">
+                <span className="text-[7px] font-black text-white italic uppercase tracking-widest">{stats.stage}</span>
+              </div>
+              <button className="p-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-full text-white">
+                <Share2Icon className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>
@@ -8355,8 +8413,8 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle:
               <h4 className="text-[9px] font-black text-white uppercase italic tracking-widest">Dinâmica</h4>
             </div>
             
-            <div className="flex-1 bg-zinc-900/40 border border-white/5 rounded-3xl p-4 flex flex-col justify-between">
-               <div className="space-y-3">
+            <div className="flex-1 bg-zinc-900/40 border border-white/5 rounded-3xl p-4 flex flex-col justify-start">
+               <div className="space-y-2.5">
                  <div className="space-y-1">
                    <div className="flex justify-between items-end">
                      <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Velocidade Máxima</span>
@@ -8388,7 +8446,7 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle:
                  </div>
                </div>
 
-               <div className="mt-4 pt-3 border-t border-white/5">
+               <div className="mt-3 pt-2 border-t border-white/5">
                  <div className="flex items-center gap-1.5 mb-2">
                    <Trophy className="w-3 h-3 text-yellow-500" />
                    <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Melhores Recordes</span>
@@ -8396,11 +8454,15 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle:
                  <div className="space-y-1.5">
                    <div className="flex items-center justify-between bg-zinc-950/50 rounded-lg p-1.5">
                      <span className="text-[6px] font-bold text-zinc-500 uppercase tracking-widest">0-100 KM/H</span>
-                     <span className="text-[9px] font-black text-white italic">-- <span className="text-brand-primary">S</span></span>
+                     <span className="text-[9px] font-black text-white italic">
+                       {vehicle.best0to100 ? vehicle.best0to100.toFixed(2) : '--'} <span className="text-brand-primary">S</span>
+                     </span>
                    </div>
                    <div className="flex items-center justify-between bg-zinc-950/50 rounded-lg p-1.5">
                      <span className="text-[6px] font-bold text-zinc-500 uppercase tracking-widest">201 METROS</span>
-                     <span className="text-[9px] font-black text-white italic">-- <span className="text-blue-500">S</span></span>
+                     <span className="text-[9px] font-black text-white italic">
+                       {vehicle.best201m ? vehicle.best201m.toFixed(2) : '--'} <span className="text-blue-500">S</span>
+                     </span>
                    </div>
                  </div>
                </div>

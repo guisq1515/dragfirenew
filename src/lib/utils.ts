@@ -22,3 +22,15 @@ export const normalizeText = (text: string) => {
     .toUpperCase()
     .trim();
 };
+
+export const calculateBearing = (p1: { latitude: number, longitude: number }, p2: { latitude: number, longitude: number }) => {
+  const lat1 = (p1.latitude * Math.PI) / 180;
+  const lat2 = (p2.latitude * Math.PI) / 180;
+  const dLon = ((p2.longitude - p1.longitude) * Math.PI) / 180;
+
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  const brng = (Math.atan2(y, x) * 180) / Math.PI;
+
+  return (brng + 360) % 360;
+};

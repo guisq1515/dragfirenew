@@ -72,7 +72,7 @@ export function useCorneringAssistant(
   }, []);
 
   const baseDist = telemetryConfig?.lookAheadBaseDistance ?? 1200; 
-  const speedFactor = telemetryConfig?.lookAheadSpeedFactor ?? 12; 
+  const speedFactor = telemetryConfig?.lookAheadSpeedFactor ?? 20; 
   const maxDist = telemetryConfig?.lookAheadMaxDistance ?? 4000; 
   const lookAheadDistance = Math.min(maxDist, baseDist + (speedKmh * speedFactor));
 
@@ -98,7 +98,7 @@ export function useCorneringAssistant(
     const distToLast = lastFetchRef.current ? curveService.haversineDistance(lat, lng, lastFetchRef.current.lat, lastFetchRef.current.lng) : Infinity;
     const headingDiff = lastFetchRef.current ? Math.abs((heading || 0) - lastFetchRef.current.heading) : Infinity;
     
-    if (distToLast > 100 || headingDiff > 45) {
+    if (distToLast > 30 || headingDiff > 30) {
       const updateGeometry = async () => {
         if (upcomingNodes.length === 0) setIsLoading(true);
         const { nodes, roadName, allWays } = await curveService.getRoadGeometry(lat, lng, heading, speedKmh);
@@ -174,11 +174,15 @@ export function useCorneringAssistant(
 
   // Curve Analysis
   useEffect(() => {
-    if (!upcomingNodes.length || lat === null || lng === null) return;
-    const foundCurves = curveService.findUpcomingCurves(lat, lng, heading, upcomingNodes, lookAheadDistance, speedKmh);
+    const targetLat = smoothLocation?.lat || lat;
+    const targetLng = smoothLocation?.lng || lng;
+    
+    if (!upcomingNodes.length || targetLat === null || targetLng === null) return;
+    
+    const foundCurves = curveService.findUpcomingCurves(targetLat, targetLng, heading, upcomingNodes, lookAheadDistance, speedKmh);
     setCurves(foundCurves);
-    setSnappedLocation(curveService.snapToRoad(lat, lng));
-  }, [lat, lng, heading, upcomingNodes, lookAheadDistance, speedKmh]);
+    setSnappedLocation(curveService.snapToRoad(targetLat, targetLng));
+  }, [lat, lng, heading, upcomingNodes, lookAheadDistance, speedKmh, smoothLocation]);
 
   return { 
     nextCurve: curves[0] || null, 

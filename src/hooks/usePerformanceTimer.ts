@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { RunConfig, RunResult, GPSPoint, TelemetryConfig } from '../types';
-import { calculateDistance } from '../lib/utils';
+import { calculateDistance, calculateBearing } from '../lib/utils';
 import { Geolocation } from '@capacitor/geolocation';
 import { Motion } from '@capacitor/motion';
 import { fetchElevationPoints } from '../services/googleMapsService';
@@ -357,19 +357,44 @@ export function usePerformanceTimer(
             if (err) { setGpsStatus('error'); return; }
             if (!position) return;
             setGpsStatus('active');
-            const { latitude, longitude, speed, accuracy, altitude, heading } = position.coords;
-            setCurrentHeading(heading ?? null);
-            
+            const { latitude, longitude, speed, accuracy, altitude, heading: systemHeading } = position.coords;
             let calculatedSpeed = speed;
             if (calculatedSpeed === null && lastPointRef.current) {
               const d = calculateDistance(lastPointRef.current, { latitude, longitude } as any), t = (position.timestamp - lastPointRef.current.timestamp) / 1000;
               if (t > 0) calculatedSpeed = d / t;
             }
+            
             const currentPoint: GPSPoint = { latitude, longitude, altitude: altitude, speed: calculatedSpeed || 0, accuracy: accuracy, timestamp: position.timestamp, gLong: gLongRef.current, gLat: gLatRef.current };
+            const speedKmh = (calculatedSpeed || 0) * 3.6;
+            
+            // Smart Heading Logic (Waze-style)
+            if (speedKmh > 10 && lastPositionRef.current) {
+              const distMoved = calculateDistance(lastPositionRef.current, { latitude, longitude });
+              if (distMoved > 2) {
+                const gpsBearing = calculateBearing(lastPositionRef.current, { latitude, longitude });
+                // Smooth with system heading if available, or just use GPS
+                setCurrentHeading(prev => {
+                   if (prev === null) return gpsBearing;
+                   let diff = gpsBearing - prev;
+                   if (diff > 180) diff -= 360;
+                   if (diff < -180) diff += 360;
+                   return (prev + diff * 0.3 + 360) % 360; // Smoothing
+                });
+              }
+            } else if (systemHeading !== null) {
+              // Low speed: use system heading but with heavy smoothing to avoid "gyro bugs"
+              setCurrentHeading(prev => {
+                if (prev === null) return systemHeading;
+                let diff = systemHeading - prev;
+                if (diff > 180) diff -= 360;
+                if (diff < -180) diff += 360;
+                return (prev + diff * 0.1 + 360) % 360;
+              });
+            }
             
             setAccuracy(accuracy);
             setLastPosition({ latitude, longitude });
-            const speedKmh = (calculatedSpeed || 0) * 3.6;
+            lastPositionRef.current = { latitude, longitude };
             
             // --- WHEEL SPIN DETECTION ---
             if (isRunningRef.current && telemetryConfig?.wheelSpinDetectionEnabled && lastPointRef.current) {
@@ -379,7 +404,6 @@ export function usePerformanceTimer(
                 const gpsG = gpsAccel / 9.81;
                 const measuredG = linearAccelRef.current / 9.81;
                 
-                // If physical G is much higher than GPS-derived G, the wheels are spinning
                 if (measuredG > gpsG + 0.35) {
                   wheelSpinCounterRef.current++;
                   if (wheelSpinCounterRef.current > 3) wheelSpinDetectedRef.current = true;
@@ -415,7 +439,7 @@ export function usePerformanceTimer(
               setProgress(Math.min(100, Math.max(0, p)));
             } else setProgress(0);
 
-            if (config.mode === 'free') {
+            if (config.mode === 'free' || config.mode === 'trip') {
               if (isRunningRef.current) {
                 pointsRef.current.push(currentPoint);
                 if (lastPointRef.current) {

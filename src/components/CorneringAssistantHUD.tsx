@@ -159,10 +159,29 @@ export function CorneringAssistantHUD({
 
   return (
     <div className={`fixed inset-0 z-[200] flex flex-col font-display overflow-hidden transition-all duration-700 ${isMirrored ? 'scale-x-[-1]' : ''} bg-zinc-950`}>
+      
+      {/* Mini Plate (Next-Next Curve) */}
+      <AnimatePresence>
+        {posteriorCurve && (
+          <motion.div 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="absolute left-6 top-32 z-[60] flex flex-col items-center gap-1"
+          >
+            <div className="text-[7px] font-black text-white/40 uppercase tracking-[0.3em] mb-1">PRÓXIMA</div>
+            {renderPredefinedPlate(posteriorCurve, 'small')}
+            <div className="text-[10px] font-black text-white italic mt-1">{posteriorCurve.distance}m</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Top Bar */}
       <div className="relative z-50 p-3 flex items-center justify-between gap-3">
         <button onClick={onBack} className="bg-white/5 border border-white/10 p-3 rounded-xl"><ChevronLeft className="w-5 h-5 text-zinc-400" /></button>
         <div className="flex-1"><button onClick={() => setIsSearching(true)} className="w-full bg-zinc-900/50 border border-white/10 rounded-xl py-2.5 px-3 flex items-center gap-2"><SearchIcon className="w-3.5 h-3.5 text-zinc-600" /><span className="text-[9px] font-black uppercase text-zinc-500">{destination || 'Definir Destino...'}</span></button></div>
+        <div className="flex items-center gap-2">
+        <span className="text-white font-black italic text-base tracking-tighter uppercase">Drag<span className="text-brand-primary">Fire</span></span>
         <div className="flex items-center gap-2">
           <button onClick={() => setShowFeedback(true)} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400"><AlertTriangle className="w-5 h-5" /></button>
           <button onClick={() => setIsMuted(!isMuted)} className={`p-3 rounded-xl border ${isMuted ? 'bg-zinc-900 border-white/5 text-zinc-600' : 'bg-cyan-500/20 border-cyan-500 text-cyan-400'}`}>{isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}</button>
@@ -170,13 +189,14 @@ export function CorneringAssistantHUD({
           <button onClick={() => setIsMirrored(!isMirrored)} className={`p-3 rounded-xl border ${isMirrored ? 'bg-brand-primary/20 border-brand-primary text-brand-primary' : 'bg-white/5 border-white/10 text-zinc-400'}`}>{isMirrored ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}</button>
         </div>
       </div>
+    </div>
 
       {/* G-Force Panel (Lateral G) */}
       <div className="absolute left-6 top-24 flex flex-col items-center gap-2 z-50">
          <div className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Lateral G</div>
          <div className="w-2 h-32 bg-white/5 rounded-full relative overflow-hidden border border-white/5">
             <motion.div 
-               animate={{ height: `${Math.abs(imu?.lateralG || 0) * 50}%`, y: (imu?.lateralG || 0) > 0 ? '50%' : '-50%' }}
+               animate={{ height: `${Math.min(100, Math.abs(imu?.lateralG || 0) * 50)}%`, y: (imu?.lateralG || 0) > 0 ? '50%' : '-50%' }}
                className={`w-full absolute top-1/2 rounded-full ${(imu?.lateralG || 0) > 0.8 ? 'bg-red-500' : 'bg-cyan-400'}`}
                style={{ boxShadow: `0 0 10px ${(imu?.lateralG || 0) > 0.8 ? '#ef4444' : '#22d3ee'}` }}
             />
@@ -185,23 +205,46 @@ export function CorneringAssistantHUD({
       </div>
 
       <div className="px-6 mb-2 flex items-center justify-between">
-        <div className="flex flex-col"><span className="text-[10px] font-black text-brand-primary uppercase tracking-[0.5em] mb-1">Via Atual</span><div className="text-sm font-black text-white italic truncate uppercase max-w-[60vw]">{isLoading && upcomingNodes.length === 0 ? 'Mapeando Via...' : (currentRoadName || 'Analisando Trecho...')}</div></div>
+        <div className="flex flex-col">
+          <span className="text-[10px] font-black text-brand-primary uppercase tracking-[0.5em] mb-1">Via Atual</span>
+          <div className="text-sm font-black text-white italic truncate uppercase max-w-[60vw]">
+            {currentRoadName || (isLoading ? 'Localizando...' : 'Via Mapeada')}
+          </div>
+        </div>
       </div>
 
       {/* Progress Bar */}
       <div className="px-6 mt-4">
-        <div className="h-2 bg-white/5 rounded-full overflow-hidden relative border border-white/5 backdrop-blur-md">{nextCurve && <motion.div animate={{ width: `${Math.max(0, Math.min(100, (1 - nextCurve.distance / lookAheadDistance) * 100))}%`, backgroundColor: getSeverityBaseColor(nextCurve.severity) }} className="h-full rounded-full" />}<div className="absolute left-[80%] top-0 bottom-0 w-0.5 bg-white/20" /></div>
+        <div className="h-2 bg-white/5 rounded-full overflow-hidden relative border border-white/5 backdrop-blur-md">
+          {nextCurve && <motion.div animate={{ width: `${Math.max(0, Math.min(100, (1 - nextCurve.distance / lookAheadDistance) * 100))}%`, backgroundColor: getSeverityBaseColor(nextCurve.severity) }} className="h-full rounded-full" />}
+          <div className="absolute left-[80%] top-0 bottom-0 w-0.5 bg-white/20" />
+        </div>
       </div>
 
       {/* Main Display */}
       <motion.div className="flex-1 flex flex-col items-center justify-center relative z-10">
         <AnimatePresence mode="wait">
-          {isLoading && upcomingNodes.length === 0 ? (
-            <motion.div className="flex flex-col items-center gap-6"><Activity className="w-20 h-20 text-zinc-800 animate-pulse" /><div className="text-xs font-black text-zinc-650 uppercase tracking-[0.6em]">Mapeando Via...</div></motion.div>
-          ) : nextCurve ? (
-            <motion.div key={nextCurve.direction + nextCurve.severity} className="flex flex-col items-center">{renderPredefinedPlate(nextCurve)}<div className="mt-4 text-center space-y-1"><div className={`text-2xl font-black uppercase italic ${nextCurve.severity === 'soft' || nextCurve.severity === 'straight' ? 'text-emerald-500' : 'text-red-500'}`}>{getSeverityLabel(nextCurve.severity)}</div><div className="text-6xl font-black text-white italic tracking-tighter leading-none">{nextCurve.distance}<span className="text-xl text-zinc-600 ml-1.5 font-black NOT-italic tracking-widest uppercase">m</span></div></div></motion.div>
+          {nextCurve ? (
+            <motion.div key={nextCurve.direction + nextCurve.severity} className="flex flex-col items-center">
+              {renderPredefinedPlate(nextCurve)}
+              <div className="mt-4 text-center space-y-1">
+                <div className={`text-2xl font-black uppercase italic ${nextCurve.severity === 'soft' || nextCurve.severity === 'straight' ? 'text-emerald-500' : 'text-red-500'}`}>
+                  {getSeverityLabel(nextCurve.severity)}
+                </div>
+                <div className="text-6xl font-black text-white italic tracking-tighter leading-none">
+                  {nextCurve.distance}
+                  <span className="text-xl text-zinc-600 ml-1.5 font-black NOT-italic tracking-widest uppercase">m</span>
+                </div>
+              </div>
+            </motion.div>
           ) : (
-            <motion.div className="flex flex-col items-center opacity-20"><Zap className="w-16 h-16 text-zinc-500 mb-4" /><span className="text-[10px] font-black uppercase tracking-[0.4em]">Aguardando Dados...</span></motion.div>
+            <motion.div className="flex flex-col items-center">
+              {renderPredefinedPlate({ severity: 'straight', direction: 'straight', distance: 0, angle: 0, points: [] })}
+              <div className="mt-4 text-center space-y-1">
+                <div className="text-2xl font-black uppercase italic text-emerald-500">Pista Livre / Reta</div>
+                <div className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.4em] pt-2">Aferição em Tempo Real</div>
+              </div>
+            </motion.div>
           )}
         </AnimatePresence>
       </motion.div>
@@ -214,7 +257,10 @@ export function CorneringAssistantHUD({
               <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100">
                 <g style={{ transform: `rotate(${-(currentHeading || 0)}deg)`, transformOrigin: '50% 50%', transition: 'transform 0.4s ease-out' }}>
                   {(() => {
-                    const mapScale = minimapZoomMultiplier; 
+                    // Dynamic zoom based on speed: Higher speed = Zoom OUT (Smaller multiplier)
+                    // baseMultiplier at 0kmh, reduce as speed increases
+                    const speedZoomFactor = Math.max(0.3, 1 - (speedKmh / 250));
+                    const mapScale = minimapZoomMultiplier * speedZoomFactor; 
                     const cLat = smoothLocation?.lat || currentLat; 
                     const cLng = smoothLocation?.lng || currentLng;
                     return (

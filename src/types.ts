@@ -123,6 +123,8 @@ export interface UserProfile {
   lastLoginDate?: string;
   lastWeeklyReset?: string;
   lastRewardClaimMonth?: string; // Format: YYYY-MM
+  isBanned?: boolean;
+  banReason?: string;
 }
 
 export interface Vehicle {

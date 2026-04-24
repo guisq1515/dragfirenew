@@ -285,7 +285,7 @@ class CurveAnalysisService {
         found.push({
           angle: Math.round(absAngle),
           severity: type,
-          distance: Math.round(scan),
+          distance: Math.round(scan * 0.9),
           direction: cumAngle > 0 ? 'right' : 'left',
           points: nodes.slice(i, j + 1),
           slope: Math.round(slope),
