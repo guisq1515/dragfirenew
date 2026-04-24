@@ -71,7 +71,7 @@ export function AdminDashboard({
   const [profiles, setProfiles] = useState<Record<string, TelemetryProfile>>({
     'v1.5.3-balanced': {
       id: 'v1.5.3-balanced',
-      name: 'PadrÃ£o (v1.5.3)',
+      name: 'Padrão (v1.5.3)',
       isDefault: true,
       motionSensitivity: 1.4,
       noiseFloor: 0.05,
@@ -190,10 +190,10 @@ export function AdminDashboard({
         activeProfileId: activeId,
         profiles: updatedProfiles
       }, { merge: true });
-      alert('ConfiguraÃ§Ãµes salvas e aplicadas a todos os clientes!');
+      alert('Configurações salvas e aplicadas a todos os clientes!');
     } catch (e) {
       console.error('Failed to save settings', e);
-      alert('Erro ao salvar configuraÃ§Ãµes');
+      alert('Erro ao salvar configurações');
     } finally {
       setSaveLoading(false);
     }
@@ -242,11 +242,11 @@ export function AdminDashboard({
 
   const deleteProfile = async (id: string) => {
     if (profiles[id].isDefault) {
-      alert('O perfil padrÃ£o nÃ£o pode ser excluÃ­do.');
+      alert('O perfil padrÃ£o nÃ£o pode ser excluído.');
       return;
     }
 
-    if (!window.confirm('Excluir este perfil de configuraÃ§Ã£o?')) return;
+    if (!window.confirm('Excluir este perfil de configuração?')) return;
 
     const newProfiles = { ...profiles };
     delete newProfiles[id];
@@ -339,17 +339,17 @@ export function AdminDashboard({
       setPowerRefs([newRef, ...powerRefs]);
       setShowPowerForm(false);
       setRefFormData({ carName: '', weight: 0, time: 0, distance: 201, slope: 0, verifiedCV: 0 });
-      alert('ReferÃªncia salva com sucesso!');
+      alert('Referência salva com sucesso!');
     } catch (e) {
       console.error('Failed to save power ref', e);
-      alert('Erro ao salvar referÃªncia');
+      alert('Erro ao salvar referência');
     } finally {
       setSaveLoading(false);
     }
   };
 
   const deletePowerRef = async (id: string) => {
-    if (!window.confirm('Excluir esta referÃªncia de potÃªncia?')) return;
+    if (!window.confirm('Excluir esta referência de potência?')) return;
     try {
       await deleteDoc(doc(db, 'power_references', id));
       setPowerRefs(powerRefs.filter(r => r.id !== id));
@@ -387,9 +387,9 @@ export function AdminDashboard({
         <div className="flex bg-zinc-900/50 p-1 rounded-[22px] border border-white/5 backdrop-blur-md">
           {[
             { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
-            { id: 'users', label: 'UsuÃ¡rios', icon: Users },
+            { id: 'users', label: 'Usuários', icon: Users },
             { id: 'settings', label: 'Aux. Curvas', icon: Navigation },
-            { id: 'power', label: 'PotÃªncia', icon: Gauge }
+            { id: 'power', label: 'Potência', icon: Gauge }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -446,7 +446,7 @@ export function AdminDashboard({
                         <div className="absolute top-0 bottom-0 w-0.5 bg-red-500/50 z-10" style={{ left: `${lockPercentage}%` }} />
                         <motion.div initial={{ width: 0 }} animate={{ width: `${usagePercentage}%` }} className={`h-full rounded-full ${isLocked ? 'bg-red-600' : isDanger ? 'bg-yellow-500' : 'bg-green-500'}`} />
                       </div>
-                      <p className="text-[8px] font-black uppercase text-zinc-600 text-right tracking-[0.1em]">SeguranÃ§a em 70%</p>
+                      <p className="text-[8px] font-black uppercase text-zinc-600 text-right tracking-[0.1em]">Segurança em 70%</p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
@@ -571,7 +571,7 @@ export function AdminDashboard({
               <div className="space-y-4">
                 <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
                   <Navigation className="w-3 h-3 text-cyan-500" />
-                  ConfiguraÃ§Ãµes Aux. Curvas
+                  Configurações Aux. Curvas
                 </h3>
 
                 <div className="glass-panel p-6 rounded-[34px] border border-white/5 bg-zinc-900/40 space-y-6">
@@ -618,11 +618,11 @@ export function AdminDashboard({
                               </button>
                             </div>
                          </div>
-                         <p className="text-[8px] text-zinc-500 font-medium leading-tight mb-2">Algoritmo de processamento de dados GPS + AcelerÃ´metro. Kalman Ã© o padrÃ£o Dragy/Racebox.</p>
+                         <p className="text-[8px] text-zinc-500 font-medium leading-tight mb-2">Algoritmo de processamento de dados GPS + AcelerÃ´metro. Kalman é o padrÃ£o Dragy/Racebox.</p>
                          
                          <div className="space-y-2 pt-2 border-t border-white/5">
                             <div className="flex justify-between items-center">
-                               <label className="text-[9px] font-bold text-zinc-400 uppercase">CorreÃ§Ã£o Sea Level (DA)</label>
+                               <label className="text-[9px] font-bold text-zinc-400 uppercase">Correção Sea Level (DA)</label>
                                <button 
                                  onClick={() => setTelemetrySettings({...telemetrySettings, daCorrectionEnabled: !telemetrySettings.daCorrectionEnabled})}
                                  className={`w-10 h-5 rounded-full relative transition-all ${telemetrySettings.daCorrectionEnabled ? "bg-green-500" : "bg-zinc-800"}`}
@@ -631,7 +631,7 @@ export function AdminDashboard({
                                </button>
                             </div>
                             <div className="flex justify-between items-center">
-                               <label className="text-[9px] font-bold text-zinc-400 uppercase">DetecÃ§Ã£o de Destracionamento</label>
+                               <label className="text-[9px] font-bold text-zinc-400 uppercase">Detecção de Destracionamento</label>
                                <button 
                                  onClick={() => setTelemetrySettings({...telemetrySettings, wheelSpinDetectionEnabled: !telemetrySettings.wheelSpinDetectionEnabled})}
                                  className={`w-10 h-5 rounded-full relative transition-all ${telemetrySettings.wheelSpinDetectionEnabled ? "bg-green-500" : "bg-zinc-800"}`}
@@ -650,16 +650,16 @@ export function AdminDashboard({
                        {[
                          { 
                            id: 'lookAheadBaseDistance', 
-                           label: 'Alcance de DetecÃ§Ã£o', 
+                           label: 'Alcance de Detecção', 
                            min: 200, max: 4000, step: 100, icon: Eye,
                            desc: 'O que faz: Controla o quÃ£o longe a IA "enxerga" na via.',
-                           utility: 'Utilidade: Em altas velocidades, aumente para dar mais tempo de reaÃ§Ã£o.'
+                           utility: 'Utilidade: Em altas velocidades, aumente para dar mais tempo de reação.'
                          },
                          { 
                            id: 'curveDetectionThreshold', 
                            label: 'Sensibilidade de Curva', 
                            min: 5, max: 45, step: 1, icon: Compass,
-                           desc: 'O que faz: Ã‚ngulo mÃ­nimo para considerar um trecho como curva.',
+                           desc: 'O que faz: Ã‚ngulo mínimo para considerar um trecho como curva.',
                            utility: 'Utilidade: Aumente se houver muitos alertas falsos em retas leves.'
                          },
                          { 
@@ -673,7 +673,7 @@ export function AdminDashboard({
                            id: 'regionalCacheRadius', 
                            label: 'Raio de Cache do Mapa', 
                            min: 1000, max: 15000, step: 500, icon: Map,
-                           desc: 'O que faz: Tamanho da Ã¡rea baixada para uso offline.',
+                           desc: 'O que faz: Tamanho da área baixada para uso offline.',
                            utility: 'Utilidade: Valores maiores garantem funcionamento sem internet por mais tempo.'
                          }
                        ].map(field => (
@@ -707,9 +707,9 @@ export function AdminDashboard({
                        </h4>
                        {[
                          { id: 'motionSensitivity', label: 'Sensibilidade Largada (G)', min: 1.0, max: 2.5, step: 0.1, icon: Radio },
-                         { id: 'noiseFloor', label: 'Noise Floor (RuÃ­do)', min: 0.01, max: 0.5, step: 0.01, icon: Gauge },
-                         { id: 'maxAccelG', label: 'AceleraÃ§Ã£o MÃ¡xima (CAP)', min: 1.5, max: 5.0, step: 0.1, icon: Zap },
-                         { id: 'fusionGpsWeight', label: 'ConfianÃ§a GPS', min: 0.5, max: 1.0, step: 0.05, icon: Activity }
+                         { id: 'noiseFloor', label: 'Noise Floor (Ruído)', min: 0.01, max: 0.5, step: 0.01, icon: Gauge },
+                         { id: 'maxAccelG', label: 'Aceleração Máxima (CAP)', min: 1.5, max: 5.0, step: 0.1, icon: Zap },
+                         { id: 'fusionGpsWeight', label: 'Confiança GPS', min: 0.5, max: 1.0, step: 0.05, icon: Activity }
                        ].map(field => (
                          <div key={field.id} className="space-y-3">
                            <div className="flex justify-between items-center">
@@ -757,7 +757,7 @@ export function AdminDashboard({
                 <div className="flex items-center justify-between px-1">
                   <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
                     <Gauge className="w-3 h-3 text-brand-primary" />
-                    GestÃ£o de CalibraÃ§Ã£o
+                    GestÃ£o de Calibração
                   </h3>
                   <button onClick={() => setShowPowerForm(!showPowerForm)} className="p-2 bg-zinc-900 rounded-lg text-brand-primary border border-brand-primary/20">
                     {showPowerForm ? <ChevronLeft className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
@@ -771,7 +771,7 @@ export function AdminDashboard({
                       <input type="number" value={refFormData.weight || ''} onChange={e => setRefFormData({...refFormData, weight: Number(e.target.value)})} placeholder="Peso(kg)" className="bg-zinc-950 border-white/5 rounded-xl p-4 text-sm text-white" />
                       <input type="number" value={refFormData.verifiedCV || ''} onChange={e => setRefFormData({...refFormData, verifiedCV: Number(e.target.value)})} placeholder="CV Real" className="bg-zinc-950 border-white/5 rounded-xl p-4 text-sm text-white" />
                     </div>
-                    <button onClick={handleSavePowerRef} className="w-full py-4 bg-brand-primary text-white rounded-2xl font-black uppercase text-[10px]">Cadastrar ReferÃªncia</button>
+                    <button onClick={handleSavePowerRef} className="w-full py-4 bg-brand-primary text-white rounded-2xl font-black uppercase text-[10px]">Cadastrar Referência</button>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -784,7 +784,7 @@ export function AdminDashboard({
                         <button onClick={() => deletePowerRef(ref.id)} className="p-3 text-zinc-700 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     )) : (
-                      <div className="p-12 border-2 border-dashed border-white/5 rounded-[40px] text-center opacity-20">Nenhuma calibraÃ§Ã£o.</div>
+                      <div className="p-12 border-2 border-dashed border-white/5 rounded-[40px] text-center opacity-20">Nenhuma calibração.</div>
                     )}
                   </div>
                 )}

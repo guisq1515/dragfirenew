@@ -6565,12 +6565,24 @@ export default function App() {
               if (userProfile) setUserProfile({ ...userProfile, ...data });
             }}
           />
-        ) : (screen === 'missions' || screen === 'trip-explorer' || screen === 'curve-radar') && userProfile ? (
-          <MissionsView 
-            profile={userProfile}
-            onUpdate={(data) => setUserProfile({ ...userProfile, ...data })}
-          />
-        ) : screen === 'history' ? (
+        ) : screen === 'trip-explorer' && userProfile ? (
+            <TripExplorer 
+              onBack={() => setScreen('home')}
+              userLocation={userLocation}
+              userId={user?.uid}
+              isGuest={isGuest}
+            />
+          ) : screen === 'curve-radar' && userProfile ? (
+            <CurveRadar 
+              onBack={() => setScreen('home')}
+              userLocation={userLocation}
+            />
+          ) : screen === 'missions' && userProfile ? (
+            <MissionsView 
+              profile={userProfile}
+              onUpdate={(data) => setUserProfile({ ...userProfile, ...data })}
+            />
+          ) : screen === 'history' ? (
           <motion.div
             key="history"
             initial={{ opacity: 0, x: 20 }}
