@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { curveService, RoadNode, CurveData } from '../services/CurveAnalysisService';
 import { fetchRoutePoints } from '../services/googleMapsService';
+import { sensorFusion, IMUData } from '../services/SensorFusionService';
+import { TelemetryConfig } from '../types';
 
 interface UseCorneringAssistant {
   nextCurve: CurveData | null;
   posteriorCurve: CurveData | null;
   upcomingNodes: RoadNode[];
+  allRegionalWays: RoadNode[][];
   isLoading: boolean;
   lookAheadDistance: number;
   setDestination: (dest: string | null) => void;
@@ -13,6 +16,8 @@ interface UseCorneringAssistant {
   isRouteMode: boolean;
   currentRoadName: string | null;
   snappedLocation: RoadNode | null;
+  smoothLocation: {lat: number, lng: number, heading: number} | null;
+  imu: IMUData | null;
 }
 
 export function useCorneringAssistant(
@@ -22,23 +27,21 @@ export function useCorneringAssistant(
   speedKmh: number,
   userId?: string,
   isGuest = false,
-  config?: {
-    baseDist?: number;
-    speedFactor?: number;
-    maxDist?: number;
-  },
+  telemetryConfig?: TelemetryConfig,
   externalDestination?: string | null
 ) {
   const [curves, setCurves] = useState<CurveData[]>([]);
   const [upcomingNodes, setUpcomingNodes] = useState<RoadNode[]>([]);
+  const [allRegionalWays, setAllRegionalWays] = useState<RoadNode[][]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [destination, setDestination] = useState<string | null>(externalDestination || null);
   const [isRouteMode, setIsRouteMode] = useState(false);
   const [currentRoadName, setCurrentRoadName] = useState<string | null>(null);
   const [snappedLocation, setSnappedLocation] = useState<RoadNode | null>(null);
   const [smoothLocation, setSmoothLocation] = useState<{lat: number, lng: number, heading: number} | null>(null);
+  const [imu, setImu] = useState<IMUData | null>(null);
   
-  const lastFetchRef = useRef<{ lat: number, lng: number } | null>(null);
+  const lastFetchRef = useRef<{ lat: number, lng: number, heading: number } | null>(null);
   const extrapolationRef = useRef<{
     lastLat: number;
     lastLng: number;
@@ -47,22 +50,33 @@ export function useCorneringAssistant(
     lastTime: number;
   } | null>(null);
 
-  // Sync with external destination if provided
+  // Sync Service Config
   useEffect(() => {
-    if (externalDestination !== undefined) {
-      setDestination(externalDestination);
+    if (telemetryConfig) {
+      curveService.updateConfig({
+        detectionThreshold: telemetryConfig.curveDetectionThreshold,
+        mediumThreshold: telemetryConfig.curveMediumThreshold,
+        hardThreshold: telemetryConfig.curveHardThreshold,
+        cacheRadius: telemetryConfig.regionalCacheRadius
+      });
     }
-  }, [externalDestination]);
+  }, [telemetryConfig]);
 
-  // Default values for look-ahead
-  const baseDist = config?.baseDist ?? 2000; 
-  const speedFactor = config?.speedFactor ?? 12; 
-  const maxDist = config?.maxDist ?? 4000; 
+  useEffect(() => {
+    sensorFusion.start();
+    const unsub = sensorFusion.addListener(data => setImu(data));
+    return () => {
+      sensorFusion.stop();
+      unsub();
+    };
+  }, []);
 
-  // Dynamic distance calculation
+  const baseDist = telemetryConfig?.lookAheadBaseDistance ?? 1200; 
+  const speedFactor = telemetryConfig?.lookAheadSpeedFactor ?? 12; 
+  const maxDist = telemetryConfig?.lookAheadMaxDistance ?? 4000; 
   const lookAheadDistance = Math.min(maxDist, baseDist + (speedKmh * speedFactor));
 
-  // 1. Fetch Geometry (Either Route-based or Scan-based)
+  // Geometry Manager
   useEffect(() => {
     if (lat === null || lng === null) return;
 
@@ -81,111 +95,96 @@ export function useCorneringAssistant(
       return;
     }
 
-    // Default Scanner: Check if we moved enough to warrant a check (30m for better resolution)
-    const shouldFetch = !lastFetchRef.current || 
-      curveService.haversineDistance(lat, lng, lastFetchRef.current.lat, lastFetchRef.current.lng) > 30;
-
-    if (shouldFetch) {
+    const distToLast = lastFetchRef.current ? curveService.haversineDistance(lat, lng, lastFetchRef.current.lat, lastFetchRef.current.lng) : Infinity;
+    const headingDiff = lastFetchRef.current ? Math.abs((heading || 0) - lastFetchRef.current.heading) : Infinity;
+    
+    if (distToLast > 100 || headingDiff > 45) {
       const updateGeometry = async () => {
-        setIsLoading(true);
-        const { nodes, roadName } = await curveService.getRoadGeometry(lat, lng, heading, speedKmh);
+        if (upcomingNodes.length === 0) setIsLoading(true);
+        const { nodes, roadName, allWays } = await curveService.getRoadGeometry(lat, lng, heading, speedKmh);
+        
         if (nodes.length > 0) {
           setUpcomingNodes(nodes);
+          setAllRegionalWays(allWays);
           setCurrentRoadName(roadName);
           setIsRouteMode(false);
-          lastFetchRef.current = { lat, lng };
+          lastFetchRef.current = { lat, lng, heading: heading || 0 };
           
-          // Persistence: Store the latest geometry for total offline survival
-          localStorage.setItem('dragfire_active_geometry', JSON.stringify({ nodes, roadName, timestamp: Date.now() }));
+          // Background: Fetch elevation for key points
+          fetchElevation(nodes.slice(0, 500));
         }
         setIsLoading(false);
       };
       updateGeometry();
     }
-  }, [lat, lng, destination, userId, isGuest]);
+  }, [lat, lng, heading, speedKmh, destination]);
 
-  // Initial Load from Cache for 100% Offline Start
-  useEffect(() => {
-     try {
-       const cached = localStorage.getItem('dragfire_active_geometry');
-       if (cached && !upcomingNodes.length) {
-          const { nodes, roadName } = JSON.parse(cached);
-          setUpcomingNodes(nodes);
-          setCurrentRoadName(roadName);
-          console.log("Cornering Assistant: Started with cached offline geometry.");
-       }
-     } catch (e) {}
-  }, []);
+  const fetchElevation = async (nodes: RoadNode[]) => {
+    // Only fetch for a subset of points to save API quota
+    const sample = nodes.filter((_, i) => i % 10 === 0);
+    const locations = sample.map(n => `${n.lat},${n.lng}`).join('|');
+    const key = process.env.GOOGLE_MAPS_API_KEY;
+    if (!key) return;
 
-  // Extrapolation Loop (Dead Reckoning)
+    try {
+      const resp = await fetch(`https://maps.googleapis.com/maps/api/elevation/json?locations=${locations}&key=${key}`);
+      const data = await resp.json();
+      if (data.status === 'OK') {
+        // Map back to nodes
+        const elevMap: Record<string, number> = {};
+        data.results.forEach((r: any) => {
+           elevMap[`${r.location.lat.toFixed(5)},${r.location.lng.toFixed(5)}`] = r.elevation;
+        });
+        
+        setUpcomingNodes(prev => prev.map(n => ({
+          ...n,
+          elevation: elevMap[`${n.lat.toFixed(5)},${n.lng.toFixed(5)}`] || n.elevation
+        })));
+      }
+    } catch (e) {}
+  };
+
+  // Dead Reckoning & GPS Sync
   useEffect(() => {
     const interval = setInterval(() => {
       if (!extrapolationRef.current || speedKmh < 5) return;
-
       const now = Date.now();
       const dt = (now - extrapolationRef.current.lastTime) / 1000;
-      
-      // Only extrapolate for up to 2 seconds of silence
       if (dt > 0.05 && dt < 2.0) {
         const speedMs = (speedKmh / 3.6);
         const distance = speedMs * dt;
-        
         const R = 6371000;
         const brng = (extrapolationRef.current.lastHeading * Math.PI) / 180;
         const lat1 = (extrapolationRef.current.lastLat * Math.PI) / 180;
         const lon1 = (extrapolationRef.current.lastLng * Math.PI) / 180;
-
-        const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distance / R) +
-                     Math.cos(lat1) * Math.sin(distance / R) * Math.cos(brng));
-        const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(distance / R) * Math.cos(lat1),
-                     Math.cos(distance / R) - Math.sin(lat1) * Math.sin(lat2));
-
-        setSmoothLocation({
-          lat: (lat2 * 180) / Math.PI,
-          lng: (lon2 * 180) / Math.PI,
-          heading: extrapolationRef.current.lastHeading
-        });
+        const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distance / R) + Math.cos(lat1) * Math.sin(distance / R) * Math.cos(brng));
+        const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(distance / R) * Math.cos(lat1), Math.cos(distance / R) - Math.sin(lat1) * Math.sin(lat2));
+        setSmoothLocation({ lat: (lat2 * 180) / Math.PI, lng: (lon2 * 180) / Math.PI, heading: extrapolationRef.current.lastHeading });
       }
     }, 50);
-
     return () => clearInterval(interval);
   }, [speedKmh]);
 
-  // Sync Extrapolation with real GPS
   useEffect(() => {
     if (lat !== null && lng !== null) {
-      extrapolationRef.current = {
-        lastLat: lat,
-        lastLng: lng,
-        lastHeading: heading || extrapolationRef.current?.lastHeading || 0,
-        lastSpeed: speedKmh,
-        lastTime: Date.now()
-      };
+      extrapolationRef.current = { lastLat: lat, lastLng: lng, lastHeading: heading || extrapolationRef.current?.lastHeading || 0, lastSpeed: speedKmh, lastTime: Date.now() };
       setSmoothLocation({ lat, lng, heading: heading || 0 });
     }
   }, [lat, lng, heading, speedKmh]);
 
-  // 2. Perform Curve Analysis
+  // Curve Analysis
   useEffect(() => {
-    if (!upcomingNodes.length || lat === null || lng === null) {
-      setCurves([]);
-      return;
-    }
-
-    // Analyze upcoming curves based on current position and heading
+    if (!upcomingNodes.length || lat === null || lng === null) return;
     const foundCurves = curveService.findUpcomingCurves(lat, lng, heading, upcomingNodes, lookAheadDistance, speedKmh);
     setCurves(foundCurves);
-
-    // Update Snapped Location for Minimap stability
-    const snapped = curveService.snapToRoad(lat, lng);
-    setSnappedLocation(snapped);
-
-  }, [lat, lng, heading, upcomingNodes, lookAheadDistance]);
+    setSnappedLocation(curveService.snapToRoad(lat, lng));
+  }, [lat, lng, heading, upcomingNodes, lookAheadDistance, speedKmh]);
 
   return { 
     nextCurve: curves[0] || null, 
     posteriorCurve: curves[1] || null,
     upcomingNodes, 
+    allRegionalWays,
     isLoading, 
     lookAheadDistance, 
     setDestination, 
@@ -193,6 +192,7 @@ export function useCorneringAssistant(
     isRouteMode,
     currentRoadName,
     snappedLocation,
-    smoothLocation
+    smoothLocation,
+    imu
   };
 }

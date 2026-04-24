@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { doc, getDoc, query, collection, where, limit, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { 
@@ -22,7 +22,11 @@ import {
   LayoutDashboard,
   Coins,
   Settings as SettingsIcon,
-  Users
+  Users,
+  Compass,
+  Map,
+  Eye,
+  Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, TelemetryConfig, SystemSettings, TelemetryProfile, PowerReference } from '../types';
@@ -50,13 +54,24 @@ export function AdminDashboard({
     fusionGpsWeight: 0.95,
     fusionAccelGain: 1.0,
     rotationThreshold: 60,
-    mountingAxis: 'auto'
+    mountingAxis: 'auto',
+    minimapZoomMultiplier: 30000,
+    curveDetectionThreshold: 15,
+    curveMediumThreshold: 45,
+    curveHardThreshold: 90,
+    regionalCacheRadius: 7500,
+    fusionAlgorithm: 'kalman',
+    daCorrectionEnabled: false,
+    wheelSpinDetectionEnabled: false,
+    lookAheadBaseDistance: 1000,
+    lookAheadSpeedFactor: 5,
+    lookAheadMaxDistance: 2500
   });
   
   const [profiles, setProfiles] = useState<Record<string, TelemetryProfile>>({
     'v1.5.3-balanced': {
       id: 'v1.5.3-balanced',
-      name: 'Padrão (v1.5.3)',
+      name: 'PadrÃ£o (v1.5.3)',
       isDefault: true,
       motionSensitivity: 1.4,
       noiseFloor: 0.05,
@@ -64,7 +79,16 @@ export function AdminDashboard({
       fusionGpsWeight: 0.95,
       fusionAccelGain: 1.0,
       rotationThreshold: 60,
-      mountingAxis: 'auto'
+      mountingAxis: 'auto',
+      minimapZoomMultiplier: 30000,
+      curveDetectionThreshold: 15,
+      curveMediumThreshold: 45,
+      curveHardThreshold: 90,
+      regionalCacheRadius: 7500,
+      fusionAlgorithm: 'kalman',
+      daCorrectionEnabled: false,
+      wheelSpinDetectionEnabled: false,
+      lookAheadBaseDistance: 1000
     }
   });
   const [activeProfileId, setActiveProfileId] = useState('v1.5.3-balanced');
@@ -130,7 +154,11 @@ export function AdminDashboard({
               setTelemetrySettings(data.profiles[data.activeProfileId]);
             }
           } else {
-            setTelemetrySettings(snapshot.data() as TelemetryConfig);
+            const legacyData = snapshot.data() as TelemetryConfig;
+            setTelemetrySettings({
+               ...telemetrySettings,
+               ...legacyData
+            });
           }
         }
       } catch (e) {
@@ -162,10 +190,10 @@ export function AdminDashboard({
         activeProfileId: activeId,
         profiles: updatedProfiles
       }, { merge: true });
-      alert('Configurações salvas e aplicadas a todos os clientes!');
+      alert('ConfiguraÃ§Ãµes salvas e aplicadas a todos os clientes!');
     } catch (e) {
       console.error('Failed to save settings', e);
-      alert('Erro ao salvar configurações');
+      alert('Erro ao salvar configuraÃ§Ãµes');
     } finally {
       setSaveLoading(false);
     }
@@ -214,11 +242,11 @@ export function AdminDashboard({
 
   const deleteProfile = async (id: string) => {
     if (profiles[id].isDefault) {
-      alert('O perfil padrão não pode ser excluído.');
+      alert('O perfil padrÃ£o nÃ£o pode ser excluÃ­do.');
       return;
     }
 
-    if (!window.confirm('Excluir este perfil de configuração?')) return;
+    if (!window.confirm('Excluir este perfil de configuraÃ§Ã£o?')) return;
 
     const newProfiles = { ...profiles };
     delete newProfiles[id];
@@ -311,17 +339,17 @@ export function AdminDashboard({
       setPowerRefs([newRef, ...powerRefs]);
       setShowPowerForm(false);
       setRefFormData({ carName: '', weight: 0, time: 0, distance: 201, slope: 0, verifiedCV: 0 });
-      alert('Referência salva com sucesso!');
+      alert('ReferÃªncia salva com sucesso!');
     } catch (e) {
       console.error('Failed to save power ref', e);
-      alert('Erro ao salvar referência');
+      alert('Erro ao salvar referÃªncia');
     } finally {
       setSaveLoading(false);
     }
   };
 
   const deletePowerRef = async (id: string) => {
-    if (!window.confirm('Excluir esta referência de potência?')) return;
+    if (!window.confirm('Excluir esta referÃªncia de potÃªncia?')) return;
     try {
       await deleteDoc(doc(db, 'power_references', id));
       setPowerRefs(powerRefs.filter(r => r.id !== id));
@@ -359,9 +387,9 @@ export function AdminDashboard({
         <div className="flex bg-zinc-900/50 p-1 rounded-[22px] border border-white/5 backdrop-blur-md">
           {[
             { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
-            { id: 'users', label: 'Usuários', icon: Users },
-            { id: 'settings', label: 'Sensores', icon: SettingsIcon },
-            { id: 'power', label: 'Potência', icon: Gauge }
+            { id: 'users', label: 'UsuÃ¡rios', icon: Users },
+            { id: 'settings', label: 'Aux. Curvas', icon: Navigation },
+            { id: 'power', label: 'PotÃªncia', icon: Gauge }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -418,7 +446,7 @@ export function AdminDashboard({
                         <div className="absolute top-0 bottom-0 w-0.5 bg-red-500/50 z-10" style={{ left: `${lockPercentage}%` }} />
                         <motion.div initial={{ width: 0 }} animate={{ width: `${usagePercentage}%` }} className={`h-full rounded-full ${isLocked ? 'bg-red-600' : isDanger ? 'bg-yellow-500' : 'bg-green-500'}`} />
                       </div>
-                      <p className="text-[8px] font-black uppercase text-zinc-600 text-right tracking-[0.1em]">Segurança em 70%</p>
+                      <p className="text-[8px] font-black uppercase text-zinc-600 text-right tracking-[0.1em]">SeguranÃ§a em 70%</p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
@@ -455,7 +483,7 @@ export function AdminDashboard({
               <div className="space-y-4">
                 <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
                   <User className="w-3 h-3 text-brand-primary" />
-                  CRM & Gestão Comercial
+                  CRM & GestÃ£o Comercial
                 </h3>
 
                 <div className="relative group h-14">
@@ -493,7 +521,7 @@ export function AdminDashboard({
                             onClick={() => togglePremium(u)}
                             className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${u.isPremium ? 'bg-yellow-500 text-black' : 'bg-zinc-800 text-zinc-500'}`}
                           >
-                            {u.isPremium ? 'PREMIUM ✅' : 'ATIVAR PRO'}
+                            {u.isPremium ? 'PREMIUM âœ…' : 'ATIVAR PRO'}
                           </button>
                         </div>
 
@@ -542,13 +570,13 @@ export function AdminDashboard({
             >
               <div className="space-y-4">
                 <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
-                  <Activity className="w-3 h-3 text-brand-primary" />
-                  Ajustes de Sensores
+                  <Navigation className="w-3 h-3 text-cyan-500" />
+                  ConfiguraÃ§Ãµes Aux. Curvas
                 </h3>
 
                 <div className="glass-panel p-6 rounded-[34px] border border-white/5 bg-zinc-900/40 space-y-6">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Profiles</label>
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Profiles Global</label>
                     <button onClick={() => setShowNewProfileModal(true)} className="p-1.5 bg-zinc-950 border border-white/5 rounded-lg text-brand-primary"><Plus className="w-4 h-4" /></button>
                   </div>
 
@@ -564,29 +592,142 @@ export function AdminDashboard({
                     ))}
                   </div>
 
-                  <div className="grid grid-cols-1 gap-6 pt-4">
-                    {[
-                      { id: 'motionSensitivity', label: 'Sensibilidade Largada (G)', min: 1.0, max: 2.5, step: 0.1, icon: Radio },
-                      { id: 'noiseFloor', label: 'Noise Floor (Ruído)', min: 0.01, max: 0.5, step: 0.01, icon: Gauge },
-                      { id: 'maxAccelG', label: 'Aceleração Máxima (CAP)', min: 1.5, max: 5.0, step: 0.1, icon: Zap },
-                      { id: 'fusionGpsWeight', label: 'Confiança GPS', min: 0.5, max: 1.0, step: 0.05, icon: Activity }
-                    ].map(field => (
-                      <div key={field.id} className="space-y-3">
-                        <div className="flex justify-between items-center">
-                          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                            <field.icon className="w-3 h-3 text-brand-primary" />
-                            {field.label}
-                          </label>
-                          <span className="text-sm font-display font-black italic text-white">{(telemetrySettings as any)[field.id]}</span>
-                        </div>
-                        <input 
-                          type="range" min={field.min} max={field.max} step={field.step} 
-                          value={(telemetrySettings as any)[field.id]} 
-                          onChange={(e) => setTelemetrySettings({...telemetrySettings, [field.id]: Number(e.target.value)})}
-                          className="w-full accent-brand-primary h-1.5"
-                        />
-                      </div>
-                    ))}
+                  <div className="grid grid-cols-1 gap-8 pt-4">
+                    <div className="space-y-6">
+                       <h4 className="text-[8px] font-black text-zinc-700 uppercase tracking-widest flex items-center gap-2">
+                         <Zap className="w-3 h-3 text-brand-primary" /> Performance Engine (IA)
+                       </h4>
+                       
+                       <div className="space-y-3 bg-brand-primary/5 p-4 rounded-2xl border border-brand-primary/10">
+                         <div className="flex justify-between items-center mb-2">
+                            <label className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
+                              <Activity className="w-3 h-3 text-brand-primary" /> Algoritmo de FusÃ£o
+                            </label>
+                            <div className="flex bg-zinc-950 p-1 rounded-lg border border-white/5">
+                              <button 
+                                onClick={() => setTelemetrySettings({...telemetrySettings, fusionAlgorithm: "linear"})}
+                                className={`px-3 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${telemetrySettings.fusionAlgorithm === "linear" ? "bg-zinc-800 text-white" : "text-zinc-600"}`}
+                              >
+                                Linear
+                              </button>
+                              <button 
+                                onClick={() => setTelemetrySettings({...telemetrySettings, fusionAlgorithm: "kalman"})}
+                                className={`px-3 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${telemetrySettings.fusionAlgorithm === "kalman" ? "bg-brand-primary text-white" : "text-zinc-600"}`}
+                              >
+                                Kalman
+                              </button>
+                            </div>
+                         </div>
+                         <p className="text-[8px] text-zinc-500 font-medium leading-tight mb-2">Algoritmo de processamento de dados GPS + AcelerÃ´metro. Kalman Ã© o padrÃ£o Dragy/Racebox.</p>
+                         
+                         <div className="space-y-2 pt-2 border-t border-white/5">
+                            <div className="flex justify-between items-center">
+                               <label className="text-[9px] font-bold text-zinc-400 uppercase">CorreÃ§Ã£o Sea Level (DA)</label>
+                               <button 
+                                 onClick={() => setTelemetrySettings({...telemetrySettings, daCorrectionEnabled: !telemetrySettings.daCorrectionEnabled})}
+                                 className={`w-10 h-5 rounded-full relative transition-all ${telemetrySettings.daCorrectionEnabled ? "bg-green-500" : "bg-zinc-800"}`}
+                               >
+                                 <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${telemetrySettings.daCorrectionEnabled ? "right-1" : "left-1"}`} />
+                               </button>
+                            </div>
+                            <div className="flex justify-between items-center">
+                               <label className="text-[9px] font-bold text-zinc-400 uppercase">DetecÃ§Ã£o de Destracionamento</label>
+                               <button 
+                                 onClick={() => setTelemetrySettings({...telemetrySettings, wheelSpinDetectionEnabled: !telemetrySettings.wheelSpinDetectionEnabled})}
+                                 className={`w-10 h-5 rounded-full relative transition-all ${telemetrySettings.wheelSpinDetectionEnabled ? "bg-green-500" : "bg-zinc-800"}`}
+                               >
+                                 <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${telemetrySettings.wheelSpinDetectionEnabled ? "right-1" : "left-1"}`} />
+                               </button>
+                            </div>
+                         </div>
+                       </div>
+                    </div>
+                    <div className="space-y-6">
+                       <h4 className="text-[8px] font-black text-zinc-700 uppercase tracking-widest flex items-center gap-2">
+                         <Compass className="w-3 h-3" /> Algoritmo de IA & VisÃ£o
+                       </h4>
+                       
+                       {[
+                         { 
+                           id: 'lookAheadBaseDistance', 
+                           label: 'Alcance de DetecÃ§Ã£o', 
+                           min: 200, max: 4000, step: 100, icon: Eye,
+                           desc: 'O que faz: Controla o quÃ£o longe a IA "enxerga" na via.',
+                           utility: 'Utilidade: Em altas velocidades, aumente para dar mais tempo de reaÃ§Ã£o.'
+                         },
+                         { 
+                           id: 'curveDetectionThreshold', 
+                           label: 'Sensibilidade de Curva', 
+                           min: 5, max: 45, step: 1, icon: Compass,
+                           desc: 'O que faz: Ã‚ngulo mÃ­nimo para considerar um trecho como curva.',
+                           utility: 'Utilidade: Aumente se houver muitos alertas falsos em retas leves.'
+                         },
+                         { 
+                           id: 'minimapZoomMultiplier', 
+                           label: 'Zoom do Minimapa', 
+                           min: 5000, max: 100000, step: 1000, icon: Navigation,
+                           desc: 'O que faz: Escala visual do mapa no HUD.',
+                           utility: 'Utilidade: Ajuste para melhor visibilidade conforme o tamanho da tela.'
+                         },
+                         { 
+                           id: 'regionalCacheRadius', 
+                           label: 'Raio de Cache do Mapa', 
+                           min: 1000, max: 15000, step: 500, icon: Map,
+                           desc: 'O que faz: Tamanho da Ã¡rea baixada para uso offline.',
+                           utility: 'Utilidade: Valores maiores garantem funcionamento sem internet por mais tempo.'
+                         }
+                       ].map(field => (
+                         <div key={field.id} className="space-y-3 bg-black/20 p-4 rounded-2xl border border-white/5">
+                           <div className="flex justify-between items-center mb-1">
+                             <label className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
+                               <field.icon className="w-3 h-3 text-cyan-400" />
+                               {field.label}
+                             </label>
+                             <span className="text-sm font-display font-black italic text-cyan-400">{(telemetrySettings as any)[field.id] || 0}</span>
+                           </div>
+                           
+                           <div className="space-y-1 mb-3">
+                              <p className="text-[8px] text-zinc-500 font-medium leading-tight">{field.desc}</p>
+                              <p className="text-[8px] text-brand-primary/60 font-bold leading-tight uppercase italic">{field.utility}</p>
+                           </div>
+
+                           <input 
+                             type="range" min={field.min} max={field.max} step={field.step} 
+                             value={(telemetrySettings as any)[field.id] || 0} 
+                             onChange={(e) => setTelemetrySettings({...telemetrySettings, [field.id]: Number(e.target.value)})}
+                             className="w-full accent-cyan-500 h-1.5"
+                           />
+                         </div>
+                       ))}
+                    </div>
+
+                    <div className="space-y-4 border-t border-white/5 pt-6">
+                       <h4 className="text-[8px] font-black text-zinc-700 uppercase tracking-widest flex items-center gap-2">
+                         <Activity className="w-3 h-3" /> Sensores & Estabilidade
+                       </h4>
+                       {[
+                         { id: 'motionSensitivity', label: 'Sensibilidade Largada (G)', min: 1.0, max: 2.5, step: 0.1, icon: Radio },
+                         { id: 'noiseFloor', label: 'Noise Floor (RuÃ­do)', min: 0.01, max: 0.5, step: 0.01, icon: Gauge },
+                         { id: 'maxAccelG', label: 'AceleraÃ§Ã£o MÃ¡xima (CAP)', min: 1.5, max: 5.0, step: 0.1, icon: Zap },
+                         { id: 'fusionGpsWeight', label: 'ConfianÃ§a GPS', min: 0.5, max: 1.0, step: 0.05, icon: Activity }
+                       ].map(field => (
+                         <div key={field.id} className="space-y-3">
+                           <div className="flex justify-between items-center">
+                             <label className="text-[10px] font-black text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                               <field.icon className="w-3 h-3 text-zinc-600" />
+                               {field.label}
+                             </label>
+                             <span className="text-xs font-bold text-white">{(telemetrySettings as any)[field.id] || 0}</span>
+                           </div>
+                           <input 
+                             type="range" min={field.min} max={field.max} step={field.step} 
+                             value={(telemetrySettings as any)[field.id] || 0} 
+                             onChange={(e) => setTelemetrySettings({...telemetrySettings, [field.id]: Number(e.target.value)})}
+                             className="w-full accent-zinc-700 h-1"
+                           />
+                         </div>
+                       ))}
+                    </div>
                   </div>
 
                   <div className="pt-4 border-t border-white/5 flex gap-2">
@@ -616,7 +757,7 @@ export function AdminDashboard({
                 <div className="flex items-center justify-between px-1">
                   <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
                     <Gauge className="w-3 h-3 text-brand-primary" />
-                    Gestão de Calibração
+                    GestÃ£o de CalibraÃ§Ã£o
                   </h3>
                   <button onClick={() => setShowPowerForm(!showPowerForm)} className="p-2 bg-zinc-900 rounded-lg text-brand-primary border border-brand-primary/20">
                     {showPowerForm ? <ChevronLeft className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
@@ -630,7 +771,7 @@ export function AdminDashboard({
                       <input type="number" value={refFormData.weight || ''} onChange={e => setRefFormData({...refFormData, weight: Number(e.target.value)})} placeholder="Peso(kg)" className="bg-zinc-950 border-white/5 rounded-xl p-4 text-sm text-white" />
                       <input type="number" value={refFormData.verifiedCV || ''} onChange={e => setRefFormData({...refFormData, verifiedCV: Number(e.target.value)})} placeholder="CV Real" className="bg-zinc-950 border-white/5 rounded-xl p-4 text-sm text-white" />
                     </div>
-                    <button onClick={handleSavePowerRef} className="w-full py-4 bg-brand-primary text-white rounded-2xl font-black uppercase text-[10px]">Cadastrar Referência</button>
+                    <button onClick={handleSavePowerRef} className="w-full py-4 bg-brand-primary text-white rounded-2xl font-black uppercase text-[10px]">Cadastrar ReferÃªncia</button>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -638,12 +779,12 @@ export function AdminDashboard({
                       <div key={ref.id} className="glass-panel p-4 rounded-[26px] border border-white/5 bg-zinc-900/40 flex items-center justify-between">
                         <div>
                           <h4 className="text-sm font-black text-white italic uppercase">{ref.carName}</h4>
-                          <p className="text-[10px] text-zinc-500 font-bold uppercase mt-1">MT: {ref.weight}kg • PW: {ref.verifiedCV} CV</p>
+                          <p className="text-[10px] text-zinc-500 font-bold uppercase mt-1">MT: {ref.weight}kg â€¢ PW: {ref.verifiedCV} CV</p>
                         </div>
                         <button onClick={() => deletePowerRef(ref.id)} className="p-3 text-zinc-700 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     )) : (
-                      <div className="p-12 border-2 border-dashed border-white/5 rounded-[40px] text-center opacity-20">Nenhuma calibração.</div>
+                      <div className="p-12 border-2 border-dashed border-white/5 rounded-[40px] text-center opacity-20">Nenhuma calibraÃ§Ã£o.</div>
                     )}
                   </div>
                 )}
@@ -671,3 +812,6 @@ export function AdminDashboard({
     </div>
   );
 }
+
+
+

@@ -12,55 +12,123 @@
     <!-- Legacy Polyfills for Android Head Units -->
     <script>
       (function() {
-        if (typeof window.queueMicrotask !== 'function') {
-          window.queueMicrotask = function(callback) {
-            Promise.resolve()
-              .then(callback)
-              .catch(function(e) {
+        // Essential Polyfills for older WebViews (Android 5/6/7/8)
+        try {
+          if (typeof window.queueMicrotask !== 'function') {
+            window.queueMicrotask = function(callback) {
+              Promise.resolve().then(callback).catch(function(e) {
                 setTimeout(function() { throw e; }, 0);
               });
-          };
-          console.log('Polyfill: queueMicrotask initialized');
-        }
-        if (typeof globalThis === 'undefined') {
-          window.globalThis = window;
+            };
+          }
+          if (typeof globalThis === 'undefined') { window.globalThis = window; }
+          if (!Array.prototype.includes) {
+            Array.prototype.includes = function(search) {
+              return this.indexOf(search) !== -1;
+            };
+          }
+          if (!String.prototype.includes) {
+            String.prototype.includes = function(search) {
+              return this.indexOf(search) !== -1;
+            };
+          }
+          if (!Object.entries) {
+            Object.entries = function(obj) {
+              var ownProps = Object.keys(obj), i = ownProps.length, resArray = new Array(i);
+              while (i--) resArray[i] = [ownProps[i], obj[ownProps[i]]];
+              return resArray;
+            };
+          }
+          if (!Object.values) {
+            Object.values = function(obj) {
+              return Object.keys(obj).map(function(key) { return obj[key]; });
+            };
+          }
+          if (!window.matchMedia) {
+            window.matchMedia = function() { return { matches: false, addListener: function(){}, removeListener: function(){} }; };
+          }
+          // Polyfill for AbortController (often missing in Chrome < 66)
+          if (!window.AbortController) {
+            window.AbortController = function() {
+              this.signal = { aborted: false, addEventListener: function(){}, removeEventListener: function(){} };
+              this.abort = function() { this.signal.aborted = true; };
+            };
+          }
+        } catch (e) {
+          console.error("Critical polyfill failure:", e);
         }
       })();
     </script>
     
     <!-- Diagnostic script to catch early errors on older WebViews -->
     <script>
-      window.onerror = function(msg, url, line, col, error) {
-        var extra = !col ? '' : '\ncolumn: ' + col;
-        extra += !error ? '' : '\nerror: ' + error;
-        var message = "Erro no Carregamento:\n" + msg + "\nurl: " + url + "\nline: " + line + extra;
-        
-        // Show a visible error on the screen instead of white page
-        var div = document.createElement('div');
-        div.style.position = 'fixed';
-        div.style.top = '0';
-        div.style.left = '0';
-        div.style.width = '100%';
-        div.style.height = '100%';
-        div.style.backgroundColor = '#000';
-        div.style.color = '#ff4444';
-        div.style.padding = '20px';
-        div.style.zIndex = '99999';
-        div.style.fontFamily = 'monospace';
-        div.style.fontSize = '12px';
-        div.style.overflow = 'auto';
-        div.innerHTML = '<h1>DragFire Error</h1><pre>' + message + '</pre><button onclick="location.reload()" style="padding:10px;background:#333;color:white;border:none;border-radius:5px">Recarregar</button>';
-        document.body.appendChild(div);
-        
-        return false;
-      };
-    </script>
+      (function() {
+        var isLegacy = false;
+        try {
+          // Check for ES2020 features like Optional Chaining
+          eval('var x = null; var y = x?.prop; var z = x ?? 1;');
+        } catch (e) {
+          isLegacy = true;
+          console.warn("Legacy browser detected: Enabling compatibility mode.");
+        }
 
-    <!-- Google Maps SDK remains optional but recommended for browser-side features -->
-    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDWqsCxj7uc2Iu_J3JNPcgti5K7HNWjpY8&libraries=places"></script>
+        function showError(msg, url, line, col, error, type) {
+          // SILENCE Google Maps syntax errors on old browsers
+          if (url && url.indexOf('maps.googleapis.com') !== -1 && (msg.indexOf('SyntaxError') !== -1 || msg.indexOf('Unexpected token') !== -1)) {
+            console.warn("Ignored Google Maps Legacy Error (prevented app crash):", msg);
+            return;
+          }
+
+          var container = document.getElementById('error-overlay');
+          if (!container) {
+            container = document.createElement('div');
+            container.id = 'error-overlay';
+            container.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#000;color:#ff4444;padding:20px;z-index:99999;font-family:monospace;font-size:12px;overflow:auto;box-sizing:border-box;';
+            document.body ? document.body.appendChild(container) : document.documentElement.appendChild(container);
+          }
+          
+          var extra = !col ? '' : '\ncolumn: ' + col;
+          extra += !error ? '' : '\nerror: ' + error;
+          if (error && error.stack) extra += '\nstack: ' + error.stack;
+          
+          var message = "<h2>DragFire " + (type || "Error") + "</h2>" +
+            "<pre style='white-space:pre-wrap;word-break:break-all;'>" +
+            "Message: " + msg + "\n" +
+            "URL: " + url + "\n" +
+            "Line: " + line + extra + "\n\n" +
+            "User Agent: " + navigator.userAgent + "\n" +
+            "Time: " + new Date().toISOString() +
+            "</pre>" +
+            "<button onclick='location.reload()' style='padding:12px 24px;background:#ff4444;color:white;border:none;border-radius:8px;font-weight:bold;cursor:pointer;'>Recarregar</button>";
+          
+          container.innerHTML = message;
+        }
+
+        window.onerror = function(msg, url, line, col, error) {
+          showError(msg, url, line, col, error, "Runtime Error");
+          return false;
+        };
+
+        window.onunhandledrejection = function(event) {
+          showError(event.reason, "Promise", 0, 0, event.reason, "Async Error");
+        };
+
+        // Conditional Google Maps loading with legacy support
+        window.addEventListener('load', function() {
+          var mapsScript = document.createElement('script');
+          // Forcing 3.55 (Legacy) if modern features are missing
+          var version = isLegacy ? "3.55" : "weekly";
+          mapsScript.src = "https://maps.googleapis.com/maps/api/js?key=AIzaSyDWqsCxj7uc2Iu_J3JNPcgti5K7HNWjpY8&libraries=places&v=" + version;
+          mapsScript.async = true;
+          mapsScript.defer = true;
+          mapsScript.onerror = function() { console.warn("Google Maps failed to load."); };
+          document.head.appendChild(mapsScript);
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
-
+</html>

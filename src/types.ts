@@ -28,9 +28,13 @@ export interface RunResult {
   } | null;
   estimatedPowerCV?: number; // Estimated engine horsepower
   performanceScore?: number;  // Normalised score (compensated for slope)
+  slopeCorrectedTime?: number; // Time standardized to 0% slope
+  seaLevelTime?: number;      // DA-corrected time (Standard Day)
+  wheelSpinDetected?: boolean; // If excessive wheel spin was detected
   runSerial?: string;        // Short unique ID for user reference
   vehicleId?: string;       // Associated vehicle
   vehicleName?: string;     // Associated vehicle name
+  fusionUsed?: 'linear' | 'kalman';
 }
 
 export interface RankingEntry {
@@ -50,6 +54,8 @@ export interface RankingEntry {
   longitude: number;
   slope: number;
   performanceScore?: number;
+  slopeCorrectedTime?: number;
+  seaLevelTime?: number;
   runSerial?: string;
   vehicleId?: string;
 }
@@ -201,9 +207,17 @@ export interface TelemetryConfig {
   fusionAccelGain?: number;  // 0.0 - 2.0 (Multiplier for accel data)
   rotationThreshold?: number; // Threshold to ignore accel (deg/s)
   mountingAxis?: 'auto' | 'all' | 'x' | 'y' | 'z'; // Pref axis
+  fusionAlgorithm?: 'linear' | 'kalman'; // Algorithm selection
+  daCorrectionEnabled?: boolean;
+  wheelSpinDetectionEnabled?: boolean;
   lookAheadBaseDistance?: number;   // Base distance in meters (default 500)
   lookAheadSpeedFactor?: number;    // Multiplier for speed-based distance (default 5)
   lookAheadMaxDistance?: number;    // Max look-ahead limit (default 1500)
+  minimapZoomMultiplier?: number;   // Global zoom level for HUD minimap (default 30000)
+  curveDetectionThreshold?: number; // Min angle to consider curve (default 15)
+  curveMediumThreshold?: number;    // Angle for medium curve (default 45)
+  curveHardThreshold?: number;      // Angle for hard curve (default 90)
+  regionalCacheRadius?: number;     // Radius for topological loading in meters (default 7500)
 }
 
 export interface TelemetryProfile extends TelemetryConfig {
@@ -229,6 +243,8 @@ export interface PowerReference {
   timestamp: number;
   isLiveTest?: boolean;
   rawRunId?: string;
+  estimatedWheelHp?: number; // Calculated hp before loss
+  trueEngineHp?: number;     // Real hp from dyno/reference
 }
 export interface Activity {
   id?: string;

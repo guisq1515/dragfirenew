@@ -333,6 +333,20 @@ export const fetchNearbyStationsTextSearch = async (
 };
 
 /**
+ * Generic search for places using the Places API (v1) Text Search.
+ */
+export const searchPlacesHTTP = async (
+  query: string,
+  location: { lat: number, lng: number },
+  radius = 50000,
+  userId?: string,
+  isGuest = false
+): Promise<GooglePlaceResult[]> => {
+  const response = await fetchNearbyStationsTextSearch(query, location.lat, location.lng, radius, userId, isGuest);
+  return response.results;
+};
+
+/**
  * Reverse geocodes coordinates to find the city/municipality (Direct HTTP - Mobile Safe)
  */
 export const getCityFromCoordinates = async (lat: number, lng: number): Promise<string | null> => {
@@ -395,7 +409,7 @@ export const fetchPlaceDetails = async (placeId: string) => {
     const url = `https://places.googleapis.com/v1/places/${placeId}?key=${GOOGLE_MAPS_API_KEY}`;
     const response = await CapacitorHttp.get({
       url,
-      headers: { 'X-Goog-FieldMask': 'formattedPhoneNumber,internationalPhoneNumber,website,regularOpeningHours,photos' }
+      headers: { 'X-Goog-FieldMask': 'id,displayName,formattedAddress,location,rating,userRatingCount,reviews,photos,website,regularOpeningHours,formattedPhoneNumber' }
     });
     return response.data || null;
   } catch (error) {
@@ -471,7 +485,7 @@ export const fetchRoutePoints = async (
           allPoints = [...allPoints, ...stepPoints];
         });
       });
-
+ 
       // Simple deduplication of consecutive identical points
       const points = allPoints.filter((p, i, arr) => 
         i === 0 || p.lat !== arr[i-1].lat || p.lng !== arr[i-1].lng
@@ -486,3 +500,39 @@ export const fetchRoutePoints = async (
     return { points: [], status: 'FETCH_ERROR' };
   }
 };
+
+/**
+ * Fetches elevation data for multiple coordinates from Google Maps API
+ */
+export const fetchElevationPoints = async (
+  points: { lat: number, lng: number }[],
+  userId?: string,
+  isGuest = false
+): Promise<{ elevation: number, location: { lat: number, lng: number } }[]> => {
+  if (!GOOGLE_MAPS_API_KEY || points.length === 0) return [];
+
+  // SAFETY CHECK
+  const guard = await checkAPILimits(userId, isGuest);
+  if (!guard.allowed) return [];
+
+  try {
+    const locations = points.map(p => `${p.lat},${p.lng}`).join('|');
+    const url = `${API_BASE}/maps/api/elevation/json?locations=${locations}&key=${GOOGLE_MAPS_API_KEY}`;
+    
+    const response = await CapacitorHttp.get({ url });
+    const data = response.data;
+
+    if (data.status === 'OK' && data.results) {
+      logGoogleAPIUsage('elevation_search');
+      return data.results.map((r: any) => ({
+        elevation: r.elevation,
+        location: { lat: r.location.lat, lng: r.location.lng }
+      }));
+    }
+    return [];
+  } catch (error) {
+    console.error('Error in fetchElevationPoints:', error);
+    return [];
+  }
+};
+
