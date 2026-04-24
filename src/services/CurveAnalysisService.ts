@@ -97,27 +97,49 @@ class CurveAnalysisService {
 
   private async fetchRegionInBackground(lat: number, lng: number) {
     try {
-      const radius = this.cacheRadius; 
-      const query = `[out:json][timeout:30];(way["highway"](around:${radius},${lat},${lng})["highway"!~"footway|pedestrian|cycleway|service|path|steps|track"];);out body;>;out skel qt;`;
-      const response = await CapacitorHttp.post({ url: 'https://overpass-api.de/api/interpreter', data: query, headers: { 'Content-Type': 'text/plain' } });
+      const radius = this.cacheRadius;
+      const overpassQuery = `
+        [out:json][timeout:25];
+        (
+          way["highway"](around:${radius},${lat},${lng});
+        );
+        out body;
+        >;
+        out skel qt;
+      `;
+
+      const response = await CapacitorHttp.post({
+        url: 'https://overpass-api.de/api/interpreter',
+        data: overpassQuery,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+      });
 
       if (response.status === 200 && response.data.elements) {
         const nodesMap: Record<number, RoadNode> = {};
-        const ways: WayData[] = [];
-        response.data.elements.forEach((el: any) => { if (el.type === 'node') nodesMap[el.id] = { lat: el.lat, lng: el.lon }; });
         response.data.elements.forEach((el: any) => {
-          if (el.type === 'way') {
-            const points = el.nodes.map((nid: number) => nodesMap[nid]).filter(Boolean);
-            if (points.length > 1) ways.push({ id: el.id, nodes: el.nodes, tags: el.tags, points });
+          if (el.type === 'node') {
+            nodesMap[el.id] = { lat: el.lat, lng: el.lon };
           }
         });
 
-        const newRegion: TopologicalRegion = { lat, lng, radius, ways, nodesMap, timestamp: Date.now() };
-        this.regions = this.regions.filter(r => this.haversineDistance(lat, lng, r.lat, r.lng) > 2000);
-        this.regions.unshift(newRegion);
+        const ways: WayData[] = response.data.elements
+          .filter((el: any) => el.type === 'way')
+          .map((el: any) => ({
+            id: el.id,
+            nodes: el.nodes,
+            tags: el.tags,
+            points: el.nodes.map((id: number) => nodesMap[id]).filter(Boolean)
+          }));
+
+        const newRegion: TopologicalRegion = {
+          lat, lng, radius, ways, nodesMap,
+          timestamp: Date.now()
+        };
+
+        this.regions = [newRegion, ...this.regions.filter(r => this.haversineDistance(lat, lng, r.lat, r.lng) > 5000)].slice(0, 10);
         this.saveRegions();
       }
-    } catch (error) {}
+    } catch (e) {}
   }
 
   private stitchLocalRoad(lat: number, lng: number, heading: number | null, speedKmh: number, region: TopologicalRegion): { nodes: RoadNode[], roadName: string | null } {
@@ -127,31 +149,28 @@ class CurveAnalysisService {
 
     ways.forEach(w => {
       let d = Infinity;
-      let wayBearing = 0;
-      for (let i = 0; i < w.points.length - 1; i++) {
-        const n1 = w.points[i];
-        const dist = this.haversineDistance(lat, lng, n1.lat, n1.lng);
-        if (dist < d) {
-          d = dist;
-          const dLat = w.points[i+1].lat - n1.lat;
-          const dLng = w.points[i+1].lng - n1.lng;
-          wayBearing = (Math.atan2(dLng, dLat) * 180 / Math.PI + 360) % 360;
+      w.points.forEach(p => {
+        const dist = this.haversineDistance(lat, lng, p.lat, p.lng);
+        if (dist < d) d = dist;
+      });
+
+      if (d < 50) {
+        let hScore = 0;
+        if (heading !== null && w.points.length >= 2) {
+           const wH = this.calculateHeading(w.points[0], w.points[w.points.length-1]);
+           let diff = Math.abs(heading - wH);
+           if (diff > 180) diff = 360 - diff;
+           hScore = diff;
         }
+        const totalScore = d + hScore * 0.5;
+        if (totalScore < minScore) { minScore = totalScore; bestWay = w; }
       }
-      let penalty = 0;
-      if (heading !== null && speedKmh > 15) {
-        let diff = Math.min(Math.abs(heading - wayBearing), 360 - Math.abs(heading - wayBearing));
-        let diffOpp = Math.min(Math.abs(heading - ((wayBearing + 180) % 360)), 360 - Math.abs(heading - ((wayBearing + 180) % 360)));
-        if (Math.min(diff, diffOpp) > 45) penalty = Math.min(diff, diffOpp) * 5;
-      }
-      if ((d + penalty) < minScore) { minScore = d + penalty; bestWay = w; }
     });
 
     if (!bestWay) return { nodes: this.activeNodes, roadName: this.activeRoadName };
     const roadName = bestWay.tags?.name || bestWay.tags?.ref || 'Via Mapeada';
     
     if (this.activeRoadName && roadName !== this.activeRoadName && minScore < 30) {
-       // Keep old name if very close
     } else {
        this.activeRoadName = roadName;
        this.activeWayId = bestWay.id;
@@ -205,6 +224,12 @@ class CurveAnalysisService {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   }
 
+  private calculateHeading(p1: RoadNode, p2: RoadNode): number {
+    const y = Math.sin((p2.lng - p1.lng) * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180);
+    const x = Math.cos(p1.lat * Math.PI / 180) * Math.sin(p2.lat * Math.PI / 180) - Math.sin(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) * Math.cos((p2.lng - p1.lng) * Math.PI / 180);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  }
+
   findUpcomingCurves(currentLat: number, currentLng: number, currentHeading: number | null, nodes: RoadNode[], lookAheadMeters: number, speedKmh: number = 0): CurveData[] {
     if (nodes.length < 5) return [];
     const found: CurveData[] = [];
@@ -212,43 +237,61 @@ class CurveAnalysisService {
     nodes.forEach((n, idx) => { const d = this.haversineDistance(currentLat, currentLng, n.lat, n.lng); if (d < minDist) { minDist = d; closest = idx; } });
 
     let i = closest, scan = 0;
-    while (i < nodes.length - 3 && found.length < 3) {
+    while (i < nodes.length - 3 && found.length < 5) {
       scan += this.haversineDistance(nodes[i].lat, nodes[i].lng, nodes[i+1].lat, nodes[i+1].lng);
       if (scan > lookAheadMeters) break;
 
       let cumAngle = 0, win = 0, j = i;
-      while (j < nodes.length - 2 && win < 100) {
+      let signChanges = 0, lastAngle = 0;
+      
+      while (j < nodes.length - 2 && win < 150) {
         win += this.haversineDistance(nodes[j].lat, nodes[j].lng, nodes[j+1].lat, nodes[j+1].lng);
         const v1 = { x: nodes[j+1].lng - nodes[j].lng, y: nodes[j+1].lat - nodes[j].lat };
         const v2 = { x: nodes[j+2].lng - nodes[j+1].lng, y: nodes[j+2].lat - nodes[j+1].lat };
         const dot = v1.x * v2.x + v1.y * v2.y;
         const mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y), mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+        
         if (mag1 > 0 && mag2 > 0) {
            const angle = Math.acos(Math.max(-1, Math.min(1, dot / (mag1 * mag2)))) * (180 / Math.PI);
-           cumAngle += (v1.x * v2.y - v1.y * v2.x) < 0 ? angle : -angle;
+           const currentSign = (v1.x * v2.y - v1.y * v2.x) < 0 ? 1 : -1;
+           const signedAngle = currentSign * angle;
+           
+           if (lastAngle !== 0 && Math.sign(signedAngle) !== Math.sign(lastAngle) && Math.abs(signedAngle) > 5) {
+              signChanges++;
+           }
+           
+           cumAngle += signedAngle;
+           lastAngle = signedAngle;
         }
         j++;
       }
 
-      // Detection Threshold (Dynamic based on speed)
       const dynamicThreshold = speedKmh > 80 ? (this.detectionThreshold * 0.7) : this.detectionThreshold;
       
-      if (Math.abs(cumAngle) > dynamicThreshold) {
-        // Simple slope calculation if elevation is present
+      if (Math.abs(cumAngle) > dynamicThreshold || signChanges >= 2) {
         const startE = nodes[i].elevation, endE = nodes[j].elevation;
         let slope = 0;
         if (startE !== undefined && endE !== undefined) slope = ((endE - startE) / win) * 100;
 
+        let type: CurveData['severity'] = 'soft';
+        const absAngle = Math.abs(cumAngle);
+        
+        if (signChanges >= 2) type = 'chicane';
+        else if (absAngle > 140) type = 'hairpin';
+        else if (absAngle > this.hardThreshold) type = 'hard';
+        else if (absAngle > this.mediumThreshold) type = 'medium';
+        else if (absAngle < 10) type = 'straight';
+
         found.push({
-          angle: Math.round(Math.abs(cumAngle)),
-          severity: Math.abs(cumAngle) > this.hardThreshold ? 'hard' : (Math.abs(cumAngle) > this.mediumThreshold ? 'medium' : 'soft'),
+          angle: Math.round(absAngle),
+          severity: type,
           distance: Math.round(scan),
           direction: cumAngle > 0 ? 'right' : 'left',
-          points: nodes.slice(i, i + 50),
+          points: nodes.slice(i, j + 1),
           slope: Math.round(slope),
           isUphill: slope > 1.5
         });
-        i = j + 5;
+        i = j + 2;
       } else i++;
     }
     return found;

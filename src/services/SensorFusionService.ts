@@ -5,6 +5,7 @@ export interface IMUData {
   gyro: { alpha: number, beta: number, gamma: number };
   lateralG: number;
   longitudinalG: number;
+  fusedHeading: number;
   timestamp: number;
 }
 
@@ -14,11 +15,20 @@ class SensorFusionService {
     gyro: { alpha: 0, beta: 0, gamma: 0 },
     lateralG: 0,
     longitudinalG: 0,
+    fusedHeading: 0,
     timestamp: Date.now()
   };
 
+  // Kalman Filter for Heading
+  private Q = 0.1; // Process noise
+  private R = 2.0; // Measurement noise
+  private x = 0;   // State (Heading)
+  private P = 1;   // Error covariance
+  private K = 0;   // Kalman gain
+
   private listeners: ((data: IMUData) => void)[] = [];
   private isActive = false;
+  private lastUpdate = Date.now();
 
   constructor() {}
 
@@ -26,18 +36,14 @@ class SensorFusionService {
     if (this.isActive) return;
     
     try {
-      // Permission check is handled by Capacitor internally or should be requested if needed
       await Motion.addListener('accel', (event) => {
-        // Convert to Gs (approx 9.81 m/s^2)
         const ax = event.acceleration.x / 9.81;
         const ay = event.acceleration.y / 9.81;
         const az = event.acceleration.z / 9.81;
 
-        // Simple filtering to get Lateral/Longitudinal based on common phone orientations
-        // This assumes phone is flat or vertical in a mount. 
-        // For professional use, we would need a calibration step.
         this.currentData.accel = { x: ax, y: ay, z: az };
-        this.currentData.lateralG = ax; // Typical for landscape mount
+        // Assuming Landscape Mount
+        this.currentData.lateralG = ax; 
         this.currentData.longitudinalG = ay;
         this.currentData.timestamp = Date.now();
         
@@ -50,14 +56,42 @@ class SensorFusionService {
           beta: event.beta, 
           gamma: event.gamma 
         };
+        
+        // Update fused heading using alpha (Z-axis rotation)
+        if (event.alpha !== null) {
+          this.updateHeading(event.alpha);
+        }
+        
         this.notify();
       });
 
       this.isActive = true;
-      console.log("Sensor Fusion Service Started");
+      console.log("Elite Sensor Fusion (Kalman Enabled) Started");
     } catch (e) {
-      console.warn("Motion sensors not available on this device", e);
+      console.warn("Motion sensors not available", e);
     }
+  }
+
+  // Simple 1D Kalman Filter for Heading smoothing
+  private updateHeading(measurement: number) {
+    // Prediction
+    this.P = this.P + this.Q;
+
+    // Innovation (handle 360 wrap)
+    let diff = measurement - this.x;
+    if (diff > 180) diff -= 360;
+    if (diff < -180) diff += 360;
+
+    // Update
+    this.K = this.P / (this.P + this.R);
+    this.x = this.x + this.K * diff;
+    this.P = (1 - this.K) * this.P;
+
+    // Wrap state
+    if (this.x < 0) this.x += 360;
+    if (this.x >= 360) this.x -= 360;
+
+    this.currentData.fusedHeading = this.x;
   }
 
   stop() {
@@ -81,6 +115,10 @@ class SensorFusionService {
       lateral: this.currentData.lateralG, 
       longitudinal: this.currentData.longitudinalG 
     };
+  }
+
+  getHeading(): number {
+    return this.currentData.fusedHeading;
   }
 }
 
