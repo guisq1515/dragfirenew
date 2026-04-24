@@ -8267,7 +8267,6 @@ function CurveRadar({ onBack, userLocation, userId, isGuest }: { onBack: () => v
 }
 
 function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle: any, onBack: () => void, isOwnCar: boolean, onEditVehicle: (v: any) => void }) {
-  // Mock data for display if missing
   const stats = {
     topSpeed: vehicle.topSpeed || 240,
     torque: vehicle.torque || 270,
@@ -8279,38 +8278,36 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle:
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0A0A0A] overflow-hidden relative">
-      {/* Header */}
-      <header className="px-6 pt-6 pb-4 flex items-center justify-between z-20">
-        <button onClick={onBack} className="p-3 bg-zinc-900/80 backdrop-blur-xl border border-white/5 rounded-2xl text-white active:scale-90 transition-transform">
-          <ChevronLeft className="w-6 h-6" />
+    <div className="flex-1 flex flex-col bg-[#0A0A0A] overflow-hidden relative h-full">
+      {/* Header - Compact */}
+      <header className="px-4 pt-4 pb-2 flex items-center justify-between z-20">
+        <button onClick={onBack} className="p-2 bg-zinc-900/80 backdrop-blur-xl border border-white/5 rounded-xl text-white active:scale-90 transition-transform">
+          <ChevronLeft className="w-5 h-5" />
         </button>
-        <div className="flex items-center gap-2">
-          <span className="text-white font-black italic text-xl tracking-tighter uppercase">Drag<span className="text-brand-primary">Fire</span></span>
-        </div>
-        <button className="p-3 bg-zinc-900/80 backdrop-blur-xl border border-white/5 rounded-2xl text-white active:scale-90 transition-transform">
-          <SettingsIcon className="w-6 h-6 text-brand-primary" />
+        <span className="text-white font-black italic text-base tracking-tighter uppercase">Drag<span className="text-brand-primary">Fire</span></span>
+        <button className="p-2 bg-zinc-900/80 backdrop-blur-xl border border-white/5 rounded-xl text-white active:scale-90 transition-transform">
+          <SettingsIcon className="w-5 h-5 text-brand-primary" />
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-6 pb-24 relative z-10 scrollbar-hide">
-        {/* Hero Card */}
-        <div className="relative aspect-[16/11] rounded-[48px] overflow-hidden border border-white/10 shadow-2xl mb-8 group">
+      <main className="flex-1 flex flex-col px-4 pb-4 overflow-hidden">
+        {/* Hero Card - More Compact */}
+        <div className="relative aspect-[16/9] rounded-[32px] overflow-hidden border border-white/10 shadow-xl mb-4 shrink-0">
           <img 
             src={vehicle.photoURL || 'https://images.unsplash.com/photo-1614162692292-7ac56d7f7f1e?auto=format&fit=crop&q=80'} 
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
+            className="w-full h-full object-cover" 
             alt={vehicle.model} 
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
           
-          {/* Top Glass Badge */}
-          <div className="absolute top-6 left-6 right-6 flex items-start justify-between">
-            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-3 flex items-center gap-4">
-              <div className="text-[10px] font-black text-white italic uppercase tracking-tighter pr-4 border-r border-white/20">
+          {/* Top Glass Badge - Smaller */}
+          <div className="absolute top-4 left-4 right-4 flex items-start justify-between">
+            <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-2 flex items-center gap-3">
+              <div className="text-[8px] font-black text-white italic uppercase tracking-tighter pr-3 border-r border-white/10">
                 DRAG<span className="text-brand-primary">FIRE</span>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 flex items-center justify-center opacity-70">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 flex items-center justify-center opacity-70">
                    <svg viewBox="0 0 100 40" className="w-full h-full fill-white">
                      <circle cx="20" cy="20" r="15" fill="none" stroke="currentColor" strokeWidth="4"/>
                      <circle cx="40" cy="20" r="15" fill="none" stroke="currentColor" strokeWidth="4"/>
@@ -8319,147 +8316,143 @@ function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle:
                    </svg>
                 </div>
                 <div className="flex flex-col">
-                  <span className="text-[10px] font-black text-white uppercase leading-none">{vehicle.brand}</span>
-                  <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest">{vehicle.nickname || vehicle.model}</span>
+                  <span className="text-[8px] font-black text-white uppercase leading-none">{vehicle.brand}</span>
+                  <span className="text-[6px] font-bold text-zinc-400 uppercase tracking-widest leading-none">{vehicle.nickname || vehicle.model}</span>
                 </div>
               </div>
             </div>
             
-            <button className="p-4 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-white active:scale-90 transition-transform">
-              <Share2Icon className="w-5 h-5" />
+            <button className="p-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-full text-white">
+              <Share2Icon className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Bottom Stage Badge */}
-          <div className="absolute bottom-6 right-8">
-            <div className="bg-brand-primary/90 backdrop-blur-md px-5 py-1.5 rounded-full border border-white/20">
-              <span className="text-[10px] font-black text-white italic uppercase tracking-widest">{stats.stage}</span>
+          <div className="absolute bottom-4 right-6">
+            <div className="bg-brand-primary/90 px-3 py-1 rounded-full">
+              <span className="text-[8px] font-black text-white italic uppercase tracking-widest">{stats.stage}</span>
             </div>
           </div>
         </div>
 
-        {/* Section: DINÃ‚MICA */}
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="w-1 h-4 bg-brand-primary rounded-full" />
-            <h4 className="text-[12px] font-black text-white uppercase italic tracking-widest">Dinâmica</h4>
-          </div>
-          
-          <div className="space-y-6 bg-zinc-900/40 backdrop-blur-xl border border-white/5 rounded-[40px] p-8">
-             <div className="space-y-2">
-               <div className="flex justify-between items-end">
-                 <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Velocidade Máxima</span>
-                 <span className="text-sm font-black text-white italic">{stats.topSpeed} <span className="text-[10px] text-brand-primary">KM/H</span></span>
-               </div>
-               <div className="h-1.5 bg-zinc-800/50 rounded-full overflow-hidden">
-                 <div className="h-full bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.5)]" style={{ width: '65%' }} />
-               </div>
-             </div>
-
-             <div className="space-y-2">
-               <div className="flex justify-between items-end">
-                 <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Torque Estimado</span>
-                 <span className="text-sm font-black text-white italic">{stats.torque} <span className="text-[10px] text-orange-500">NM</span></span>
-               </div>
-               <div className="h-1.5 bg-zinc-800/50 rounded-full overflow-hidden">
-                 <div className="h-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]" style={{ width: '55%' }} />
-               </div>
-             </div>
-
-             <div className="space-y-2">
-               <div className="flex justify-between items-end">
-                 <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Força G Acúm.</span>
-                 <span className="text-sm font-black text-white italic">{stats.gForce} <span className="text-[10px] text-blue-500">G</span></span>
-               </div>
-               <div className="h-1.5 bg-zinc-800/50 rounded-full overflow-hidden">
-                 <div className="h-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" style={{ width: '45%' }} />
-               </div>
-             </div>
-          </div>
-        </div>
-
-        {/* Section: FICHA TÃ‰CNICA */}
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="w-1 h-4 bg-zinc-600 rounded-full" />
-            <h4 className="text-[12px] font-black text-zinc-400 uppercase italic tracking-widest">Ficha Técnica</h4>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4">
-            <div className="bg-zinc-900/40 border border-white/5 rounded-3xl p-5 flex items-center justify-between">
-              <div className="flex flex-col">
-                <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-1">Potência</span>
-                <span className="text-xl font-black text-white italic leading-none">{stats.power} <span className="text-[10px] text-brand-primary">CV</span></span>
-              </div>
-              <Zap className="w-8 h-8 text-brand-primary opacity-50" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-zinc-900/40 border border-white/5 rounded-3xl p-5 flex items-center justify-between">
-                <div className="flex flex-col">
-                  <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-1">Peso Total</span>
-                  <span className="text-sm font-black text-white italic leading-none">{stats.weight} <span className="text-[8px] text-zinc-500">KG</span></span>
-                </div>
-                <Scale className="w-5 h-5 text-zinc-600" />
-              </div>
-              <div className="bg-zinc-900/40 border border-white/5 rounded-3xl p-5 flex items-center justify-between">
-                <div className="flex flex-col">
-                  <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-1">Tração</span>
-                  <span className="text-sm font-black text-white italic leading-none">{vehicle.traction || 'FWD'}</span>
-                </div>
-                <Cpu className="w-5 h-5 text-zinc-600" />
-              </div>
-            </div>
-
-            <div className="bg-zinc-900/40 border border-white/5 rounded-3xl p-5 flex flex-col">
-              <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-1">Modelo Motor</span>
-              <span className="text-sm font-black text-white italic">{stats.engine}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Section: RECORDES */}
-        <div className="mb-10">
-          <div className="flex items-center gap-2 mb-6">
-            <Trophy className="w-5 h-5 text-yellow-500" />
-            <h4 className="text-[12px] font-black text-white uppercase italic tracking-widest">Melhores Recordes</h4>
-          </div>
-          
-          <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-            <div className="min-w-[140px] bg-zinc-900/40 border border-white/10 rounded-3xl p-5">
-              <div className="flex items-center gap-2 mb-4">
-                 <div className="w-1.5 h-1.5 rounded-full bg-brand-primary" />
-                 <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">0-100 KM/H</span>
-              </div>
-              <span className="text-xl font-black text-white italic">-- <span className="text-brand-primary">S</span></span>
+        {/* Content Area - Two Columns */}
+        <div className="flex-1 grid grid-cols-2 gap-3 min-h-0 overflow-hidden">
+          {/* Left Column: DINÃ‚MICA */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-1.5 px-1">
+              <div className="w-0.5 h-3 bg-brand-primary rounded-full" />
+              <h4 className="text-[9px] font-black text-white uppercase italic tracking-widest">Dinâmica</h4>
             </div>
             
-            <div className="min-w-[140px] bg-zinc-900/40 border border-white/10 rounded-3xl p-5">
-              <div className="flex items-center gap-2 mb-4">
-                 <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                 <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">201 METROS</span>
+            <div className="flex-1 bg-zinc-900/40 border border-white/5 rounded-3xl p-4 flex flex-col justify-between">
+               <div className="space-y-3">
+                 <div className="space-y-1">
+                   <div className="flex justify-between items-end">
+                     <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Velocidade Máxima</span>
+                     <span className="text-[10px] font-black text-white italic">{stats.topSpeed} <span className="text-[7px] text-brand-primary">KM/H</span></span>
+                   </div>
+                   <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
+                     <div className="h-full bg-cyan-400" style={{ width: '65%' }} />
+                   </div>
+                 </div>
+
+                 <div className="space-y-1">
+                   <div className="flex justify-between items-end">
+                     <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Torque Estimado</span>
+                     <span className="text-[10px] font-black text-white italic">{stats.torque} <span className="text-[7px] text-orange-500">NM</span></span>
+                   </div>
+                   <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
+                     <div className="h-full bg-orange-500" style={{ width: '55%' }} />
+                   </div>
+                 </div>
+
+                 <div className="space-y-1">
+                   <div className="flex justify-between items-end">
+                     <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Força G Acúm.</span>
+                     <span className="text-[10px] font-black text-white italic">{stats.gForce} <span className="text-[7px] text-blue-500">G</span></span>
+                   </div>
+                   <div className="h-1 bg-zinc-800 rounded-full overflow-hidden">
+                     <div className="h-full bg-blue-500" style={{ width: '45%' }} />
+                   </div>
+                 </div>
+               </div>
+
+               <div className="mt-4 pt-3 border-t border-white/5">
+                 <div className="flex items-center gap-1.5 mb-2">
+                   <Trophy className="w-3 h-3 text-yellow-500" />
+                   <span className="text-[7px] font-black text-zinc-500 uppercase tracking-widest">Melhores Recordes</span>
+                 </div>
+                 <div className="space-y-1.5">
+                   <div className="flex items-center justify-between bg-zinc-950/50 rounded-lg p-1.5">
+                     <span className="text-[6px] font-bold text-zinc-500 uppercase tracking-widest">0-100 KM/H</span>
+                     <span className="text-[9px] font-black text-white italic">-- <span className="text-brand-primary">S</span></span>
+                   </div>
+                   <div className="flex items-center justify-between bg-zinc-950/50 rounded-lg p-1.5">
+                     <span className="text-[6px] font-bold text-zinc-500 uppercase tracking-widest">201 METROS</span>
+                     <span className="text-[9px] font-black text-white italic">-- <span className="text-blue-500">S</span></span>
+                   </div>
+                 </div>
+               </div>
+            </div>
+          </div>
+
+          {/* Right Column: FICHA TÃ‰CNICA */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-1.5 px-1">
+              <div className="w-0.5 h-3 bg-zinc-600 rounded-full" />
+              <h4 className="text-[9px] font-black text-zinc-400 uppercase italic tracking-widest">Ficha Técnica</h4>
+            </div>
+
+            <div className="flex-1 space-y-2 overflow-y-auto scrollbar-hide">
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-3 flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-[6px] font-black text-zinc-600 uppercase tracking-widest">Potência</span>
+                  <span className="text-sm font-black text-white italic leading-none">{stats.power} <span className="text-[7px] text-brand-primary">CV</span></span>
+                </div>
+                <Zap className="w-5 h-5 text-brand-primary opacity-30" />
               </div>
-              <span className="text-xl font-black text-white italic">-- <span className="text-blue-500">S</span></span>
+
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-3 flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-[6px] font-black text-zinc-600 uppercase tracking-widest">Peso Total</span>
+                  <span className="text-[10px] font-black text-white italic leading-none">{stats.weight} <span className="text-[6px] text-zinc-500">KG</span></span>
+                </div>
+                <Scale className="w-4 h-4 text-zinc-600" />
+              </div>
+
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-3 flex flex-col">
+                <span className="text-[6px] font-black text-zinc-600 uppercase tracking-widest mb-0.5">Modelo Motor</span>
+                <span className="text-[9px] font-black text-white italic leading-tight">{stats.engine}</span>
+              </div>
+
+              <div className="bg-zinc-900/40 border border-white/5 rounded-2xl p-3 flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-[6px] font-black text-zinc-600 uppercase tracking-widest">Tração</span>
+                  <span className="text-[10px] font-black text-white italic leading-none">{vehicle.traction || 'FWD'}</span>
+                </div>
+                <Cpu className="w-4 h-4 text-zinc-600" />
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Share Button */}
-        <button 
-          className="w-full py-6 bg-gradient-to-r from-brand-primary to-red-600 text-white rounded-[32px] font-black uppercase italic tracking-[0.3em] text-[11px] active:scale-95 transition-all shadow-2xl shadow-brand-primary/20 flex items-center justify-center gap-4 mb-4"
-        >
-          <Share2Icon className="w-5 h-5" />
-          Compartilhar Garagem
-        </button>
-
-        {isOwnCar && (
+        {/* Action Button - More Compact */}
+        <div className="mt-4 pt-2 shrink-0">
           <button 
-            onClick={() => onEditVehicle(vehicle)}
-            className="w-full py-4 text-zinc-500 font-black uppercase tracking-widest text-[9px] active:scale-95 transition-all"
+            className="w-full py-4 bg-gradient-to-r from-brand-primary to-red-600 text-white rounded-[24px] font-black uppercase italic tracking-[0.2em] text-[9px] active:scale-95 transition-all shadow-lg flex items-center justify-center gap-3"
           >
-            Editar Configurações
+            <Share2Icon className="w-4 h-4" />
+            Compartilhar Garagem
           </button>
-        )}
+          
+          {isOwnCar && (
+            <button 
+              onClick={() => onEditVehicle(vehicle)}
+              className="w-full py-2 text-zinc-600 font-black uppercase tracking-widest text-[7px] active:scale-95"
+            >
+              Editar Configurações
+            </button>
+          )}
+        </div>
       </main>
     </div>
   );
