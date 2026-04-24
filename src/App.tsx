@@ -202,7 +202,7 @@ class ErrorBoundary extends React.Component<any, any> {
           </div>
           <h2 className="text-2xl font-display font-black italic mb-2 uppercase tracking-tighter">Ops! Algo deu errado</h2>
           <p className="text-zinc-400 text-sm mb-8 max-w-xs">
-            Ocorreu um erro ao processar sua solicitaÃ§Ã£o. Verifique sua conexÃ£o ou tente novamente.
+            Ocorreu um erro ao processar sua solicitação. Verifique sua conexà£o ou tente novamente.
           </p>
           <div className="bg-zinc-900 p-4 rounded-xl border border-white/5 text-left w-full max-w-sm mb-8">
             <p className="text-[10px] font-mono text-zinc-500 uppercase mb-2">Detalhes do Erro</p>
@@ -452,33 +452,33 @@ type Screen = 'home' | 'timer' | 'challenge' | 'duel-result' | 'settings' | 'log
 function GPSGuide({ onBack }: { onBack: () => void }) {
   const tips = [
     {
-      title: "CÃ©u Aberto",
-      description: "O sinal de GPS viaja do espaÃ§o. Ãrvores, prÃ©dios altos e garagens bloqueiam ou refletem o sinal, causando erros de metros.",
+      title: "Céu Aberto",
+      description: "O sinal de GPS viaja do espaà§o. àrvores, prédios altos e garagens bloqueiam ou refletem o sinal, causando erros de metros.",
       icon: <Cloud className="w-5 h-5 text-blue-400" />
     },
     {
-      title: "PosiÃ§Ã£o do Celular",
+      title: "Posição do Celular",
       description: "Coloque o celular no painel ou no para-brisa. Evite o console central ou o bolso, onde a lataria do carro abafa o sinal.",
       icon: <Smartphone className="w-5 h-5 text-brand-primary" />
     },
     {
       title: "Antenas Externas",
-      description: "Para precisÃ£o profissional (10Hz ou 25Hz), considere usar receptores Bluetooth externos.",
+      description: "Para precisà£o profissional (10Hz ou 25Hz), considere usar receptores Bluetooth externos.",
       icon: <Zap className="w-5 h-5 text-brand-accent" />
     },
     {
       title: "Bateria e Energia",
-      description: "Mantenha o celular carregando. O modo de economia de energia reduz a frequÃªncia de atualizaÃ§Ã£o do GPS para economizar bateria.",
+      description: "Mantenha o celular carregando. O modo de economia de energia reduz a frequência de atualização do GPS para economizar bateria.",
       icon: <BatteryCharging className="w-5 h-5 text-green-400" />
     },
     {
       title: "Hardware do Smartphone",
-      description: "A qualidade do sensor GPS varia entre modelos. Smartphones mais modernos e potentes possuem chips de localizaÃ§Ã£o mais precisos e rÃ¡pidos.",
+      description: "A qualidade do sensor GPS varia entre modelos. Smartphones mais modernos e potentes possuem chips de localização mais precisos e rápidos.",
       icon: <Smartphone className="w-5 h-5 text-purple-400" />
     },
     {
-      title: "PermissÃµes de Sistema",
-      description: "Algumas marcas (Xiaomi, Samsung, Huawei) podem bloquear o GPS para economizar bateria. Verifique se o app tem permissÃ£o de 'LocalizaÃ§Ã£o Precisa' e se a economia de energia estÃ¡ desativada.",
+      title: "Permissões de Sistema",
+      description: "Algumas marcas (Xiaomi, Samsung, Huawei) podem bloquear o GPS para economizar bateria. Verifique se o app tem permissà£o de 'Localização Precisa' e se a economia de energia está desativada.",
       icon: <Shield className="w-5 h-5 text-red-400" />
     }
   ];
@@ -490,7 +490,7 @@ function GPSGuide({ onBack }: { onBack: () => void }) {
           <ChevronLeft className="w-5 h-5" />
         </button>
         <div>
-          <h2 className="text-xl font-display font-black italic text-white leading-none">GUIA DE PRECISÃƒO</h2>
+          <h2 className="text-xl font-display font-black italic text-white leading-none">GUIA DE PRECISàƒO</h2>
           <p className="text-xs text-brand-primary font-bold uppercase tracking-widest mt-1">Como melhorar seus resultados</p>
         </div>
       </div>
@@ -516,9 +516,9 @@ function GPSGuide({ onBack }: { onBack: () => void }) {
       </div>
 
       <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-5 space-y-3">
-        <h4 className="text-xs font-black text-white uppercase tracking-widest">Dica TÃ©cnica</h4>
+        <h4 className="text-xs font-black text-white uppercase tracking-widest">Dica Técnica</h4>
         <p className="text-[10px] text-zinc-400 leading-relaxed">
-          O DragFire utiliza um algoritmo hÃ­brido que combina a posiÃ§Ã£o geogrÃ¡fica com o efeito Doppler (velocidade real) para compensar oscilaÃ§Ãµes do sensor do smartphone.
+          O DragFire utiliza um algoritmo híbrido que combina a posição geográfica com o efeito Doppler (velocidade real) para compensar oscilaà§ões do sensor do smartphone.
         </p>
       </div>
     </div>
@@ -702,11 +702,11 @@ function HistoryItem({ run, isPremium, onDelete }: HistoryItemProps) {
                     {run.config.mode === 'free' ? (
                       <>
                         <div className="flex justify-between items-center">
-                          <span className="text-[10px] font-bold text-zinc-400 uppercase">DistÃ¢ncia</span>
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase">Distà¢ncia</span>
                           <span className="text-sm font-display font-black text-white italic">{Math.round(run.distance)}m</span>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-[10px] font-bold text-zinc-400 uppercase">Velo. MÃ©dia</span>
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase">Velo. Média</span>
                           <span className="text-sm font-display font-black text-white italic">{Math.round(run.avgSpeed)} km/h</span>
                         </div>
                       </>
@@ -729,7 +729,7 @@ function HistoryItem({ run, isPremium, onDelete }: HistoryItemProps) {
                 </div>
                   <div className="bg-zinc-950/50 p-4 rounded-xl border border-white/5 space-y-4">
                     <div>
-                      <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">InclinaÃ§Ã£o</span>
+                      <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Inclinação</span>
                       <p className={`text-lg font-display font-black italic leading-none ${run.isValidSlope ? 'text-white' : 'text-red-500'}`}>
                         {run.slope?.toFixed(1)}%
                       </p>
@@ -740,7 +740,7 @@ function HistoryItem({ run, isPremium, onDelete }: HistoryItemProps) {
                     </div>
                     <div className="flex justify-between items-end">
                       <div>
-                        <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1 font-display">PotÃªncia (CV)</span>
+                        <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1 font-display">Potência (CV)</span>
                         {!isPremium ? (
                           <div className="flex items-center gap-1.5 text-yellow-500/40">
                             <div className="flex flex-col items-center">
@@ -760,7 +760,7 @@ function HistoryItem({ run, isPremium, onDelete }: HistoryItemProps) {
                       </div>
                     </div>
                     <div className="flex justify-between items-center pt-2 border-t border-white/5">
-                      <span className="text-[10px] font-black text-zinc-600 uppercase">PrecisÃ£o</span>
+                      <span className="text-[10px] font-black text-zinc-600 uppercase">Precisà£o</span>
                       <p className="text-xs font-bold text-zinc-500">{run.avgAccuracy?.toFixed(1)}m</p>
                     </div>
                   </div>
@@ -819,7 +819,7 @@ function HistoryView({
       });
 
       if (validRuns.length === 0) {
-        alert('Nenhuma puxada nova vÃ¡lida para sincronizar.');
+        alert('Nenhuma puxada nova válida para sincronizar.');
         return;
       }
 
@@ -830,7 +830,7 @@ function HistoryView({
           uid: user.uid,
           userName: user.displayName || 'Piloto',
           userPhoto: user.photoURL || undefined,
-          vehicleName: 'Sync HistÃ³rico', // We don't have the full vehicle object here easily, but we can improve this
+          vehicleName: 'Sync Histórico', // We don't have the full vehicle object here easily, but we can improve this
           vehicleType: r.config.mode === 'distance' ? 'car' : 'car', 
           time: r.time,
           maxSpeed: r.maxSpeed,
@@ -850,7 +850,7 @@ function HistoryView({
       alert(`${syncedCount} puxadas sincronizadas com sucesso!`);
     } catch (err: any) {
       console.error("Sync error:", err);
-      alert("Erro na sincronizaÃ§Ã£o: " + err.message);
+      alert("Erro na sincronização: " + err.message);
     } finally {
       setSyncing(false);
       setUploadStatus('');
@@ -865,7 +865,7 @@ function HistoryView({
         setError(null);
       } catch (e) {
         console.error("Error loading guest history:", e);
-        setError("Erro ao carregar histÃ³rico local.");
+        setError("Erro ao carregar histórico local.");
       }
       setLoading(false);
       return;
@@ -895,11 +895,11 @@ function HistoryView({
       console.error("Error fetching history:", err);
       // More descriptive message for common firestore errors
       if (err.message.includes('index')) {
-        setError("O banco de dados ainda estÃ¡ sendo configurado. Tente novamente em alguns minutos.");
+        setError("O banco de dados ainda está sendo configurado. Tente novamente em alguns minutos.");
       } else if (err.message.includes('permission')) {
-        setError("Sem permissÃ£o para carregar o histÃ³rico. Tente relogar.");
+        setError("Sem permissà£o para carregar o histórico. Tente relogar.");
       } else {
-        setError("Erro ao carregar histÃ³rico. Verifique sua conexÃ£o.");
+        setError("Erro ao carregar histórico. Verifique sua conexà£o.");
       }
       setLoading(false);
     });
@@ -942,7 +942,7 @@ function HistoryView({
           </button>
         </div>
         <div>
-          <h2 className="text-xl font-display font-black italic text-white leading-none">HISTÃ“RICO</h2>
+          <h2 className="text-xl font-display font-black italic text-white leading-none">HISTà“RICO</h2>
           <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest mt-1">Suas puxadas recentes</p>
         </div>
       </div>
@@ -954,9 +954,9 @@ function HistoryView({
           </div>
           <div className="flex-1">
             <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-tight leading-tight">
-              No plano Free, apenas as <span className="text-yellow-500">2 Ãºltimas puxadas</span> sÃ£o salvas.
+              No plano Free, apenas as <span className="text-yellow-500">2 últimas puxadas</span> sà£o salvas.
             </p>
-            <p className="text-[9px] text-zinc-500 font-medium mt-0.5">Assine o Premium para histÃ³rico ilimitado!</p>
+            <p className="text-[9px] text-zinc-500 font-medium mt-0.5">Assine o Premium para histórico ilimitado!</p>
           </div>
         </div>
       )}
@@ -1008,7 +1008,7 @@ function BottomNav({
     { id: 'search', icon: Search, label: 'Busca', locked: false },
     { id: 'regional-ranking', icon: Trophy, label: 'Ranking', locked: false },
     ...(isAdmin ? [{ id: 'admin-dashboard', icon: LayoutDashboard, label: 'Dash', locked: false }] : []),
-    { id: (activeScreen === 'trip-explorer' ? 'trip-explorer' : (activeScreen === 'curve-radar' ? 'curve-radar' : 'missions')), icon: Target, label: 'MissÃµes', locked: isGuest },
+    { id: (activeScreen === 'trip-explorer' ? 'trip-explorer' : (activeScreen === 'curve-radar' ? 'curve-radar' : 'missions')), icon: Target, label: 'Missões', locked: isGuest },
     { id: 'public-profile', icon: User, label: 'Perfil', locked: isGuest },
   ];
 
@@ -1248,10 +1248,10 @@ function Feed() {
                  </div>
                  <div className="flex-1 min-w-0">
                     <p className="text-[8px] font-black text-brand-primary uppercase tracking-widest mb-0.5 italic">
-                       {act.type === 'new_run' ? 'Novo Resultado' : 'Novo VeÃ­culo na Garagem'}
+                       {act.type === 'new_run' ? 'Novo Resultado' : 'Novo Veículo na Garagem'}
                     </p>
                     <h4 className="text-sm font-black text-white uppercase italic tracking-tighter truncate">
-                       {act.data.vehicleName || 'VeÃ­culo'}
+                       {act.data.vehicleName || 'Veículo'}
                     </h4>
                     <p className="text-[10px] text-zinc-400 font-bold">
                        {act.type === 'new_run' ? `${act.data.target}: ${act.data.time}` : act.data.description}
@@ -1263,7 +1263,7 @@ function Feed() {
         ) : (
           <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 opacity-30">
              <Users className="w-12 h-12 text-zinc-600" />
-             <p className="text-[10px] font-black uppercase tracking-widest max-w-[150px]">O feed estÃ¡ vazio. Siga outros pilotos para ver as atividades!</p>
+             <p className="text-[10px] font-black uppercase tracking-widest max-w-[150px]">O feed está vazio. Siga outros pilotos para ver as atividades!</p>
           </div>
         )}
       </div>
@@ -1418,7 +1418,7 @@ function PublicProfile({
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-zinc-950 p-6 text-center">
         <User className="w-12 h-12 text-zinc-800 mb-4" />
-        <h3 className="text-white font-bold">Perfil nÃ£o encontrado</h3>
+        <h3 className="text-white font-bold">Perfil nà£o encontrado</h3>
         <button onClick={onBack} className="mt-4 text-brand-primary font-bold uppercase text-xs">Voltar</button>
       </div>
     );
@@ -1504,7 +1504,7 @@ function PublicProfile({
           <div className="flex-1 pt-6 space-y-4">
             <div className="flex flex-col">
               <h2 className="text-2xl font-display font-black italic text-white leading-none uppercase tracking-tighter">
-                {profile.displayName || 'Piloto AnÃ´nimo'}
+                {profile.displayName || 'Piloto Anà´nimo'}
               </h2>
               {profile.handle && (
                 <p className="text-[10px] text-brand-primary font-black italic tracking-[0.2em] mt-1.5 uppercase opacity-80">#{profile.handle.toUpperCase()}</p>
@@ -1597,7 +1597,7 @@ function PublicProfile({
             onClick={() => setActiveProfileTab('library')}
             className={`flex-1 py-3 text-[10px] font-black uppercase tracking-widest transition-all rounded-lg flex justify-center items-center gap-1.5 ${activeProfileTab === 'library' ? 'bg-brand-primary text-white shadow-lg' : 'text-zinc-500 hover:text-white'}`}
           >
-            <ImageIcon className="w-4 h-4" /> Ãlbuns
+            <ImageIcon className="w-4 h-4" /> àlbuns
           </button>
         </div>
 
@@ -1608,7 +1608,7 @@ function PublicProfile({
               <Lock className="w-8 h-8 text-zinc-700" />
             </div>
             <div>
-              <h3 className="text-white font-bold">Esta conta Ã© privada</h3>
+              <h3 className="text-white font-bold">Esta conta é privada</h3>
               <p className="text-zinc-500 text-xs mt-1 leading-relaxed">Siga este piloto para ver sua garagem e tempos registrados.</p>
             </div>
           </div>
@@ -1630,7 +1630,7 @@ function PublicProfile({
                     <span className="text-[10px] font-black uppercase tracking-widest">ADICIONAR</span>
                   </button>
                 )}
-                <span className="text-[10px] text-zinc-500 font-bold">{vehicles.length} {vehicles.length === 1 ? 'VeÃ­culo' : 'VeÃ­culos'}</span>
+                <span className="text-[10px] text-zinc-500 font-bold">{vehicles.length} {vehicles.length === 1 ? 'Veículo' : 'Veículos'}</span>
               </div>
               
               <div className="grid grid-cols-1 gap-3">
@@ -1664,7 +1664,7 @@ function PublicProfile({
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
                   <History className="w-4 h-4 text-brand-primary" />
-                  Ãšltimos Tempos
+                  àšltimos Tempos
                 </h3>
               </div>
               
@@ -1833,7 +1833,7 @@ function RegionalRanking({
               <div className="w-12 h-12 bg-zinc-900 rounded-full flex items-center justify-center mx-auto">
                 <Trophy className="w-6 h-6 text-zinc-700" />
               </div>
-              <p className="text-zinc-500 text-xs font-bold uppercase">Nenhum tempo registrado nesta regiÃ£o</p>
+              <p className="text-zinc-500 text-xs font-bold uppercase">Nenhum tempo registrado nesta regià£o</p>
             </div>
           ) : (
             filteredRankings.map((entry, index) => {
@@ -1902,7 +1902,7 @@ function RegionalRanking({
       <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-4 flex items-start gap-3">
         <AlertCircle className="w-5 h-5 text-brand-primary shrink-0 mt-0.5" />
         <p className="text-[10px] text-zinc-400 font-medium leading-relaxed">
-          Apenas puxadas realizadas em <span className="text-white font-bold">plano ou subida</span> sÃ£o vÃ¡lidas para o ranking. Descidas sÃ£o automaticamente invalidadas pelo sistema.
+          Apenas puxadas realizadas em <span className="text-white font-bold">plano ou subida</span> sà£o válidas para o ranking. Descidas sà£o automaticamente invalidadas pelo sistema.
         </p>
       </div>
     </div>
@@ -2021,7 +2021,7 @@ function RegionalRankingElite({
              {loading ? (
                 <div className="flex flex-col items-center justify-center py-20 gap-4">
                    <div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" />
-                   <p className="text-[10px] text-zinc-600 font-black uppercase tracking-[0.4em]">Sincronizando SatÃ©lites</p>
+                   <p className="text-[10px] text-zinc-600 font-black uppercase tracking-[0.4em]">Sincronizando Satélites</p>
                 </div>
              ) : filteredRankings.length === 0 ? (
                <div className="text-center py-20 bg-white/5 rounded-[40px] border border-white/5">
@@ -2077,7 +2077,7 @@ function RegionalRankingElite({
                             </div>
                             <p className="text-[9px] text-zinc-400 font-black tracking-widest uppercase truncate flex items-center gap-2">
                                <Car className="w-3 h-3 opacity-40" />
-                               {entry.vehicleName || 'VeÃ­culo Desconhecido'}
+                               {entry.vehicleName || 'Veículo Desconhecido'}
                             </p>
                          </div>
 
@@ -2108,8 +2108,8 @@ function RegionalRankingElite({
           <div className="p-4 rounded-3xl bg-brand-primary/5 border border-brand-primary/20 flex gap-3">
              <ShieldCheck className="w-5 h-5 text-brand-primary shrink-0" />
              <div>
-                <p className="text-[10px] font-black text-brand-primary uppercase mb-1">Nota de AferiÃ§Ã£o</p>
-                <p className="text-[9px] text-zinc-400 font-bold leading-relaxed italic">Somente puxadas em terreno nivelado ou aclive ascendente sÃ£o homologadas pela liga Elite DragFire.</p>
+                <p className="text-[10px] font-black text-brand-primary uppercase mb-1">Nota de Aferição</p>
+                <p className="text-[9px] text-zinc-400 font-bold leading-relaxed italic">Somente puxadas em terreno nivelado ou aclive ascendente sà£o homologadas pela liga Elite DragFire.</p>
              </div>
           </div>
        </div>
@@ -2248,7 +2248,7 @@ function ProfileSettings({
       const q = query(collection(db, 'users'), where('handle', '==', val));
       const snap = await getDocs(q);
       if (!snap.empty) {
-        setHandleError('Este identificador jÃ¡ estÃ¡ sendo usado por outro piloto.');
+        setHandleError('Este identificador já está sendo usado por outro piloto.');
       } else {
         setHandleError(null);
       }
@@ -2297,7 +2297,7 @@ function ProfileSettings({
             <h3 className="text-xs font-black uppercase tracking-widest">Seja Premium</h3>
           </div>
           <p className="text-[10px] text-zinc-400 font-medium leading-relaxed">
-            Desbloqueie vantagens exclusivas: garagem ilimitada, fotos reais dos veÃ­culos, histÃ³rico completo e grÃ¡ficos de performance!
+            Desbloqueie vantagens exclusivas: garagem ilimitada, fotos reais dos veículos, histórico completo e gráficos de performance!
           </p>
           <button 
             onClick={handleUpgrade}
@@ -2329,14 +2329,14 @@ function ProfileSettings({
             <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} disabled={uploading} />
           </label>
         </div>
-        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Toque na cÃ¢mera para alterar</p>
+        <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">Toque na cà¢mera para alterar</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
 
         {followRequests.length > 0 && (
           <div className="space-y-3">
-            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">SolicitaÃ§Ãµes de Seguidores ({followRequests.length})</label>
+            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Solicitaà§ões de Seguidores ({followRequests.length})</label>
             <div className="space-y-2">
               {followRequests.map(req => (
                 <div key={req.id} className="flex items-center gap-3 p-3 bg-zinc-900 border border-white/5 rounded-xl">
@@ -2417,7 +2417,7 @@ function ProfileSettings({
             </div>
             {isCheckingHandle && <p className="text-[8px] text-zinc-500 animate-pulse px-1">Verificando disponibilidade...</p>}
             {handleError && <p className="text-[8px] text-red-500 px-1">{handleError}</p>}
-            {!handleError && handle && <p className="text-[8px] text-green-500 px-1">Identificador disponÃ­vel!</p>}
+            {!handleError && handle && <p className="text-[8px] text-green-500 px-1">Identificador disponível!</p>}
           </div>
 
           <div className="relative">
@@ -2442,9 +2442,9 @@ function ProfileSettings({
           <div className="space-y-2">
             {[
               { id: 'isPrivate', label: 'Conta Privada', desc: 'Apenas seguidores podem ver seu perfil completo', icon: Lock },
-              { id: 'showHistory', label: 'Mostrar HistÃ³rico', desc: 'Permitir que outros vejam suas puxadas salvas', icon: History },
-              { id: 'showGarage', label: 'Mostrar Garagem', desc: 'Permitir que outros vejam seus veÃ­culos', icon: Car },
-              { id: 'showRankings', label: 'Aparecer no Ranking', desc: 'Permitir que seu tempo apareÃ§a no ranking global', icon: Trophy }
+              { id: 'showHistory', label: 'Mostrar Histórico', desc: 'Permitir que outros vejam suas puxadas salvas', icon: History },
+              { id: 'showGarage', label: 'Mostrar Garagem', desc: 'Permitir que outros vejam seus veículos', icon: Car },
+              { id: 'showRankings', label: 'Aparecer no Ranking', desc: 'Permitir que seu tempo apareà§a no ranking global', icon: Trophy }
             ].map((item) => (
               <div 
                 key={item.id}
@@ -2469,7 +2469,7 @@ function ProfileSettings({
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">E-mail (NÃ£o editÃ¡vel)</label>
+          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">E-mail (Nà£o editável)</label>
           <input 
             type="email"
             value={user?.email || ''}
@@ -2484,7 +2484,7 @@ function ProfileSettings({
             className="w-full py-4 bg-brand-primary hover:bg-red-500 rounded-xl font-display font-black text-lg italic tracking-tight flex items-center justify-center gap-2 shadow-lg shadow-red-600/20 transition-all active:scale-95"
           >
             <Zap className="w-5 h-5" />
-            SALVAR ALTERAÃ‡Ã•ES
+            SALVAR ALTERAà‡à•ES
           </button>
         </div>
       </form>
@@ -2529,13 +2529,13 @@ function SettingsMenu({
         </button>
         <div>
           <h2 className="text-xl font-display font-black italic text-white leading-none">AJUSTES</h2>
-          <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest mt-1">Menu de ConfiguraÃ§Ãµes</p>
+          <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest mt-1">Menu de Configuraà§ões</p>
         </div>
       </div>
 
       {!isGuest && (
         <div className="space-y-4">
-          <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-widest px-1">VeÃ­culo Ativo</h3>
+          <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-widest px-1">Veículo Ativo</h3>
           
           {activeVehicle ? (
             <div className="flex flex-col items-center p-6 bg-zinc-900/50 border border-white/5 rounded-3xl relative overflow-hidden">
@@ -2568,7 +2568,7 @@ function SettingsMenu({
                   onClick={() => onNavigate('vehicle-settings')}
                   className="mt-6 px-6 py-2 bg-zinc-800 hover:bg-zinc-700 border border-white/5 rounded-xl text-[10px] font-black uppercase tracking-widest text-zinc-400 transition-all active:scale-95"
                 >
-                  Editar VeÃ­culo
+                  Editar Veículo
                 </button>
               </div>
             </div>
@@ -2578,13 +2578,13 @@ function SettingsMenu({
               className="w-full p-8 bg-zinc-900/30 border border-dashed border-white/10 rounded-3xl flex flex-col items-center gap-3 text-zinc-500 hover:bg-zinc-900/50 transition-all"
             >
               <Plus className="w-8 h-8" />
-              <span className="text-xs font-bold uppercase tracking-widest">Adicionar VeÃ­culo</span>
+              <span className="text-xs font-bold uppercase tracking-widest">Adicionar Veículo</span>
             </button>
           )}
 
           {vehicles.length > 1 && (
             <div className="space-y-2">
-              <p className="text-[9px] font-black text-zinc-700 uppercase tracking-widest px-1">Trocar VeÃ­culo</p>
+              <p className="text-[9px] font-black text-zinc-700 uppercase tracking-widest px-1">Trocar Veículo</p>
               <div className="grid grid-cols-1 gap-2">
                 {vehicles.filter(v => v.id !== activeVehicle?.id).map((v) => (
                   <button
@@ -2632,7 +2632,7 @@ function SettingsMenu({
             {isGuest ? <Lock className="w-5 h-5 text-zinc-600" /> : <Car className="w-5 h-5 text-brand-secondary" />}
           </div>
           <div className="flex-1 text-left">
-            <h4 className="text-sm font-bold text-white">Meus VeÃ­culos</h4>
+            <h4 className="text-sm font-bold text-white">Meus Veículos</h4>
             <p className="text-[10px] text-zinc-500 uppercase font-bold">Gerenciar garagem</p>
           </div>
           {!isGuest && <ChevronRight className="w-5 h-5 text-zinc-700" />}
@@ -2649,7 +2649,7 @@ function SettingsMenu({
               </div>
               <div>
                 <h4 className="text-sm font-bold text-white">Antena GPS Externa</h4>
-                <p className="text-[10px] text-zinc-500 uppercase font-bold">Usar sensor de alta precisÃ£o</p>
+                <p className="text-[10px] text-zinc-500 uppercase font-bold">Usar sensor de alta precisà£o</p>
               </div>
             </div>
             <button 
@@ -2667,7 +2667,7 @@ function SettingsMenu({
               </div>
               <div>
                 <h4 className="text-sm font-bold text-white">Reiniciar GPS</h4>
-                <p className="text-[10px] text-zinc-500 uppercase font-bold">ForÃ§ar liberaÃ§Ã£o do sensor (Xiaomi/Android)</p>
+                <p className="text-[10px] text-zinc-500 uppercase font-bold">Forà§ar liberação do sensor (Xiaomi/Android)</p>
               </div>
             </div>
             <button 
@@ -2696,7 +2696,7 @@ function SettingsMenu({
         <h3 className="text-[10px] font-black text-zinc-600 uppercase tracking-widest px-1">Aplicativo</h3>
         <div className="bg-zinc-900/50 border border-white/5 rounded-2xl divide-y divide-white/5">
           <div className="p-4 flex items-center justify-between">
-            <span className="text-sm font-bold text-zinc-300">VersÃ£o</span>
+            <span className="text-sm font-bold text-zinc-300">Versà£o</span>
             <span className="text-xs font-mono text-zinc-500">v{APP_VERSION}</span>
           </div>
           <div className="p-4 flex items-center justify-between">
@@ -2729,7 +2729,7 @@ function SettingsMenu({
                     <ShieldCheck className="w-5 h-5 text-yellow-500" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-white">FunÃ§Ã£o Admin</h4>
+                    <h4 className="text-sm font-bold text-white">Função Admin</h4>
                     <p className="text-[10px] text-yellow-500 uppercase font-bold">Painel de Controle</p>
                   </div>
                 </div>
@@ -2749,8 +2749,8 @@ function SettingsMenu({
         <div className="bg-brand-primary/5 border border-brand-primary/20 rounded-2xl p-4 flex items-start gap-3">
           <Info className="w-5 h-5 text-brand-primary shrink-0 mt-0.5" />
           <p className="text-[10px] text-zinc-400 font-medium leading-relaxed">
-            VocÃª estÃ¡ no <span className="text-brand-primary font-bold">Modo Visitante</span>. 
-            Crie uma conta para salvar seus veÃ­culos, fotos e tempos na nuvem.
+            Você está no <span className="text-brand-primary font-bold">Modo Visitante</span>. 
+            Crie uma conta para salvar seus veículos, fotos e tempos na nuvem.
           </p>
         </div>
       )}
@@ -2773,96 +2773,96 @@ function TermsOfUse({ onAccept, onDecline }: { onAccept: () => void, onDecline: 
 
       <div className="glass-panel rounded-2xl p-6 border-white/5 space-y-6 text-zinc-400 text-sm leading-relaxed">
         <div className="space-y-2">
-          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">1. ACEITAÃ‡ÃƒO DOS TERMOS</h3>
-          <p>Ao clicar em â€œACEITO E CONTINUARâ€, vocÃª declara que leu, compreendeu e concorda integralmente com estes Termos de Uso, Responsabilidade e PolÃ­tica de Privacidade. Caso nÃ£o concorde, selecione â€œNÃƒO ACEITOâ€, e o uso do aplicativo serÃ¡ interrompido.</p>
+          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">1. ACEITAà‡àƒO DOS TERMOS</h3>
+          <p>Ao clicar em â€œACEITO E CONTINUARâ€, você declara que leu, compreendeu e concorda integralmente com estes Termos de Uso, Responsabilidade e Política de Privacidade. Caso nà£o concorde, selecione â€œNàƒO ACEITOâ€, e o uso do aplicativo será interrompido.</p>
         </div>
 
         <div className="space-y-2">
           <h3 className="text-white font-black text-[10px] uppercase tracking-widest">2. FINALIDADE DO APLICATIVO</h3>
-          <p>O <span className="text-white font-bold">DRAGFIRE</span> Ã© um aplicativo destinado ao monitoramento de desempenho veicular, incluindo mediÃ§Ãµes como aceleraÃ§Ã£o (0â€“100 km/h, 0â€“200 km/h), tempo, velocidade e outras mÃ©tricas.</p>
-          <p className="text-brand-primary/80 font-medium italic">âš ï¸ O uso Ã© permitido exclusivamente em ambientes privados, controlados e legalmente autorizados, como pistas fechadas, autÃ³dromos ou propriedades particulares.</p>
+          <p>O <span className="text-white font-bold">DRAGFIRE</span> é um aplicativo destinado ao monitoramento de desempenho veicular, incluindo medià§ões como aceleração (0â€“100 km/h, 0â€“200 km/h), tempo, velocidade e outras métricas.</p>
+          <p className="text-brand-primary/80 font-medium italic">âš ï¸ O uso é permitido exclusivamente em ambientes privados, controlados e legalmente autorizados, como pistas fechadas, autódromos ou propriedades particulares.</p>
         </div>
 
         <div className="space-y-2">
           <h3 className="text-brand-primary font-black text-[10px] uppercase tracking-widest">3. USO PROIBIDO</h3>
-          <p>Ã‰ expressamente proibido:</p>
+          <p>à‰ expressamente proibido:</p>
           <ul className="list-disc pl-4 space-y-1">
-            <li>Utilizar o aplicativo em vias pÃºblicas para testes de desempenho;</li>
-            <li>Praticar direÃ§Ã£o perigosa ou ilegal com base nas informaÃ§Ãµes do app;</li>
-            <li>Utilizar o aplicativo de forma que viole leis de trÃ¢nsito ou normas de seguranÃ§a.</li>
+            <li>Utilizar o aplicativo em vias públicas para testes de desempenho;</li>
+            <li>Praticar direção perigosa ou ilegal com base nas informaà§ões do app;</li>
+            <li>Utilizar o aplicativo de forma que viole leis de trà¢nsito ou normas de seguranà§a.</li>
           </ul>
         </div>
 
         <div className="space-y-2">
-          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">4. RESPONSABILIDADE DO USUÃRIO</h3>
-          <p>O usuÃ¡rio declara que:</p>
+          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">4. RESPONSABILIDADE DO USUàRIO</h3>
+          <p>O usuário declara que:</p>
           <ul className="list-disc pl-4 space-y-1">
             <li>Utiliza o aplicativo por sua conta e risco;</li>
-            <li>Cumpre integralmente a legislaÃ§Ã£o vigente;</li>
-            <li>Ã‰ o Ãºnico responsÃ¡vel pela conduÃ§Ã£o do veÃ­culo;</li>
+            <li>Cumpre integralmente a legislação vigente;</li>
+            <li>à‰ o único responsável pela condução do veículo;</li>
             <li>Assume total responsabilidade por quaisquer danos materiais, pessoais ou a terceiros decorrentes do uso.</li>
           </ul>
         </div>
 
         <div className="space-y-2">
-          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">5. ISENÃ‡ÃƒO DE RESPONSABILIDADE</h3>
-          <p>O <span className="text-white font-bold">DRAGFIRE</span> nÃ£o se responsabiliza por:</p>
+          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">5. ISENà‡àƒO DE RESPONSABILIDADE</h3>
+          <p>O <span className="text-white font-bold">DRAGFIRE</span> nà£o se responsabiliza por:</p>
           <ul className="list-disc pl-4 space-y-1">
-            <li>Acidentes, multas, penalidades ou infraÃ§Ãµes;</li>
-            <li>Danos ao veÃ­culo, ao usuÃ¡rio ou terceiros;</li>
+            <li>Acidentes, multas, penalidades ou infraà§ões;</li>
+            <li>Danos ao veículo, ao usuário ou terceiros;</li>
             <li>Uso indevido, ilegal ou imprudente do aplicativo;</li>
-            <li>DecisÃµes tomadas com base nos dados fornecidos.</li>
+            <li>Decisões tomadas com base nos dados fornecidos.</li>
           </ul>
         </div>
 
         <div className="space-y-2">
-          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">6. LIMITAÃ‡ÃƒO DE GARANTIA</h3>
-          <p>O aplicativo Ã© fornecido â€œcomo estÃ¡â€, sem garantias de precisÃ£o absoluta dos dados, funcionamento ininterrupto ou livre de erros.</p>
+          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">6. LIMITAà‡àƒO DE GARANTIA</h3>
+          <p>O aplicativo é fornecido â€œcomo estáâ€, sem garantias de precisà£o absoluta dos dados, funcionamento ininterrupto ou livre de erros.</p>
         </div>
 
         <div className="space-y-2">
           <h3 className="text-white font-black text-[10px] uppercase tracking-widest">7. COLETA DE DADOS (LGPD)</h3>
-          <p>Para funcionamento do aplicativo, poderÃ£o ser coletados dados de localizaÃ§Ã£o (GPS), desempenho do veÃ­culo, dados do dispositivo e informaÃ§Ãµes fornecidas pelo usuÃ¡rio.</p>
+          <p>Para funcionamento do aplicativo, poderà£o ser coletados dados de localização (GPS), desempenho do veículo, dados do dispositivo e informaà§ões fornecidas pelo usuário.</p>
         </div>
 
         <div className="space-y-2">
           <h3 className="text-white font-black text-[10px] uppercase tracking-widest">8. FINALIDADE DO TRATAMENTO DE DADOS</h3>
-          <p>Os dados coletados serÃ£o utilizados para o funcionamento das funcionalidades, geraÃ§Ã£o de mÃ©tricas, melhoria da experiÃªncia e seguranÃ§a.</p>
+          <p>Os dados coletados serà£o utilizados para o funcionamento das funcionalidades, geração de métricas, melhoria da experiência e seguranà§a.</p>
         </div>
 
         <div className="space-y-2">
           <h3 className="text-white font-black text-[10px] uppercase tracking-widest">9. COMPARTILHAMENTO DE DADOS</h3>
-          <p>Os dados nÃ£o serÃ£o vendidos. PoderÃ£o ser compartilhados apenas quando necessÃ¡rio para funcionamento tÃ©cnico ou por obrigaÃ§Ã£o legal.</p>
+          <p>Os dados nà£o serà£o vendidos. Poderà£o ser compartilhados apenas quando necessário para funcionamento técnico ou por obrigação legal.</p>
         </div>
 
         <div className="space-y-2">
-          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">10. ARMAZENAMENTO E SEGURANÃ‡A</h3>
-          <p>Os dados sÃ£o armazenados em ambiente seguro, com medidas tÃ©cnicas adequadas para proteÃ§Ã£o contra acesso nÃ£o autorizado.</p>
+          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">10. ARMAZENAMENTO E SEGURANà‡A</h3>
+          <p>Os dados sà£o armazenados em ambiente seguro, com medidas técnicas adequadas para proteção contra acesso nà£o autorizado.</p>
         </div>
 
         <div className="space-y-2">
-          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">11. DIREITOS DO USUÃRIO (LGPD)</h3>
-          <p>VocÃª pode solicitar acesso, correÃ§Ã£o ou exclusÃ£o dos seus dados atravÃ©s do contato: <span className="text-white font-bold">guisq1515@gmail.com</span></p>
+          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">11. DIREITOS DO USUàRIO (LGPD)</h3>
+          <p>Você pode solicitar acesso, correção ou exclusà£o dos seus dados através do contato: <span className="text-white font-bold">guisq1515@gmail.com</span></p>
         </div>
 
         <div className="space-y-2">
-          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">12. RETENÃ‡ÃƒO DE DADOS</h3>
-          <p>Os dados serÃ£o armazenados apenas pelo tempo necessÃ¡rio para cumprir as finalidades descritas ou conforme exigido por lei.</p>
+          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">12. RETENà‡àƒO DE DADOS</h3>
+          <p>Os dados serà£o armazenados apenas pelo tempo necessário para cumprir as finalidades descritas ou conforme exigido por lei.</p>
         </div>
 
         <div className="space-y-2">
-          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">13. ALTERAÃ‡Ã•ES NOS TERMOS</h3>
-          <p>Estes termos podem ser atualizados a qualquer momento. O uso contÃ­nuo do app apÃ³s alteraÃ§Ãµes implica nova aceitaÃ§Ã£o.</p>
+          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">13. ALTERAà‡à•ES NOS TERMOS</h3>
+          <p>Estes termos podem ser atualizados a qualquer momento. O uso contínuo do app após alteraà§ões implica nova aceitação.</p>
         </div>
 
         <div className="space-y-2">
-          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">14. LEGISLAÃ‡ÃƒO E FORO</h3>
-          <p>Este termo serÃ¡ regido pelas leis da RepÃºblica Federativa do Brasil. Fica eleito o foro da comarca de SÃ£o Paulo/SP para resoluÃ§Ã£o de conflitos.</p>
+          <h3 className="text-white font-black text-[10px] uppercase tracking-widest">14. LEGISLAà‡àƒO E FORO</h3>
+          <p>Este termo será regido pelas leis da República Federativa do Brasil. Fica eleito o foro da comarca de Sà£o Paulo/SP para resolução de conflitos.</p>
         </div>
 
         <div className="space-y-2">
           <h3 className="text-white font-black text-[10px] uppercase tracking-widest">15. CONSENTIMENTO FINAL</h3>
-          <p>Ao clicar em â€œACEITO E CONTINUARâ€, vocÃª declara que leu e concorda com todos os termos, autoriza o tratamento de dados e assume total responsabilidade pelo uso.</p>
+          <p>Ao clicar em â€œACEITO E CONTINUARâ€, você declara que leu e concorda com todos os termos, autoriza o tratamento de dados e assume total responsabilidade pelo uso.</p>
         </div>
       </div>
 
@@ -2878,7 +2878,7 @@ function TermsOfUse({ onAccept, onDecline }: { onAccept: () => void, onDecline: 
           onClick={onDecline}
           className="w-full py-3 bg-zinc-900 text-zinc-500 rounded-xl font-bold text-sm hover:text-white transition-all active:scale-95 border border-white/5"
         >
-          NÃƒO ACEITO
+          NàƒO ACEITO
         </button>
       </div>
     </div>
@@ -2955,7 +2955,7 @@ function VehicleSettings({
     setUploadProgress(1);
     
     try {
-      if (!auth.currentUser) throw new Error('UsuÃ¡rio nÃ£o autenticado.');
+      if (!auth.currentUser) throw new Error('Usuário nà£o autenticado.');
       
       await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'UPLOAD_MAIN_START', details: { vehicleId: formData.id } });
       
@@ -2970,7 +2970,7 @@ function VehicleSettings({
         height: 800
       });
 
-      if (!photo.dataUrl) throw new Error('CÃ¢mera nÃ£o retornou os dados da imagem.');
+      if (!photo.dataUrl) throw new Error('Cà¢mera nà£o retornou os dados da imagem.');
       await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'PHOTO_DATA_RECEIVED', details: { format: photo.format, size_est: photo.dataUrl.length } });
       
       setUploadStatus('[S2] Preparando Foto...');
@@ -2979,7 +2979,7 @@ function VehicleSettings({
       const storageRef = ref(storage, path);
       
       setUploadProgress(15);
-      setUploadStatus('[S3] Convertendo BinÃ¡rio...');
+      setUploadStatus('[S3] Convertendo Binário...');
       
       // Manual Base64 to Blob conversion (more stable on some Androids than fetch)
       const base64Data = photo.dataUrl.split(',')[1];
@@ -2992,7 +2992,7 @@ function VehicleSettings({
       const blob = new Blob([byteArray], { type: 'image/jpeg' });
       
       setUploadProgress(30);
-      setUploadStatus('[S4] Iniciando TransferÃªncia...');
+      setUploadStatus('[S4] Iniciando Transferência...');
       await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'STORAGE_UPLOAD_START_RESUMABLE', details: { path, size: blob.size } });
       
       const uploadTask = uploadBytesResumable(storageRef, blob, { contentType: 'image/jpeg' });
@@ -3001,7 +3001,7 @@ function VehicleSettings({
         // Safety timeout: 120 seconds
         const timeout = setTimeout(() => {
           uploadTask.cancel();
-          const err = new Error('Tempo limite excedido (120s). Verifique sua conexÃ£o.');
+          const err = new Error('Tempo limite excedido (120s). Verifique sua conexà£o.');
           logRemote({ uid: auth.currentUser!.uid, level: 'error', message: 'UPLOAD_TIMEOUT', details: { size: blob.size } });
           reject(err);
         }, 120000);
@@ -3089,10 +3089,10 @@ function VehicleSettings({
           height: 800
         });
         
-        if (!photo.dataUrl) throw new Error('CÃ¢mera nÃ£o retornou os dados da imagem.');
+        if (!photo.dataUrl) throw new Error('Cà¢mera nà£o retornou os dados da imagem.');
         await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'EXTRA_PHOTO_DATA_RECEIVED', details: { format: photo.format } });
         
-        setUploadStatus('[S2] Preparando BinÃ¡rio...');
+        setUploadStatus('[S2] Preparando Binário...');
         setUploadProgress(20);
         
         // Convert to blob for robust upload
@@ -3254,7 +3254,7 @@ function VehicleSettings({
       // Ensure at least a nickname or brand/model is provided for better display
       const finalData = {
         ...formData,
-        nickname: formData.nickname?.trim() || (formData.brand ? `${formData.brand} ${formData.model}` : 'Meu VeÃ­culo')
+        nickname: formData.nickname?.trim() || (formData.brand ? `${formData.brand} ${formData.model}` : 'Meu Veículo')
       };
 
       console.log('Submitting vehicle data:', finalData);
@@ -3311,7 +3311,7 @@ function VehicleSettings({
             <ChevronLeft className="w-5 h-5" />
           </button>
           <div>
-            <h2 className="text-xl font-display font-black italic text-white leading-none">MEUS VEÃCULOS</h2>
+            <h2 className="text-xl font-display font-black italic text-white leading-none">MEUS VEàCULOS</h2>
             <p className="text-xs text-brand-primary font-bold uppercase tracking-widest mt-1">Garagem Virtual</p>
           </div>
         </div>
@@ -3373,12 +3373,12 @@ function VehicleSettings({
               className="w-full py-4 border-2 border-dashed border-white/5 rounded-2xl flex items-center justify-center gap-2 text-zinc-500 hover:text-white hover:border-white/10 transition-all"
             >
               <Plus className="w-5 h-5" />
-              <span className="text-sm font-bold uppercase tracking-widest">Adicionar Novo VeÃ­culo</span>
+              <span className="text-sm font-bold uppercase tracking-widest">Adicionar Novo Veículo</span>
             </button>
           ) : (
             <div className="p-8 bg-yellow-500/5 border border-dashed border-yellow-500/20 rounded-2xl flex flex-col items-center gap-2 text-yellow-500/40 text-center">
               <Lock className="w-6 h-6" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Limite de 1 veÃ­culo atingido</span>
+              <span className="text-[10px] font-black uppercase tracking-widest">Limite de 1 veículo atingido</span>
               <p className="text-[9px] font-bold uppercase tracking-tighter">Assine o Premium para garagem ilimitada</p>
             </div>
           )}
@@ -3395,9 +3395,9 @@ function VehicleSettings({
         </button>
         <div>
           <h2 className="text-xl font-display font-black italic text-white leading-none">
-            {editingVehicle.id ? 'EDITAR VEÃCULO' : 'NOVO VEÃCULO'}
+            {editingVehicle.id ? 'EDITAR VEàCULO' : 'NOVO VEàCULO'}
           </h2>
-          <p className="text-xs text-brand-primary font-bold uppercase tracking-widest mt-1">ConfiguraÃ§Ãµes</p>
+          <p className="text-xs text-brand-primary font-bold uppercase tracking-widest mt-1">Configuraà§ões</p>
         </div>
       </div>
 
@@ -3406,13 +3406,13 @@ function VehicleSettings({
           onClick={() => setActiveTab('basics')}
           className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === 'basics' ? 'bg-brand-primary text-white shadow-lg shadow-red-600/20' : 'text-zinc-500 hover:text-white'}`}
         >
-          InformaÃ§Ãµes BÃ¡sicas
+          Informaà§ões Básicas
         </button>
         <button
           onClick={() => setActiveTab('technical')}
           className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${activeTab === 'technical' ? 'bg-brand-primary text-white shadow-lg shadow-red-600/20' : 'text-zinc-500 hover:text-white'}`}
         >
-          InformaÃ§Ãµes TÃ©cnicas
+          Informaà§ões Técnicas
         </button>
       </div>
 
@@ -3424,7 +3424,7 @@ function VehicleSettings({
             <div 
               onClick={() => {
                 if (!isPremium) {
-                  alert("A funÃ§Ã£o de adicionar fotos reais do veÃ­culo estÃ¡ disponÃ­vel apenas para usuÃ¡rios Premium. Assine agora para personalizar sua garagem!");
+                  alert("A função de adicionar fotos reais do veículo está disponível apenas para usuários Premium. Assine agora para personalizar sua garagem!");
                 } else {
                   if (Capacitor.isNativePlatform()) {
                     handlePhotoUpload(null);
@@ -3467,16 +3467,16 @@ function VehicleSettings({
           {!isPremium && (
             <div className="flex items-center gap-1.5 text-yellow-500/50">
               <Lock className="w-3 h-3" />
-              <p className="text-[9px] font-bold uppercase tracking-widest">Foto real disponÃ­vel apenas no Premium</p>
+              <p className="text-[9px] font-bold uppercase tracking-widest">Foto real disponível apenas no Premium</p>
             </div>
           )}
           <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">
-            {isPremium ? 'Toque no + para alterar' : 'Foto padrÃ£o do veÃ­culo'}
+            {isPremium ? 'Toque no + para alterar' : 'Foto padrà£o do veículo'}
           </p>
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Tipo de VeÃ­culo</label>
+          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Tipo de Veículo</label>
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
@@ -3512,7 +3512,7 @@ function VehicleSettings({
         <div className="space-y-4 pt-2">
           <div className="flex items-center gap-2 mb-2">
              <div className="w-1 h-3 bg-brand-primary rounded-full transition-all" />
-             <h4 className="text-[10px] font-black text-white/50 uppercase tracking-widest">Estilo do CatÃ¡logo</h4>
+             <h4 className="text-[10px] font-black text-white/50 uppercase tracking-widest">Estilo do Catálogo</h4>
           </div>
           <div className="grid grid-cols-2 gap-3">
              <button 
@@ -3548,14 +3548,14 @@ function VehicleSettings({
                     <Zap className="w-5 h-5 text-brand-primary" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-black text-white uppercase italic tracking-tighter">Performance de FÃ¡brica</h4>
+                    <h4 className="text-sm font-black text-white uppercase italic tracking-tighter">Performance de Fábrica</h4>
                     <p className="text-[10px] text-zinc-500 font-bold uppercase">Configure o potencial do seu motor</p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest px-1">PotÃªncia (CV)</label>
+                    <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest px-1">Potência (CV)</label>
                     <input 
                       type="number"
                       value={formData.hp || ''}
@@ -3565,7 +3565,7 @@ function VehicleSettings({
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest px-1">Velo. MÃ¡x (kM/h)</label>
+                    <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest px-1">Velo. Máx (kM/h)</label>
                     <input 
                       type="number"
                       value={formData.maxSpeed || ''}
@@ -3577,7 +3577,7 @@ function VehicleSettings({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest px-1">NÃ­vel de PreparaÃ§Ã£o (STAGE)</label>
+                  <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest px-1">Nível de Preparação (STAGE)</label>
                   <div className="grid grid-cols-3 gap-2">
                     {STAGES_LIST.map((stage) => (
                       <button
@@ -3593,7 +3593,7 @@ function VehicleSettings({
                 </div>
 
                 <div className="space-y-1.5">
-                   <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest px-1">ModificaÃ§Ãµes / Setup</label>
+                   <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest px-1">Modificaà§ões / Setup</label>
                    <textarea 
                     value={formData.mods || ''}
                     onChange={e => setFormData({...formData, mods: e.target.value})}
@@ -3603,11 +3603,11 @@ function VehicleSettings({
                 </div>
 
                 <div className="space-y-1.5">
-                   <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest px-1">ObservaÃ§Ãµes Adicionais</label>
+                   <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest px-1">Observaà§ões Adicionais</label>
                    <textarea 
                     value={formData.observations || ''}
                     onChange={e => setFormData({...formData, observations: e.target.value})}
-                    placeholder="Detalhes Ãºnicos que vocÃª queira registrar..."
+                    placeholder="Detalhes únicos que você queira registrar..."
                     className="w-full bg-zinc-950 border border-white/5 rounded-xl p-4 text-[10px] text-white placeholder:text-zinc-800 focus:outline-none focus:border-brand-primary/50 transition-colors min-h-[80px] resize-none"
                    />
                 </div>
@@ -3616,7 +3616,7 @@ function VehicleSettings({
         )}
 
         <div className="space-y-1.5">
-          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Fotos Extras (Premium - MÃ¡x 3)</label>
+          <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Fotos Extras (Premium - Máx 3)</label>
           <div className="grid grid-cols-3 gap-2">
             {formData.photoURLs?.map((url, idx) => (
               <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-white/5">
@@ -3697,7 +3697,7 @@ function VehicleSettings({
 
           <div className="space-y-1.5">
               <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">
-                {formData.type === 'car' ? 'VersÃ£o / MotorizaÃ§Ã£o / CÃ¢mbio' : 'VersÃ£o / Setup (Opcional)'}
+                {formData.type === 'car' ? 'Versà£o / Motorização / Cà¢mbio' : 'Versà£o / Setup (Opcional)'}
               </label>
               <div className="relative group">
                 <select 
@@ -3706,14 +3706,14 @@ function VehicleSettings({
                   className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 text-white focus:outline-none focus:border-brand-primary/50 transition-colors"
                   disabled={!formData.model}
                 >
-                  <option value="">Selecione a VersÃ£o</option>
+                  <option value="">Selecione a Versà£o</option>
                   {specs.map(s => <option key={s} value={s}>{s}</option>)}
                   <option value="Custom">Outra / Customizada</option>
                 </select>
                 {(!specs.includes(formData.engine) && formData.engine !== '') && (
                   <input 
                     type="text"
-                    placeholder={formData.type === 'car' ? "Ex: 2.0 Turbo Manual 180cv" : "Ex: EdiÃ§Ã£o Especial / Remap"}
+                    placeholder={formData.type === 'car' ? "Ex: 2.0 Turbo Manual 180cv" : "Ex: Edição Especial / Remap"}
                     value={formData.engine === ' ' ? '' : formData.engine}
                     onChange={e => setFormData({ ...formData, engine: e.target.value || ' ' })}
                     className="w-full bg-zinc-900 border border-white/5 rounded-xl p-4 mt-2 text-white focus:border-brand-primary/50"
@@ -3741,7 +3741,7 @@ function VehicleSettings({
                  className={`w-full h-[54px] rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 ${(!(formData.type === 'motorcycle' ? formData.model : formData.engine) || !isPremium) ? 'bg-zinc-900 text-zinc-700 border border-white/5' : 'bg-brand-secondary/20 text-brand-secondary border border-brand-secondary/30 hover:bg-brand-secondary/30'}`}
                >
                  {isFetchingAI ? <div className="w-4 h-4 border-2 border-brand-secondary border-t-transparent rounded-full animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                 MÃ¡gica IA
+                 Mágica IA
                </button>
             </div>
           </div>
@@ -3755,7 +3755,7 @@ function VehicleSettings({
               placeholder="Ex: 1450"
               className="w-full bg-zinc-900 border border-brand-primary/20 rounded-xl p-4 text-white placeholder:text-zinc-800 focus:outline-none focus:border-brand-primary/50 transition-colors"
             />
-            <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter px-1">{formData.type === 'car' ? 'Carro + Piloto + CombustÃ­vel' : 'Moto + Piloto + Equipamento'}</p>
+            <p className="text-[8px] text-zinc-600 font-bold uppercase tracking-tighter px-1">{formData.type === 'car' ? 'Carro + Piloto + Combustível' : 'Moto + Piloto + Equipamento'}</p>
           </div>
         </div>
 
@@ -3777,7 +3777,7 @@ function VehicleSettings({
             ) : (
               <>
                 <Zap className="w-5 h-5" />
-                SALVAR VEÃCULO
+                SALVAR VEàCULO
               </>
             )}
           </button>
@@ -3803,7 +3803,7 @@ function DuelComparison({ challenge }: { challenge: Challenge }) {
   const chartData = challenge.result.path.map((p, i) => ({
     time: i,
     [challenge.creatorName]: p.speed * 3.6,
-    VocÃª: challenge.opponentResult?.path[i]?.speed * 3.6 || 0
+    Você: challenge.opponentResult?.path[i]?.speed * 3.6 || 0
   }));
 
   const creatorChartData = challenge.result.path.map((p, i) => ({
@@ -3828,7 +3828,7 @@ function DuelComparison({ challenge }: { challenge: Challenge }) {
         </motion.div>
         <div className="space-y-1">
           <h2 className="text-3xl font-display font-black italic text-white uppercase tracking-tighter">
-            {isWinner ? 'VITÃ“RIA!' : 'DERROTA'}
+            {isWinner ? 'VITà“RIA!' : 'DERROTA'}
           </h2>
           <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em]">Duelo de Performance</p>
         </div>
@@ -3856,7 +3856,7 @@ function DuelComparison({ challenge }: { challenge: Challenge }) {
           </div>
           <div className="mt-4 pt-4 border-t border-white/5 flex justify-between items-end">
             <div className="space-y-0.5">
-              <span className="text-[8px] font-bold text-zinc-600 uppercase">Velo. MÃ¡x</span>
+              <span className="text-[8px] font-bold text-zinc-600 uppercase">Velo. Máx</span>
               <p className="text-sm font-display font-bold text-zinc-300">{Math.round(challenge.result.maxSpeed)} <span className="text-[10px]">km/h</span></p>
             </div>
           </div>
@@ -3873,7 +3873,7 @@ function DuelComparison({ challenge }: { challenge: Challenge }) {
             <div className="w-6 h-6 rounded-full bg-brand-accent/20 flex items-center justify-center">
               <User className="w-3 h-3 text-brand-accent" />
             </div>
-            <span className="text-[10px] font-black text-brand-accent uppercase tracking-widest">VOCÃŠ</span>
+            <span className="text-[10px] font-black text-brand-accent uppercase tracking-widest">VOCàŠ</span>
           </div>
           <div className="space-y-1">
             <span className="text-[9px] font-bold text-zinc-600 uppercase tracking-tighter">Tempo Final</span>
@@ -3883,7 +3883,7 @@ function DuelComparison({ challenge }: { challenge: Challenge }) {
           </div>
           <div className="mt-4 pt-4 border-t border-white/5 flex justify-between items-end">
             <div className="space-y-0.5">
-              <span className="text-[8px] font-bold text-zinc-600 uppercase">Velo. MÃ¡x</span>
+              <span className="text-[8px] font-bold text-zinc-600 uppercase">Velo. Máx</span>
               <p className="text-sm font-display font-bold text-zinc-300">{Math.round(challenge.opponentResult.maxSpeed)} <span className="text-[10px]">km/h</span></p>
             </div>
           </div>
@@ -3899,7 +3899,7 @@ function DuelComparison({ challenge }: { challenge: Challenge }) {
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] px-1">AnÃ¡lise Lado a Lado</h3>
+        <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] px-1">Análise Lado a Lado</h3>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <div className="h-[120px] bg-zinc-900/50 rounded-2xl p-3 border border-white/5">
@@ -3911,7 +3911,7 @@ function DuelComparison({ challenge }: { challenge: Challenge }) {
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-            <p className="text-[8px] font-black text-center text-zinc-600 uppercase tracking-widest">AceleraÃ§Ã£o {challenge.creatorName}</p>
+            <p className="text-[8px] font-black text-center text-zinc-600 uppercase tracking-widest">Aceleração {challenge.creatorName}</p>
           </div>
           <div className="space-y-2">
             <div className="h-[120px] bg-zinc-900/50 rounded-2xl p-3 border border-white/5">
@@ -3923,7 +3923,7 @@ function DuelComparison({ challenge }: { challenge: Challenge }) {
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-            <p className="text-[8px] font-black text-center text-brand-accent uppercase tracking-widest">Sua AceleraÃ§Ã£o</p>
+            <p className="text-[8px] font-black text-center text-brand-accent uppercase tracking-widest">Sua Aceleração</p>
           </div>
         </div>
       </div>
@@ -4015,9 +4015,9 @@ function ChallengeView({
           <div className="flex items-center gap-2 text-zinc-500 text-[10px] font-medium bg-zinc-900/50 p-3 rounded-xl border border-white/5">
             <Navigation className="w-4 h-4 text-brand-accent" />
             {distanceToStart !== null ? (
-              <span>VocÃª estÃ¡ a <strong className="text-white">{Math.round(distanceToStart)}m</strong> do ponto de largada.</span>
+              <span>Você está a <strong className="text-white">{Math.round(distanceToStart)}m</strong> do ponto de largada.</span>
             ) : (
-              <span>Aguardando sinal de GPS para verificar sua posiÃ§Ã£o...</span>
+              <span>Aguardando sinal de GPS para verificar sua posição...</span>
             )}
           </div>
           <button 
@@ -4048,7 +4048,7 @@ function ChallengeView({
         </button>
         {!isNearStart && (
           <p className="text-[9px] text-center text-zinc-500 font-bold uppercase">
-            VÃ¡ atÃ© o local da largada para aceitar o duelo
+            Vá até o local da largada para aceitar o duelo
           </p>
         )}
         <button 
@@ -4108,12 +4108,12 @@ function RunMap({ result }: { result: RunResult }) {
 
 const PRESETS = [
   { id: '201m', label: '201m', mode: 'distance' as const, target: 201, startSpeed: 0, description: '1/8 de milha (Arrancada)', icon: Flag, color: 'from-blue-500 to-cyan-500', type: 'standing' },
-  { id: '0-100', label: '0-100 km/h', mode: 'speed' as const, target: 100, startSpeed: 0, description: 'Teste clÃ¡ssico de aceleraÃ§Ã£o', icon: Zap, color: 'from-red-500 to-orange-500', type: 'standing' },
+  { id: '0-100', label: '0-100 km/h', mode: 'speed' as const, target: 100, startSpeed: 0, description: 'Teste clássico de aceleração', icon: Zap, color: 'from-red-500 to-orange-500', type: 'standing' },
   { id: '0-200', label: '0-200 km/h', mode: 'speed' as const, target: 200, startSpeed: 0, description: 'Performance em alta velocidade', icon: Gauge, color: 'from-orange-500 to-yellow-500', type: 'standing' },
   { id: '100-200', label: '100-200 km/h', mode: 'speed' as const, target: 200, startSpeed: 100, description: 'Retomada em movimento', icon: Timer, color: 'from-yellow-500 to-green-500', type: 'rolling' },
-  { id: '402m', label: '402m', mode: 'distance' as const, target: 402, startSpeed: 0, description: '1/4 de milha (PadrÃ£o)', icon: Trophy, color: 'from-purple-500 to-pink-500', type: 'standing' },
-  { id: 'free', label: 'Modo Livre', mode: 'free' as const, target: 0, startSpeed: 0, description: 'Ajuste mecÃ¢nico e telemetria', icon: ActivityIcon, color: 'from-zinc-700 to-zinc-600', type: 'manual' },
-  { id: 'custom', label: 'Personalizada', mode: 'custom' as const, target: 0, startSpeed: 0, description: 'Crie seu prÃ³prio teste', icon: SettingsIcon, color: 'from-brand-primary to-brand-secondary', type: 'custom' }
+  { id: '402m', label: '402m', mode: 'distance' as const, target: 402, startSpeed: 0, description: '1/4 de milha (Padrà£o)', icon: Trophy, color: 'from-purple-500 to-pink-500', type: 'standing' },
+  { id: 'free', label: 'Modo Livre', mode: 'free' as const, target: 0, startSpeed: 0, description: 'Ajuste mecà¢nico e telemetria', icon: ActivityIcon, color: 'from-zinc-700 to-zinc-600', type: 'manual' },
+  { id: 'custom', label: 'Personalizada', mode: 'custom' as const, target: 0, startSpeed: 0, description: 'Crie seu próprio teste', icon: SettingsIcon, color: 'from-brand-primary to-brand-secondary', type: 'custom' }
 ];
 
 // --- Components ---
@@ -4208,7 +4208,7 @@ function CustomSetup({ onBack, onStart, config, setConfig }: {
                   : 'bg-zinc-900 border-white/5 text-zinc-500 hover:border-white/10'
               }`}
             >
-              AceleraÃ§Ã£o
+              Aceleração
             </button>
             <button
               onClick={() => setConfig({ ...config, type: 'distance' })}
@@ -4248,7 +4248,7 @@ function CustomSetup({ onBack, onStart, config, setConfig }: {
           </div>
         ) : (
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">DistÃ¢ncia (metros)</label>
+            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest px-1">Distà¢ncia (metros)</label>
             <input
               type="number"
               value={config.target}
@@ -4387,7 +4387,7 @@ function TimerClassic(props: TimerProps) {
             <div className="space-y-1">
               <p className="text-white text-[10px] font-black uppercase tracking-widest">Dica de Sinal</p>
               <p className="text-zinc-400 text-[10px] leading-relaxed">
-                Para resultados precisos, evite ficar sob Ã¡rvores ou coberturas metÃ¡licas. Procure um local com cÃ©u aberto.
+                Para resultados precisos, evite ficar sob árvores ou coberturas metálicas. Procure um local com céu aberto.
               </p>
             </div>
           </motion.div>
@@ -4421,9 +4421,9 @@ function TimerClassic(props: TimerProps) {
                     })()}
                   </div>
                   <div className="text-left pr-2">
-                    <p className="text-[7px] font-black text-brand-primary uppercase tracking-widest leading-none mb-0.5">VeÃ­culo</p>
+                    <p className="text-[7px] font-black text-brand-primary uppercase tracking-widest leading-none mb-0.5">Veículo</p>
                     <p className="text-[9px] font-black text-white uppercase italic tracking-tighter truncate max-w-[80px]">
-                      {vehicles.find(v => v.id === runVehicleId)?.nickname || 'AnÃ´nimo'}
+                      {vehicles.find(v => v.id === runVehicleId)?.nickname || 'Anà´nimo'}
                     </p>
                   </div>
                   <ChevronDown className={`w-3 h-3 text-zinc-600 transition-transform ${isQuickSwitchOpen ? 'rotate-180' : ''}`} />
@@ -4453,7 +4453,7 @@ function TimerClassic(props: TimerProps) {
                 <span className="text-white text-lg font-bold leading-none">{elapsedTime.toFixed(2)}s</span>
               </div>
               <div className="text-center">
-                <span className="block text-zinc-600 text-[9px] uppercase font-bold mb-0.5">DistÃ¢ncia</span>
+                <span className="block text-zinc-600 text-[9px] uppercase font-bold mb-0.5">Distà¢ncia</span>
                 <span className="text-white text-lg font-bold leading-none">
                   {distance > 1000 ? `${(distance / 1000).toFixed(2)}k` : `${Math.round(distance)}m`}
                 </span>
@@ -4475,7 +4475,7 @@ function TimerClassic(props: TimerProps) {
         {(isRunning || isWaiting) && activeConfig?.mode !== 'free' && (
           <div className="max-w-[320px] mx-auto w-full space-y-2 mt-8">
             <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-zinc-400">
-              <span>{activeConfig?.mode === 'speed' ? `AlcanÃ§ando ${activeConfig.target} km/h` : `Percorrendo ${activeConfig?.target}m`}</span>
+              <span>{activeConfig?.mode === 'speed' ? `Alcanà§ando ${activeConfig.target} km/h` : `Percorrendo ${activeConfig?.target}m`}</span>
               <span className="text-brand-accent">{Math.round(progress)}%</span>
             </div>
             <div className="h-3 bg-zinc-900 rounded-full overflow-hidden border border-white/10 p-0.5">
@@ -4512,8 +4512,8 @@ function TimerClassic(props: TimerProps) {
                     : activeConfig?.mode === 'trip'
                       ? 'MODO VIAGEM - PRONTO'
                       : activeConfig?.id === '100-200' 
-                        ? (isReady ? 'PRONTO PARA ACELERAR' : 'ACELERE ATÃ‰ 100KM/H')
-                        : (isReady ? 'SINAL VERDE: ARRANQUE!' : 'PARE O VEÃCULO')}
+                        ? (isReady ? 'PRONTO PARA ACELERAR' : 'ACELERE ATà‰ 100KM/H')
+                        : (isReady ? 'SINAL VERDE: ARRANQUE!' : 'PARE O VEàCULO')}
                 </h3>
                 <p className="text-zinc-500 text-[10px] font-medium mb-4">
                   {activeConfig?.mode === 'free'
@@ -4522,7 +4522,7 @@ function TimerClassic(props: TimerProps) {
                       ? 'Inicie a viagem para monitorar sua performance.'
                       : activeConfig?.id === '100-200' 
                         ? `Aguardando atingir ${activeConfig.startSpeed} km/h...` 
-                        : (isReady ? 'O cronÃ´metro iniciarÃ¡ ao detectar movimento.' : 'O teste sÃ³ comeÃ§a com o carro totalmente parado.')}
+                        : (isReady ? 'O cronà´metro iniciará ao detectar movimento.' : 'O teste só comeà§a com o carro totalmente parado.')}
                 </p>
 
                 {(activeConfig?.mode === 'free' || activeConfig?.mode === 'trip') && (
@@ -4572,7 +4572,7 @@ function TimerClassic(props: TimerProps) {
                     <p className="text-[8px] font-mono text-brand-accent/60 font-bold uppercase tracking-widest">{lastResult.runSerial || 'DF-A1B2'}</p>
                   </div>
                   <div className="text-right">
-                    <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">PontuaÃ§Ã£o</span>
+                    <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Pontuação</span>
                     <span className="text-2xl font-display font-black text-white italic">{lastResult.performanceScore || 0} <span className="text-[10px] text-zinc-600">PTS</span></span>
                   </div>
                 </div>
@@ -4587,7 +4587,7 @@ function TimerClassic(props: TimerProps) {
                       })()}
                     </div>
                     <div>
-                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest leading-none mb-1">VeÃ­culo Utilizado</p>
+                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest leading-none mb-1">Veículo Utilizado</p>
                       <p className="text-sm font-bold text-white leading-none">
                         {vehicles.find(v => v.id === runVehicleId)?.nickname} 
                         <span className="text-zinc-500 font-medium text-[10px] uppercase ml-1">
@@ -4604,7 +4604,7 @@ function TimerClassic(props: TimerProps) {
                     <p className="text-4xl font-display font-black text-white italic leading-none">{lastResult.time.toFixed(2)}s</p>
                   </div>
                   <div className="space-y-0.5">
-                    <span className="text-zinc-500 text-[9px] uppercase font-bold">Velo. MÃ¡xima</span>
+                    <span className="text-zinc-500 text-[9px] uppercase font-bold">Velo. Máxima</span>
                     <p className="text-4xl font-display font-black text-white italic leading-none">{Math.round(lastResult.maxSpeed)} <span className="text-xs">km/h</span></p>
                   </div>
                 </div>
@@ -4618,11 +4618,11 @@ function TimerClassic(props: TimerProps) {
                       {lastResult.config.mode === 'free' ? (
                         <>
                           <div className="flex justify-between items-center">
-                            <span className="text-[10px] font-bold text-zinc-400 uppercase">DistÃ¢ncia Total</span>
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase">Distà¢ncia Total</span>
                             <span className="text-sm font-display font-black text-white italic">{Math.round(lastResult.distance)}m</span>
                           </div>
                           <div className="flex justify-between items-center">
-                            <span className="text-[10px] font-bold text-zinc-400 uppercase">Velo. MÃ©dia</span>
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase">Velo. Média</span>
                             <span className="text-sm font-display font-black text-white italic">{Math.round(lastResult.avgSpeed)} km/h</span>
                           </div>
                         </>
@@ -4654,7 +4654,7 @@ function TimerClassic(props: TimerProps) {
                   
                   <div className="bg-zinc-900/50 p-4 rounded-2xl border border-white/5 space-y-4">
                     <div className="space-y-1">
-                      <span className="text-zinc-500 text-[9px] uppercase font-bold block">InclinaÃ§Ã£o (Slope)</span>
+                      <span className="text-zinc-500 text-[9px] uppercase font-bold block">Inclinação (Slope)</span>
                       <div className="flex items-center gap-2">
                         <p className={`text-xl font-display font-black italic leading-none ${lastResult.isValidSlope ? 'text-white' : 'text-red-500'}`}>
                           {lastResult.slope?.toFixed(1)}%
@@ -4715,8 +4715,8 @@ function TimerClassic(props: TimerProps) {
                   <div className="w-10 h-10 bg-brand-primary/10 rounded-full flex items-center justify-center mb-2">
                     <Info className="w-5 h-5 text-brand-primary" />
                   </div>
-                  <h4 className="font-bold text-zinc-400 uppercase text-[10px] tracking-widest mb-1">AtenÃ§Ã£o</h4>
-                  <p className="text-zinc-500 text-[10px] font-medium">O teste de arrancada sÃ³ inicia com o veÃ­culo parado.</p>
+                  <h4 className="font-bold text-zinc-400 uppercase text-[10px] tracking-widest mb-1">Atenção</h4>
+                  <p className="text-zinc-500 text-[10px] font-medium">O teste de arrancada só inicia com o veículo parado.</p>
                 </div>
 
                 {activeConfig?.type === 'standing' && (
@@ -4764,7 +4764,7 @@ function TimerClassic(props: TimerProps) {
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-xl font-display font-black italic text-white uppercase tracking-tight">Vincular VeÃ­culo</h3>
+                  <h3 className="text-xl font-display font-black italic text-white uppercase tracking-tight">Vincular Veículo</h3>
                 </div>
                 <button onClick={() => setIsQuickSwitchOpen(false)} className="p-2 bg-white/5 rounded-xl text-zinc-400">
                   <ChevronDown className="w-5 h-5" />
@@ -4777,7 +4777,7 @@ function TimerClassic(props: TimerProps) {
                     <span className="text-[7px] text-zinc-700 font-black uppercase tracking-widest">Modo Fantasma</span>
                   </div>
                   <div className="text-center px-1">
-                    <p className="text-[10px] font-black text-white uppercase italic">AnÃ´nimo</p>
+                    <p className="text-[10px] font-black text-white uppercase italic">Anà´nimo</p>
                   </div>
                 </button>
                 {vehicles.map(v => (
@@ -4998,7 +4998,7 @@ function TimerElite(props: TimerProps) {
                                   {isReady ? 'SINAL VERDE: ARRANQUE!' : 'AGUARDANDO PARADA...'}
                                </h4>
                                <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-[0.2em] mt-0.5">
-                                  {isReady ? 'O cronÃ´metro iniciarÃ¡ ao detectar movimento' : 'O teste comeÃ§a com o carro parado'}
+                                  {isReady ? 'O cronà´metro iniciará ao detectar movimento' : 'O teste comeà§a com o carro parado'}
                                 </p>
                             </div>
                           </motion.div>
@@ -5009,8 +5009,8 @@ function TimerElite(props: TimerProps) {
                             className="flex flex-col items-center gap-4"
                           >
                             <div className="text-center">
-                               <h3 className="text-2xl font-display font-black text-white italic uppercase tracking-tighter leading-none">VAMOS COMEÃ‡AR?</h3>
-                               <p className="text-[9px] text-zinc-600 font-bold uppercase tracking-[0.3em] mt-1.5">Verifique o sinal de satÃ©lite acima</p>
+                               <h3 className="text-2xl font-display font-black text-white italic uppercase tracking-tighter leading-none">VAMOS COMEà‡AR?</h3>
+                               <p className="text-[9px] text-zinc-600 font-bold uppercase tracking-[0.3em] mt-1.5">Verifique o sinal de satélite acima</p>
                             </div>
                             
                             {activeConfig?.type === 'standing' && (
@@ -5092,7 +5092,7 @@ function TimerElite(props: TimerProps) {
                                <span className="text-xs font-mono text-brand-primary font-bold">{lastResult.runSerial || 'DF-PREVIEW'}</span>
                             </div>
                             <div className="text-right">
-                               <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-1">PontuaÃ§Ã£o</span>
+                               <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-1">Pontuação</span>
                                <span className="text-xl font-display font-black text-white italic">{lastResult.performanceScore || 0} <span className="text-[10px] text-zinc-500">PTS</span></span>
                             </div>
                          </div>
@@ -5105,7 +5105,7 @@ function TimerElite(props: TimerProps) {
                                </p>
                             </div>
                             <div className="flex flex-col">
-                               <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">DuraÃ§Ã£o</span>
+                               <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Duração</span>
                                <p className="text-5xl font-display font-black text-brand-accent italic leading-none mt-1">
                                  {lastResult.time.toFixed(2)}<span className="text-lg ml-1">SEG</span>
                                </p>
@@ -5114,11 +5114,11 @@ function TimerElite(props: TimerProps) {
 
                          <div className="grid grid-cols-2 gap-4">
                             <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
-                               <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block mb-2">PotÃªncia Est.</span>
+                               <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block mb-2">Potência Est.</span>
                                <span className="text-2xl font-display font-black text-white italic">{lastResult.estimatedPowerCV || 0} <span className="text-xs text-zinc-500">CV</span></span>
                             </div>
                             <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
-                               <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block mb-2">InclinaÃ§Ã£o MÃ©dia</span>
+                               <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest block mb-2">Inclinação Média</span>
                                <span className={`text-2xl font-display font-black italic ${Math.abs(lastResult.slope || 0) > 1.0 ? 'text-yellow-500' : 'text-white'}`}>
                                   {lastResult.slope?.toFixed(1)}%
                                </span>
@@ -5161,7 +5161,7 @@ function TimerElite(props: TimerProps) {
                             />
                          </div>
                          <div className="mt-4 p-4 rounded-2xl bg-zinc-950 border border-white/5">
-                            <h4 className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-3">AnÃ¡lise de G-Force</h4>
+                            <h4 className="text-[9px] font-black text-zinc-500 uppercase tracking-widest mb-3">Análise de G-Force</h4>
                             <div className="flex justify-between items-center">
                                <div className="flex flex-col">
                                   <span className="text-[7px] text-zinc-600 uppercase font-bold">Pico Lateral</span>
@@ -5183,11 +5183,11 @@ function TimerElite(props: TimerProps) {
                          </div>
                          <div className="mt-4 flex items-center justify-between px-2">
                             <div className="flex flex-col">
-                               <span className="text-[7px] text-zinc-600 uppercase font-bold tracking-widest">LocalizaÃ§Ã£o</span>
+                               <span className="text-[7px] text-zinc-600 uppercase font-bold tracking-widest">Localização</span>
                                <span className="text-[9px] font-bold text-zinc-400 uppercase">{lastResult.location?.latitude.toFixed(4)}, {lastResult.location?.longitude.toFixed(4)}</span>
                             </div>
                             <div className="flex flex-col text-right">
-                               <span className="text-[7px] text-zinc-600 uppercase font-bold tracking-widest">DistÃ¢ncia Total</span>
+                               <span className="text-[7px] text-zinc-600 uppercase font-bold tracking-widest">Distà¢ncia Total</span>
                                <span className="text-[9px] font-bold text-zinc-400 uppercase">{Math.round(lastResult.distance)} Metros</span>
                             </div>
                          </div>
@@ -5237,7 +5237,7 @@ function TimerElite(props: TimerProps) {
                     <EyeOff className="w-6 h-6 text-zinc-700" />
                     <span className="text-[8px] text-zinc-700 font-black uppercase tracking-widest">Modo Fantasma</span>
                   </div>
-                  <p className="text-[10px] font-black text-white uppercase italic text-center">AnÃ´nimo</p>
+                  <p className="text-[10px] font-black text-white uppercase italic text-center">Anà´nimo</p>
                 </button>
                 {vehicles.map(v => (
                   <button key={v.id} onClick={() => { setRunVehicleId(v.id || ''); setIsQuickSwitchOpen(false); }} className={`flex flex-col gap-3 p-4 rounded-[32px] border transition-all ${runVehicleId === v.id ? 'bg-white/5 border-brand-primary shadow-[0_0_20px_rgba(239,68,68,0.1)]' : 'bg-zinc-950 border-white/5'}`}>
@@ -5528,7 +5528,7 @@ export default function App() {
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log('Auth state changed:', firebaseUser ? 'User logged in' : 'No user');
       // Log auth state
-      console.log('Passo 1: Firebase percebeu ' + (firebaseUser ? 'UsuÃ¡rio Logado' : 'Deslogado'));
+      console.log('Passo 1: Firebase percebeu ' + (firebaseUser ? 'Usuário Logado' : 'Deslogado'));
       
       setUser(firebaseUser);
       setIsAuthReady(true);
@@ -5785,7 +5785,7 @@ export default function App() {
       });
 
       setPendingReward(null);
-      alert(`ParabÃ©ns! VocÃª resgatou ${pendingReward.rewardAmount} DC pelo seu pÃ³dio em ${pendingReward.month}!`);
+      alert(`Parabéns! Você resgatou ${pendingReward.rewardAmount} DC pelo seu pódio em ${pendingReward.month}!`);
     } catch (e) {
       console.error('Error claiming monthly reward:', e);
     }
@@ -5875,12 +5875,12 @@ export default function App() {
 
   const handleLogin = async () => {
     setIsLoggingIn(true);
-    // console.log('Iniciando AutenticaÃ§Ã£o Google...');
+    // console.log('Iniciando Autenticação Google...');
     
     // Failsafe timeout
     const failsafe = setTimeout(() => {
       setIsLoggingIn(false);
-      // console.warn('AtenÃ§Ã£o: O processo nÃ£o respondeu em 10 segundos.');
+      // console.warn('Atenção: O processo nà£o respondeu em 10 segundos.');
     }, 10000);
 
     try {
@@ -5905,11 +5905,11 @@ export default function App() {
       console.error('Login error:', error);
       setIsLoggingIn(false);
       
-      // Tratamento especÃ­fico de erros
+      // Tratamento específico de erros
       if (error.code === 'auth/popup-blocked') {
         alert('O login foi bloqueado pelo seu navegador. Por favor, permita pop-ups para este site.');
       } else if (error.code === 'auth/cancelled-popup-request' || error.message?.includes('cancel')) {
-        // UsuÃ¡rio cancelou, ignoramos silenciosamente
+        // Usuário cancelou, ignoramos silenciosamente
       } else {
         alert('Erro ao fazer login: ' + (error.message || 'Erro desconhecido'));
       }
@@ -5938,7 +5938,7 @@ export default function App() {
 
   const saveVehicle = async (v: Vehicle) => {
     if (isGuest) {
-      alert("Como Visitante, seus dados nÃ£o sÃ£o salvos na nuvem. Crie uma conta ou faÃ§a login com Google para salvar seus veÃ­culos e tempos permanentemente!");
+      alert("Como Visitante, seus dados nà£o sà£o salvos na nuvem. Crie uma conta ou faà§a login com Google para salvar seus veículos e tempos permanentemente!");
       return;
     }
 
@@ -6017,7 +6017,7 @@ export default function App() {
   const deleteVehicle = async (v: Vehicle) => {
     if (!user || !v.id) return;
     if (vehicles.length <= 1) {
-      alert("VocÃª precisa ter pelo menos um veÃ­culo cadastrado.");
+      alert("Você precisa ter pelo menos um veículo cadastrado.");
       return;
     }
 
@@ -6056,12 +6056,12 @@ export default function App() {
           await setDoc(doc(db, 'power_references', newId), newRef);
           
           // Show success and return to admin
-          alert(`Teste de CalibraÃ§Ã£o salvo!\nTempo: ${lastResult.time.toFixed(2)}s\nLocal: ${lastResult.slope?.toFixed(1)}%`);
+          alert(`Teste de Calibração salvo!\nTempo: ${lastResult.time.toFixed(2)}s\nLocal: ${lastResult.slope?.toFixed(1)}%`);
           setCalibrationMode(null);
           setScreen('admin-dashboard');
         } catch (e) {
           console.error("Failed to save calibration reference:", e);
-          alert("Erro ao salvar calibraÃ§Ã£o.");
+          alert("Erro ao salvar calibração.");
           setCalibrationMode(null);
         }
       };
@@ -6128,7 +6128,7 @@ export default function App() {
               ...lastResult, 
               uid: user.uid,
               vehicleId: selectedVehicle?.id || null,
-              vehicleName: selectedVehicle ? `${selectedVehicle.nickname} (${selectedVehicle.model})` : 'Piloto AnÃ´nimo',
+              vehicleName: selectedVehicle ? `${selectedVehicle.nickname} (${selectedVehicle.model})` : 'Piloto Anà´nimo',
               estimatedPowerCV,
               performanceScore,
               runSerial
@@ -6179,7 +6179,7 @@ export default function App() {
                   uid: user.uid,
                   userName: user.displayName || 'Piloto',
                   userPhoto: user.photoURL || undefined,
-                  vehicleName: selectedVehicle ? `${selectedVehicle.nickname} (${selectedVehicle.model})` : 'VeÃ­culo nÃ£o vinculado',
+                  vehicleName: selectedVehicle ? `${selectedVehicle.nickname} (${selectedVehicle.model})` : 'Veículo nà£o vinculado',
                   vehicleType: selectedVehicle?.type || 'car',
                   time: lastResult.time,
                   maxSpeed: lastResult.maxSpeed,
@@ -6405,7 +6405,7 @@ export default function App() {
                 className="mb-16 relative z-10 flex flex-col items-center"
               >
                 <DragFireLogo size="large" className="mb-8" />
-                <h2 className="text-zinc-500 font-bold uppercase tracking-[0.3em] text-[10px]">AFERIÃ‡ÃƒO DE PERFORMACE</h2>
+                <h2 className="text-zinc-500 font-bold uppercase tracking-[0.3em] text-[10px]">AFERIà‡àƒO DE PERFORMACE</h2>
               </motion.div>
 
               <div className="w-full max-w-xs space-y-4 relative z-10">
@@ -6684,7 +6684,7 @@ export default function App() {
                   <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent" />
                   <div className="absolute top-3 right-3"><Sparkles className="w-7 h-7 text-purple-500 animate-pulse" /></div>
                   <div className="absolute bottom-4 left-4 right-4">
-                    <span className="px-1.5 py-0.5 bg-purple-500/20 backdrop-blur-md rounded border border-purple-500/30 text-[7px] font-black text-purple-500 uppercase tracking-widest mb-1.5 inline-block">MÃ¡gica</span>
+                    <span className="px-1.5 py-0.5 bg-purple-500/20 backdrop-blur-md rounded border border-purple-500/30 text-[7px] font-black text-purple-500 uppercase tracking-widest mb-1.5 inline-block">Mágica</span>
                     <h4 className="text-sm font-display font-black italic text-white leading-tight uppercase tracking-tighter">Editor <span className="text-purple-500 font-bold">IA</span></h4>
                   </div>
                 </motion.div>
@@ -6719,7 +6719,7 @@ export default function App() {
                   </div>
                 </motion.div>
 
-                {/* 1.4 Postos e PreÃ§os (Emerald Green) */}
+                {/* 1.4 Postos e Preà§os (Emerald Green) */}
                 <motion.div 
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setScreen('fuel-stations')}
@@ -6853,7 +6853,7 @@ export default function App() {
                       <History className="w-5 h-5 text-zinc-400" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-bold text-white">HistÃ³rico</h4>
+                      <h4 className="text-xs font-bold text-white">Histórico</h4>
                       <p className="text-[9px] text-zinc-500 uppercase font-bold">Suas puxadas</p>
                     </div>
                   </div>
@@ -6870,7 +6870,7 @@ export default function App() {
                     <div className="flex-1">
                       <h4 className="text-sm font-bold text-white">Duelo Ativo</h4>
                       <p className={`text-[10px] uppercase font-bold ${isGuest ? 'text-zinc-600' : 'text-brand-accent'}`}>
-                        {isGuest ? 'DisponÃ­vel apenas para usuÃ¡rios logados' : `Desafio de ${activeChallenge.creatorName}`}
+                        {isGuest ? 'Disponível apenas para usuários logados' : `Desafio de ${activeChallenge.creatorName}`}
                       </p>
                     </div>
                     {!isGuest && (
@@ -6885,7 +6885,7 @@ export default function App() {
                 </section>
               )}
 
-                            {/* 6. Guia de PrecisÃ£o (Full Width) */}
+                            {/* 6. Guia de Precisà£o (Full Width) */}
               <section 
                 onClick={() => setScreen('gps-guide')}
                 className="bg-brand-primary/5 rounded-[28px] p-5 border border-brand-primary/10 cursor-pointer hover:bg-brand-primary/10 transition-all active:scale-[0.98]"
@@ -6895,7 +6895,7 @@ export default function App() {
                     <ShieldCheck className="w-6 h-6 text-brand-primary" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-black text-white italic uppercase">Guia de PrecisÃ£o</h4>
+                    <h4 className="text-sm font-black text-white italic uppercase">Guia de Precisà£o</h4>
                     <p className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest mt-1">Dicas para 100% de confiabilidade</p>
                   </div>
                 </div>
@@ -6903,7 +6903,7 @@ export default function App() {
 
               {/* 7. Viagem & Radar Curvas (Side by Side Grid) */}
               <div className="grid grid-cols-2 gap-3 pb-4">
-                {/* 7.1 SugestÃ£o de Viagem */}
+                {/* 7.1 Sugestà£o de Viagem */}
                 <motion.div 
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setScreen('trip-explorer')}
@@ -6949,7 +6949,7 @@ export default function App() {
                 className="p-1.5 hover:bg-white/5 rounded-full transition-colors flex items-center gap-1.5 text-zinc-400 hover:text-white"
               >
                 <ChevronLeft className="w-4 h-4" />
-                <span className="text-[10px] font-black uppercase tracking-widest">InÃ­cio</span>
+                <span className="text-[10px] font-black uppercase tracking-widest">Início</span>
               </button>
               <h1 className="text-[10px] font-black text-brand-primary uppercase tracking-widest">Duelo Ativo</h1>
               <div className="w-8" />
@@ -7004,7 +7004,7 @@ export default function App() {
                 className="p-1.5 hover:bg-white/5 rounded-full transition-colors flex items-center gap-1.5 text-zinc-400 hover:text-white"
               >
                 <ChevronLeft className="w-4 h-4" />
-                <span className="text-[10px] font-black uppercase tracking-widest">InÃ­cio</span>
+                <span className="text-[10px] font-black uppercase tracking-widest">Início</span>
               </button>
               <h1 className="text-[10px] font-black text-brand-primary uppercase tracking-widest">Resultado do Duelo</h1>
               <button 
@@ -7036,13 +7036,13 @@ export default function App() {
                 className="p-1.5 hover:bg-white/5 rounded-full transition-colors flex items-center gap-1.5 text-zinc-400 hover:text-white"
               >
                 <ChevronLeft className="w-4 h-4" />
-                <span className="text-[10px] font-black uppercase tracking-widest">InÃ­cio</span>
+                <span className="text-[10px] font-black uppercase tracking-widest">Início</span>
               </button>
-              <h1 className="text-[10px] font-black text-brand-primary uppercase tracking-widest">AnÃ¡lise de Viagem</h1>
+              <h1 className="text-[10px] font-black text-brand-primary uppercase tracking-widest">Análise de Viagem</h1>
               <button 
                 className="p-1.5 hover:bg-white/5 rounded-full transition-colors"
                 onClick={() => {
-                  alert('RelatÃ³rio de viagem copiado!');
+                  alert('Relatório de viagem copiado!');
                 }}
               >
                 <Share2Icon className="w-4 h-4 text-zinc-400" />
@@ -7325,7 +7325,7 @@ export default function App() {
                       </div>
                       <div>
                         <p className="font-bold text-white text-sm">{u.displayName}</p>
-                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest">DisponÃ­vel</p>
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Disponível</p>
                       </div>
                     </div>
                     <button 
@@ -7396,9 +7396,9 @@ export default function App() {
                 <Info className="w-6 h-6 text-brand-primary" />
               </div>
               <div className="space-y-1">
-                <h4 className="text-white font-black italic uppercase tracking-widest text-sm">Dica de PrecisÃ£o</h4>
+                <h4 className="text-white font-black italic uppercase tracking-widest text-sm">Dica de Precisà£o</h4>
                 <p className="text-zinc-400 text-xs font-medium leading-relaxed">
-                  Para melhores resultados, <span className="text-white font-bold">fixe o celular no suporte do veÃ­culo</span>. Evite segurar o aparelho na mÃ£o.
+                  Para melhores resultados, <span className="text-white font-bold">fixe o celular no suporte do veículo</span>. Evite segurar o aparelho na mà£o.
                 </p>
               </div>
               <button 
@@ -7603,7 +7603,7 @@ function PublicProfileDetail({ uid, currentUserId, onBack, onUpdateProfile, onEd
   };
 
   if (loading) return <div className="flex-1 flex items-center justify-center bg-zinc-950"><div className="w-12 h-12 border-4 border-brand-primary border-t-transparent rounded-full animate-spin" /></div>;
-  if (!profile) return <div className="flex-1 flex flex-col items-center justify-center bg-zinc-950 text-zinc-500 p-8 text-center"><p>Ops! Perfil nÃ£o encontrado.</p><button onClick={onBack} className="mt-4 text-brand-primary font-bold uppercase tracking-widest text-[10px]">Voltar</button></div>;
+  if (!profile) return <div className="flex-1 flex flex-col items-center justify-center bg-zinc-950 text-zinc-500 p-8 text-center"><p>Ops! Perfil nà£o encontrado.</p><button onClick={onBack} className="mt-4 text-brand-primary font-bold uppercase tracking-widest text-[10px]">Voltar</button></div>;
 
   const theme = getThemeById(profile.activeThemeId || 'default');
   const isOwner = uid === currentUserId;
@@ -7767,7 +7767,7 @@ function PublicProfileDetail({ uid, currentUserId, onBack, onUpdateProfile, onEd
             {[
               { id: 'garage', label: 'Garagem', icon: Car },
               { id: 'times', label: 'Tempos', icon: History },
-              { id: 'albums', label: 'Ãlbuns', icon: ImageIcon }
+              { id: 'albums', label: 'àlbuns', icon: ImageIcon }
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -7821,7 +7821,7 @@ function PublicProfileDetail({ uid, currentUserId, onBack, onUpdateProfile, onEd
                    {vehicles.length === 0 && (
                      <div className="col-span-2 py-12 flex flex-col items-center justify-center text-zinc-700 bg-zinc-900/20 border border-dashed border-zinc-800 rounded-[32px]">
                         <Car className="w-8 h-8 mb-2 opacity-20" />
-                        <p className="text-[9px] font-black uppercase tracking-widest">Nenhum veÃ­culo cadastrado</p>
+                        <p className="text-[9px] font-black uppercase tracking-widest">Nenhum veículo cadastrado</p>
                      </div>
                    )}
                 </div>
@@ -7899,7 +7899,7 @@ function TripExplorer({ onBack, userLocation, userId, isGuest }: { onBack: () =>
 
   const categories = [
     { id: 'beach', label: 'Praia', icon: <Palmtree className="w-6 h-6" />, query: 'praia beach', color: 'text-cyan-400', bg: 'bg-cyan-500/10' },
-    { id: 'biker_cafe', label: 'CafÃ© Biker', icon: <Coffee className="w-6 h-6" />, query: 'cafÃ© da manhÃ£ moto', color: 'text-orange-400', bg: 'bg-orange-500/10' },
+    { id: 'biker_cafe', label: 'Café Biker', icon: <Coffee className="w-6 h-6" />, query: 'café da manhà£ moto', color: 'text-orange-400', bg: 'bg-orange-500/10' },
     { id: 'waterfall', label: 'Cachoeira', icon: <Waves className="w-6 h-6" />, query: 'cachoeira waterfall', color: 'text-blue-400', bg: 'bg-blue-500/10' },
     { id: 'camping', label: 'Camping', icon: <Tent className="w-6 h-6" />, query: 'camping acampamento', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
     { id: 'lookout', label: 'Mirante', icon: <Mountain className="w-6 h-6" />, query: 'mirante lookout scenic vista', color: 'text-yellow-400', bg: 'bg-yellow-500/10' }
@@ -7961,7 +7961,7 @@ function TripExplorer({ onBack, userLocation, userId, isGuest }: { onBack: () =>
                 <div className="flex items-center gap-2">
                    <Star className="w-4 h-4 text-yellow-500 fill-current" />
                    <span className="text-white font-black italic">{selectedPlace.rating || 'N/A'}</span>
-                   <span className="text-zinc-500 text-[10px] uppercase font-bold">({selectedPlace.userRatingCount || 0} avaliaÃ§Ãµes)</span>
+                   <span className="text-zinc-500 text-[10px] uppercase font-bold">({selectedPlace.userRatingCount || 0} avaliaà§ões)</span>
                 </div>
               </div>
             </div>
@@ -7975,7 +7975,7 @@ function TripExplorer({ onBack, userLocation, userId, isGuest }: { onBack: () =>
 
             {selectedPlace.reviews && selectedPlace.reviews.length > 0 && (
               <div className="space-y-4">
-                <h3 className="text-xs font-black text-zinc-500 uppercase tracking-widest">ComentÃ¡rios Recentes</h3>
+                <h3 className="text-xs font-black text-zinc-500 uppercase tracking-widest">Comentários Recentes</h3>
                 <div className="space-y-3">
                   {selectedPlace.reviews.slice(0, 3).map((rev: any, idx: number) => (
                     <div key={idx} className="bg-zinc-900/50 p-4 rounded-2xl border border-white/5 space-y-2">
@@ -8000,7 +8000,7 @@ function TripExplorer({ onBack, userLocation, userId, isGuest }: { onBack: () =>
               className="w-full py-5 bg-cyan-500 text-zinc-950 rounded-[28px] font-black italic uppercase text-xs tracking-[0.2em] shadow-xl shadow-cyan-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-3"
             >
               <Navigation className="w-5 h-5" />
-              TraÃ§ar Rota Agora
+              Traà§ar Rota Agora
             </button>
           </div>
         </main>
@@ -8057,13 +8057,13 @@ function TripExplorer({ onBack, userLocation, userId, isGuest }: { onBack: () =>
           <div className="space-y-4 pb-24">
             <div className="flex items-center gap-2 mb-2">
               <div className="w-1 h-4 bg-cyan-500 rounded-full" />
-              <h3 className="text-xs font-black text-white uppercase tracking-widest">Resultados PrÃ³ximos</h3>
+              <h3 className="text-xs font-black text-white uppercase tracking-widest">Resultados Próximos</h3>
             </div>
             
             {loading ? (
               <div className="py-20 flex flex-col items-center gap-4">
                  <div className="w-8 h-8 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-                 <p className="text-[8px] font-black text-zinc-600 uppercase">Escaneando SatÃ©lites...</p>
+                 <p className="text-[8px] font-black text-zinc-600 uppercase">Escaneando Satélites...</p>
               </div>
             ) : places.length > 0 ? (
               places.map((place) => (
@@ -8167,7 +8167,7 @@ function CurveRadar({ onBack, userLocation, userId, isGuest }: { onBack: () => v
         </button>
         <div>
           <h2 className="text-xl font-display font-black italic text-white uppercase tracking-tighter">Radar de Curvas</h2>
-          <p className="text-[10px] text-yellow-500 font-bold uppercase tracking-widest mt-1">AnÃ¡lise de trajeto IA</p>
+          <p className="text-[10px] text-yellow-500 font-bold uppercase tracking-widest mt-1">Análise de trajeto IA</p>
         </div>
       </header>
 
@@ -8202,7 +8202,7 @@ function CurveRadar({ onBack, userLocation, userId, isGuest }: { onBack: () => v
               <div className="absolute top-0 right-0 w-32 h-32 bg-yellow-500/10 blur-[50px] rounded-full" />
               <div className="relative z-10 flex justify-between items-end">
                 <div className="space-y-1">
-                  <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">NÃ­vel de Adrenalina</span>
+                  <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Nível de Adrenalina</span>
                   <div className="flex items-baseline gap-2">
                     <h3 className="text-5xl font-display font-black italic text-white tracking-tighter">{analysisResult.score.toFixed(0)}</h3>
                     <span className="text-yellow-500 font-black italic uppercase">pts</span>
@@ -8232,7 +8232,7 @@ function CurveRadar({ onBack, userLocation, userId, isGuest }: { onBack: () => v
                    <span className="text-sm font-display font-black italic text-red-500">{analysisResult.curves.filter(c => c.severity > 3).length}</span>
                  </div>
                  <div className="bg-zinc-950 rounded-2xl p-3 text-center border border-white/5">
-                   <span className="block text-[7px] font-black text-zinc-600 uppercase mb-1">MÃ©dias</span>
+                   <span className="block text-[7px] font-black text-zinc-600 uppercase mb-1">Médias</span>
                    <span className="text-sm font-display font-black italic text-orange-500">{analysisResult.curves.filter(c => c.severity >= 1.5 && c.severity <= 3).length}</span>
                  </div>
                  <div className="bg-zinc-950 rounded-2xl p-3 text-center border border-white/5">
@@ -8258,7 +8258,7 @@ function CurveRadar({ onBack, userLocation, userId, isGuest }: { onBack: () => v
         {!analysisResult && !loading && (
           <div className="flex flex-col items-center justify-center py-20 opacity-20 text-center space-y-4">
             <ActivityIcon className="w-16 h-16 text-white" />
-            <p className="text-[10px] font-black text-white uppercase tracking-[0.2em] max-w-[200px]">Insira o destino para mapear o nÃ­vel de pilotagem da estrada</p>
+            <p className="text-[10px] font-black text-white uppercase tracking-[0.2em] max-w-[200px]">Insira o destino para mapear o nível de pilotagem da estrada</p>
           </div>
         )}
       </main>
@@ -8267,85 +8267,197 @@ function CurveRadar({ onBack, userLocation, userId, isGuest }: { onBack: () => v
 }
 
 function VehicleCatalog({ vehicle, onBack, isOwnCar, onEditVehicle }: { vehicle: any, onBack: () => void, isOwnCar: boolean, onEditVehicle: (v: any) => void }) {
+  // Mock data for display if missing
+  const stats = {
+    topSpeed: vehicle.topSpeed || 240,
+    torque: vehicle.torque || 270,
+    gForce: vehicle.maxG || 0.85,
+    power: vehicle.power || 180,
+    weight: vehicle.weight || 1350,
+    engine: vehicle.engine || '1.8 TFSI (180CV)',
+    stage: vehicle.stage || 'STAGE 1'
+  };
+
   return (
-    <div className="flex-1 flex flex-col bg-black overflow-hidden relative">
-      <div className="absolute inset-0 bg-gradient-to-b from-brand-primary/5 via-transparent to-transparent opacity-50" />
-      
-      <header className="px-6 pt-8 pb-6 flex items-center justify-between relative z-10">
-        <button onClick={onBack} className="p-3 bg-zinc-900/50 backdrop-blur-xl border border-white/5 rounded-2xl text-zinc-400 active:scale-90 transition-transform">
+    <div className="flex-1 flex flex-col bg-[#0A0A0A] overflow-hidden relative">
+      {/* Header */}
+      <header className="px-6 pt-6 pb-4 flex items-center justify-between z-20">
+        <button onClick={onBack} className="p-3 bg-zinc-900/80 backdrop-blur-xl border border-white/5 rounded-2xl text-white active:scale-90 transition-transform">
           <ChevronLeft className="w-6 h-6" />
         </button>
-        <div className="text-center">
-          <h2 className="text-sm font-display font-black italic text-white uppercase tracking-tighter leading-none">{vehicle.nickname || vehicle.model}</h2>
-          <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-[0.2em] mt-1">{vehicle.brand} Elite Catalog</p>
+        <div className="flex items-center gap-2">
+          <span className="text-white font-black italic text-xl tracking-tighter uppercase">Drag<span className="text-brand-primary">Fire</span></span>
         </div>
-        <div className="w-12" />
+        <button className="p-3 bg-zinc-900/80 backdrop-blur-xl border border-white/5 rounded-2xl text-white active:scale-90 transition-transform">
+          <SettingsIcon className="w-6 h-6 text-brand-primary" />
+        </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-6 pb-20 relative z-10 scrollbar-hide">
-        <div className="relative aspect-[16/9] rounded-[40px] overflow-hidden border border-white/10 shadow-2xl mb-8 group">
-          <img src={vehicle.photoURL || 'https://images.unsplash.com/photo-1614162692292-7ac56d7f7f1e?auto=format&fit=crop&q=80'} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt={vehicle.model} />
-          <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />
-          <div className="absolute bottom-6 left-8">
-            <h3 className="text-3xl font-display font-black italic text-white uppercase leading-none">{vehicle.model}</h3>
-            <p className="text-xs text-brand-primary font-black uppercase tracking-widest mt-2">{vehicle.brand} {vehicle.year}</p>
+      <main className="flex-1 overflow-y-auto px-6 pb-24 relative z-10 scrollbar-hide">
+        {/* Hero Card */}
+        <div className="relative aspect-[16/11] rounded-[48px] overflow-hidden border border-white/10 shadow-2xl mb-8 group">
+          <img 
+            src={vehicle.photoURL || 'https://images.unsplash.com/photo-1614162692292-7ac56d7f7f1e?auto=format&fit=crop&q=80'} 
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
+            alt={vehicle.model} 
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+          
+          {/* Top Glass Badge */}
+          <div className="absolute top-6 left-6 right-6 flex items-start justify-between">
+            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-3xl p-3 flex items-center gap-4">
+              <div className="text-[10px] font-black text-white italic uppercase tracking-tighter pr-4 border-r border-white/20">
+                DRAG<span className="text-brand-primary">FIRE</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 flex items-center justify-center opacity-70">
+                   <svg viewBox="0 0 100 40" className="w-full h-full fill-white">
+                     <circle cx="20" cy="20" r="15" fill="none" stroke="currentColor" strokeWidth="4"/>
+                     <circle cx="40" cy="20" r="15" fill="none" stroke="currentColor" strokeWidth="4"/>
+                     <circle cx="60" cy="20" r="15" fill="none" stroke="currentColor" strokeWidth="4"/>
+                     <circle cx="80" cy="20" r="15" fill="none" stroke="currentColor" strokeWidth="4"/>
+                   </svg>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-black text-white uppercase leading-none">{vehicle.brand}</span>
+                  <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest">{vehicle.nickname || vehicle.model}</span>
+                </div>
+              </div>
+            </div>
+            
+            <button className="p-4 bg-white/10 backdrop-blur-md border border-white/20 rounded-full text-white active:scale-90 transition-transform">
+              <Share2Icon className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Bottom Stage Badge */}
+          <div className="absolute bottom-6 right-8">
+            <div className="bg-brand-primary/90 backdrop-blur-md px-5 py-1.5 rounded-full border border-white/20">
+              <span className="text-[10px] font-black text-white italic uppercase tracking-widest">{stats.stage}</span>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 mb-8">
-          <div className="bg-zinc-900/50 backdrop-blur-md p-5 rounded-[32px] border border-white/5 flex flex-col items-center justify-center text-center">
-             <Gauge className="w-6 h-6 text-brand-primary mb-2" />
-             <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest">MotorizaÃ§Ã£o</span>
-             <span className="text-sm font-display font-black text-white mt-1 uppercase italic">{vehicle.engineSize || 'N/A'}</span>
+        {/* Section: DINÃ‚MICA */}
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-6">
+            <div className="w-1 h-4 bg-brand-primary rounded-full" />
+            <h4 className="text-[12px] font-black text-white uppercase italic tracking-widest">Dinâmica</h4>
           </div>
-          <div className="bg-zinc-900/50 backdrop-blur-md p-5 rounded-[32px] border border-white/5 flex flex-col items-center justify-center text-center">
-             <ActivityIcon className="w-6 h-6 text-brand-primary mb-2" />
-             <span className="text-[8px] text-zinc-500 font-bold uppercase tracking-widest">TraÃ§Ã£o</span>
-             <span className="text-sm font-display font-black text-white mt-1 uppercase italic">{vehicle.traction || 'N/A'}</span>
-          </div>
-        </div>
-
-        <div className="space-y-4 mb-8">
-          <h4 className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.3em] pl-2">Performance Specs</h4>
-          <div className="bg-zinc-900/40 backdrop-blur-xl border border-white/5 rounded-[40px] p-8 space-y-8">
-             <div className="space-y-3">
+          
+          <div className="space-y-6 bg-zinc-900/40 backdrop-blur-xl border border-white/5 rounded-[40px] p-8">
+             <div className="space-y-2">
                <div className="flex justify-between items-end">
-                 <span className="text-[10px] font-black text-white uppercase italic">PotÃªncia</span>
-                 <span className="text-lg font-display font-black text-brand-primary italic leading-none">{vehicle.power || 'N/A'} <span className="text-[8px] text-zinc-500 not-italic ml-1 uppercase">CV</span></span>
+                 <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Velocidade Máxima</span>
+                 <span className="text-sm font-black text-white italic">{stats.topSpeed} <span className="text-[10px] text-brand-primary">KM/H</span></span>
                </div>
-               <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                 <div className="h-full bg-brand-primary shadow-[0_0_10px_rgba(255,51,51,0.5)]" style={{ width: '85%' }} />
+               <div className="h-1.5 bg-zinc-800/50 rounded-full overflow-hidden">
+                 <div className="h-full bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.5)]" style={{ width: '65%' }} />
                </div>
              </div>
 
-             <div className="space-y-3">
+             <div className="space-y-2">
                <div className="flex justify-between items-end">
-                 <span className="text-[10px] font-black text-white uppercase italic">V-Max Est.</span>
-                 <span className="text-lg font-display font-black text-brand-primary italic leading-none">280 <span className="text-[8px] text-zinc-500 not-italic ml-1 uppercase">KM/H</span></span>
+                 <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Torque Estimado</span>
+                 <span className="text-sm font-black text-white italic">{stats.torque} <span className="text-[10px] text-orange-500">NM</span></span>
                </div>
-               <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                 <div className="h-full bg-brand-primary shadow-[0_0_10px_rgba(255,51,51,0.5)]" style={{ width: '92%' }} />
+               <div className="h-1.5 bg-zinc-800/50 rounded-full overflow-hidden">
+                 <div className="h-full bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.5)]" style={{ width: '55%' }} />
                </div>
              </div>
 
-             <div className="space-y-3">
+             <div className="space-y-2">
                <div className="flex justify-between items-end">
-                 <span className="text-[10px] font-black text-white uppercase italic">G-Force (Lat)</span>
-                 <span className="text-lg font-display font-black text-brand-primary italic leading-none">1.25 <span className="text-[8px] text-zinc-500 not-italic ml-1 uppercase">G</span></span>
+                 <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Força G Acúm.</span>
+                 <span className="text-sm font-black text-white italic">{stats.gForce} <span className="text-[10px] text-blue-500">G</span></span>
                </div>
-               <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                 <div className="h-full bg-brand-primary shadow-[0_0_10px_rgba(255,51,51,0.5)]" style={{ width: '78%' }} />
+               <div className="h-1.5 bg-zinc-800/50 rounded-full overflow-hidden">
+                 <div className="h-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" style={{ width: '45%' }} />
                </div>
              </div>
           </div>
         </div>
+
+        {/* Section: FICHA TÃ‰CNICA */}
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-6">
+            <div className="w-1 h-4 bg-zinc-600 rounded-full" />
+            <h4 className="text-[12px] font-black text-zinc-400 uppercase italic tracking-widest">Ficha Técnica</h4>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            <div className="bg-zinc-900/40 border border-white/5 rounded-3xl p-5 flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-1">Potência</span>
+                <span className="text-xl font-black text-white italic leading-none">{stats.power} <span className="text-[10px] text-brand-primary">CV</span></span>
+              </div>
+              <Zap className="w-8 h-8 text-brand-primary opacity-50" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-zinc-900/40 border border-white/5 rounded-3xl p-5 flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-1">Peso Total</span>
+                  <span className="text-sm font-black text-white italic leading-none">{stats.weight} <span className="text-[8px] text-zinc-500">KG</span></span>
+                </div>
+                <Scale className="w-5 h-5 text-zinc-600" />
+              </div>
+              <div className="bg-zinc-900/40 border border-white/5 rounded-3xl p-5 flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-1">Tração</span>
+                  <span className="text-sm font-black text-white italic leading-none">{vehicle.traction || 'FWD'}</span>
+                </div>
+                <Cpu className="w-5 h-5 text-zinc-600" />
+              </div>
+            </div>
+
+            <div className="bg-zinc-900/40 border border-white/5 rounded-3xl p-5 flex flex-col">
+              <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-1">Modelo Motor</span>
+              <span className="text-sm font-black text-white italic">{stats.engine}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Section: RECORDES */}
+        <div className="mb-10">
+          <div className="flex items-center gap-2 mb-6">
+            <Trophy className="w-5 h-5 text-yellow-500" />
+            <h4 className="text-[12px] font-black text-white uppercase italic tracking-widest">Melhores Recordes</h4>
+          </div>
+          
+          <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+            <div className="min-w-[140px] bg-zinc-900/40 border border-white/10 rounded-3xl p-5">
+              <div className="flex items-center gap-2 mb-4">
+                 <div className="w-1.5 h-1.5 rounded-full bg-brand-primary" />
+                 <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">0-100 KM/H</span>
+              </div>
+              <span className="text-xl font-black text-white italic">-- <span className="text-brand-primary">S</span></span>
+            </div>
+            
+            <div className="min-w-[140px] bg-zinc-900/40 border border-white/10 rounded-3xl p-5">
+              <div className="flex items-center gap-2 mb-4">
+                 <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                 <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">201 METROS</span>
+              </div>
+              <span className="text-xl font-black text-white italic">-- <span className="text-blue-500">S</span></span>
+            </div>
+          </div>
+        </div>
+
+        {/* Share Button */}
+        <button 
+          className="w-full py-6 bg-gradient-to-r from-brand-primary to-red-600 text-white rounded-[32px] font-black uppercase italic tracking-[0.3em] text-[11px] active:scale-95 transition-all shadow-2xl shadow-brand-primary/20 flex items-center justify-center gap-4 mb-4"
+        >
+          <Share2Icon className="w-5 h-5" />
+          Compartilhar Garagem
+        </button>
 
         {isOwnCar && (
           <button 
             onClick={() => onEditVehicle(vehicle)}
-            className="w-full py-5 bg-white text-black rounded-[28px] font-black uppercase italic tracking-widest text-[11px] active:scale-95 transition-all shadow-xl"
+            className="w-full py-4 text-zinc-500 font-black uppercase tracking-widest text-[9px] active:scale-95 transition-all"
           >
-            Editar ConfiguraÃ§Ãµes
+            Editar Configurações
           </button>
         )}
       </main>
