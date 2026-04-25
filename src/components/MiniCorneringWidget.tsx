@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Navigation } from 'lucide-react';
-import { CurveData } from '../services/CurveAnalysisService';
+import { CurveData } from '../types';
 
 interface MiniCorneringWidgetProps {
   nextCurve: CurveData | null;

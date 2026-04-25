@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { doc, getDoc, query, collection, where, limit, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { 
@@ -26,7 +26,9 @@ import {
   Compass,
   Map,
   Eye,
-  Info
+  Info,
+  Download,
+  ShieldAlert
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { UserProfile, TelemetryConfig, SystemSettings, TelemetryProfile, PowerReference } from '../types';
@@ -65,7 +67,9 @@ export function AdminDashboard({
     wheelSpinDetectionEnabled: false,
     lookAheadBaseDistance: 1000,
     lookAheadSpeedFactor: 5,
-    lookAheadMaxDistance: 2500
+    lookAheadMaxDistance: 2500,
+    manualDownloadRadius: 40,
+    calibrationRadius: 20000
   });
   
   const [profiles, setProfiles] = useState<Record<string, TelemetryProfile>>({
@@ -88,7 +92,9 @@ export function AdminDashboard({
       fusionAlgorithm: 'kalman',
       daCorrectionEnabled: false,
       wheelSpinDetectionEnabled: false,
-      lookAheadBaseDistance: 1000
+      lookAheadBaseDistance: 1000,
+      manualDownloadRadius: 40,
+      calibrationRadius: 20000
     }
   });
   const [activeProfileId, setActiveProfileId] = useState('v1.5.3-balanced');
@@ -242,7 +248,7 @@ export function AdminDashboard({
 
   const deleteProfile = async (id: string) => {
     if (profiles[id].isDefault) {
-      alert('O perfil padrÃ£o nÃ£o pode ser excluído.');
+      alert('O perfil padrão não pode ser excluído.');
       return;
     }
 
@@ -483,7 +489,7 @@ export function AdminDashboard({
               <div className="space-y-4">
                 <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
                   <User className="w-3 h-3 text-brand-primary" />
-                  CRM & GestÃ£o Comercial
+                  CRM & Gestão Comercial
                 </h3>
 
                 <div className="relative group h-14">
@@ -601,7 +607,7 @@ export function AdminDashboard({
                        <div className="space-y-3 bg-brand-primary/5 p-4 rounded-2xl border border-brand-primary/10">
                          <div className="flex justify-between items-center mb-2">
                             <label className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
-                              <Activity className="w-3 h-3 text-brand-primary" /> Algoritmo de FusÃ£o
+                              <Activity className="w-3 h-3 text-brand-primary" /> Algoritmo de Fusão
                             </label>
                             <div className="flex bg-zinc-950 p-1 rounded-lg border border-white/5">
                               <button 
@@ -618,7 +624,7 @@ export function AdminDashboard({
                               </button>
                             </div>
                          </div>
-                         <p className="text-[8px] text-zinc-500 font-medium leading-tight mb-2">Algoritmo de processamento de dados GPS + AcelerÃ´metro. Kalman é o padrÃ£o Dragy/Racebox.</p>
+                         <p className="text-[8px] text-zinc-500 font-medium leading-tight mb-2">Algoritmo de processamento de dados GPS + AcelerÃ´metro. Kalman é o padrão Dragy/Racebox.</p>
                          
                          <div className="space-y-2 pt-2 border-t border-white/5">
                             <div className="flex justify-between items-center">
@@ -644,7 +650,7 @@ export function AdminDashboard({
                     </div>
                     <div className="space-y-6">
                        <h4 className="text-[8px] font-black text-zinc-700 uppercase tracking-widest flex items-center gap-2">
-                         <Compass className="w-3 h-3" /> Algoritmo de IA & VisÃ£o
+                         <Compass className="w-3 h-3" /> Algoritmo de IA & Visão
                        </h4>
                        
                        {[
@@ -652,14 +658,14 @@ export function AdminDashboard({
                            id: 'lookAheadBaseDistance', 
                            label: 'Alcance de Detecção', 
                            min: 200, max: 4000, step: 100, icon: Eye,
-                           desc: 'O que faz: Controla o quÃ£o longe a IA "enxerga" na via.',
+                           desc: 'O que faz: Controla o quão longe a IA "enxerga" na via.',
                            utility: 'Utilidade: Em altas velocidades, aumente para dar mais tempo de reação.'
                          },
                          { 
                            id: 'curveDetectionThreshold', 
                            label: 'Sensibilidade de Curva', 
                            min: 5, max: 45, step: 1, icon: Compass,
-                           desc: 'O que faz: Ã‚ngulo mínimo para considerar um trecho como curva.',
+                           desc: 'O que faz: Ângulo mínimo para considerar um trecho como curva.',
                            utility: 'Utilidade: Aumente se houver muitos alertas falsos em retas leves.'
                          },
                          { 
@@ -675,6 +681,20 @@ export function AdminDashboard({
                            min: 1000, max: 15000, step: 500, icon: Map,
                            desc: 'O que faz: Tamanho da área baixada para uso offline.',
                            utility: 'Utilidade: Valores maiores garantem funcionamento sem internet por mais tempo.'
+                         },
+                         { 
+                           id: 'manualDownloadRadius', 
+                           label: 'Download Manual (km)', 
+                           min: 5, max: 100, step: 5, icon: Download,
+                           desc: 'O que faz: Raio da área baixada manualmente.',
+                           utility: 'Utilidade: 40km garante cobertura total para trajetos longos.'
+                         },
+                         { 
+                           id: 'calibrationRadius', 
+                           label: 'Raio de Calibração (m)', 
+                           min: 1000, max: 40000, step: 1000, icon: ShieldAlert,
+                           desc: 'O que faz: Raio inicial necessário para liberar o uso.',
+                           utility: 'Utilidade: 20000m (20km) é o novo padrão de segurança.'
                          }
                        ].map(field => (
                          <div key={field.id} className="space-y-3 bg-black/20 p-4 rounded-2xl border border-white/5">
@@ -757,7 +777,7 @@ export function AdminDashboard({
                 <div className="flex items-center justify-between px-1">
                   <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
                     <Gauge className="w-3 h-3 text-brand-primary" />
-                    GestÃ£o de Calibração
+                    Gestão de Calibração
                   </h3>
                   <button onClick={() => setShowPowerForm(!showPowerForm)} className="p-2 bg-zinc-900 rounded-lg text-brand-primary border border-brand-primary/20">
                     {showPowerForm ? <ChevronLeft className="w-4 h-4" /> : <Plus className="w-4 h-4" />}

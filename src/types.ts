@@ -220,6 +220,8 @@ export interface TelemetryConfig {
   curveMediumThreshold?: number;    // Angle for medium curve (default 45)
   curveHardThreshold?: number;      // Angle for hard curve (default 90)
   regionalCacheRadius?: number;     // Radius for topological loading in meters (default 7500)
+  manualDownloadRadius?: number;    // Radius for manual area download in km (default 20)
+  calibrationRadius?: number;       // Radius for initial calibration lock in meters (default 5000)
 }
 
 export interface TelemetryProfile extends TelemetryConfig {
@@ -286,4 +288,37 @@ export interface RemoteLog {
   timestamp: number;
   platform: string;
   version: string;
+}
+
+export interface RoadNode {
+  lat: number;
+  lng: number;
+  elevation?: number;
+}
+
+export interface WayData {
+  id: number;
+  nodes: number[];
+  tags: any;
+  points: RoadNode[];
+  curves?: CurveData[]; // Pre-calculated curve events
+}
+
+export interface CurveData {
+  angle: number;
+  severity: 'soft' | 'medium' | 'hard' | 'hairpin' | 'straight' | 'chicane' | 's-curve';
+  distance: number;
+  direction: 'left' | 'right' | 'straight' | 'both';
+  points: RoadNode[];
+  slope?: number;
+  isUphill?: boolean;
+}
+
+export interface TopologicalRegion {
+  lat: number;
+  lng: number;
+  radius: number;
+  ways: WayData[];
+  nodesMap: Record<number, RoadNode>;
+  timestamp: number;
 }

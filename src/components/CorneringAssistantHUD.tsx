@@ -19,10 +19,12 @@ import {
   ArrowDownRight,
   Navigation
 } from 'lucide-react';
-import { CurveData, RoadNode } from '../services/CurveAnalysisService';
+import { CurveData, RoadNode, WayData, TopologicalRegion } from '../types';
 import { IMUData } from '../services/SensorFusionService';
 import { db } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
+import { offlineMapService } from '../services/OfflineMapService';
+import { Download, CloudDownload, CheckCircle2 } from 'lucide-react';
 
 interface CorneringAssistantHUDProps {
   nextCurve: CurveData | null;
@@ -43,7 +45,9 @@ interface CorneringAssistantHUDProps {
   isLoading?: boolean;
   allRegionalWays?: RoadNode[][];
   imu?: IMUData | null;
+  trailNodes?: RoadNode[];
   minimapZoomMultiplier?: number;
+  telemetryConfig?: TelemetryConfig;
 }
 
 export function CorneringAssistantHUD({
@@ -65,6 +69,8 @@ export function CorneringAssistantHUD({
   isLoading = false,
   allRegionalWays = [],
   imu,
+  trailNodes = [],
+  telemetryConfig,
   minimapZoomMultiplier = 30000
 }: CorneringAssistantHUDProps) {
   const [isMirrored, setIsMirrored] = useState(false);
@@ -74,6 +80,12 @@ export function CorneringAssistantHUD({
   const [displayMode, setDisplayMode] = useState<'vector' | 'sign'>('sign');
   const [hasNetwork, setHasNetwork] = useState(true);
   const [showFeedback, setShowFeedback] = useState(false);
+  
+  // Offline Map Download State
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadMessage, setDownloadMessage] = useState('');
+  const [showDownloadDone, setShowDownloadDone] = useState(false);
 
   useEffect(() => {
     const updateStatus = () => setHasNetwork(navigator.onLine);
@@ -84,6 +96,29 @@ export function CorneringAssistantHUD({
       window.removeEventListener('offline', updateStatus);
     };
   }, []);
+
+  const handleDownloadOfflineMap = async () => {
+    if (!currentLat || !currentLng || isDownloading) return;
+    
+    setIsDownloading(true);
+    setDownloadProgress(0);
+    setDownloadMessage('Iniciando download...');
+    
+    try {
+      // 20km radius download (Reduced from 50km as requested)
+      await offlineMapService.preDownloadArea(currentLat, currentLng, telemetryConfig?.manualDownloadRadius || 20, (progress, message) => {
+        setDownloadProgress(progress);
+        setDownloadMessage(message);
+      });
+      
+      setShowDownloadDone(true);
+      setTimeout(() => setShowDownloadDone(false), 3000);
+    } catch (e) {
+      setDownloadMessage('Erro no download. Tente novamente.');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   const reportError = async (type: string) => {
     try {
@@ -131,26 +166,80 @@ export function CorneringAssistantHUD({
   const renderPredefinedPlate = (curve: CurveData, size: 'normal' | 'small' = 'normal') => {
     const color = getSeverityBaseColor(curve.severity);
     const isNormal = size === 'normal';
-    const isLeft = curve.direction === 'left';
-    const isStraight = curve.severity === 'straight';
-    let path = "M 50 80 L 50 20";
-    let arrowHead = "M 40 30 L 50 20 L 60 30";
-    if (isStraight) { path = "M 50 85 L 50 15"; arrowHead = "M 40 30 L 50 15 L 60 30"; }
-    else if (curve.severity === 'soft') { path = isLeft ? "M 50 85 C 50 50, 45 40, 30 30" : "M 50 85 C 50 50, 55 40, 70 30"; arrowHead = isLeft ? "M 32 42 L 30 30 L 42 32" : "M 58 32 L 70 30 L 68 42"; }
-    else if (curve.severity === 'medium') { path = isLeft ? "M 50 85 C 50 50, 40 45, 20 40" : "M 50 85 C 50 50, 60 45, 80 40"; arrowHead = isLeft ? "M 25 50 L 20 40 L 30 35" : "M 70 35 L 80 40 L 75 50"; }
-    else if (curve.severity === 'hard' || curve.severity === 'hairpin') { path = isLeft ? "M 50 85 L 50 40 L 20 40" : "M 50 85 L 50 40 L 80 40"; arrowHead = isLeft ? "M 28 50 L 20 40 L 28 30" : "M 72 30 L 80 40 L 72 50"; if (curve.severity === 'hairpin') { path = isLeft ? "M 50 85 L 50 30 C 50 15, 20 15, 20 30 L 20 60" : "M 50 85 L 50 30 C 50 15, 80 15, 80 30 L 80 60"; arrowHead = isLeft ? "M 12 52 L 20 60 L 28 52" : "M 72 52 L 80 60 L 88 52"; } }
+    
+    // Dynamic Path Generation based on actual points
+    const generateRealisticPath = () => {
+      if (!curve.points || curve.points.length < 2) return { path: "M 50 80 L 50 20", arrowHead: "M 40 30 L 50 20 L 60 30" };
+      
+      const pts = curve.points.slice(0, 20); // Focus on the main part of the curve
+      const p0 = pts[0];
+      const p1 = pts[1];
+      
+      // Calculate entry angle to rotate everything so entry is from bottom (pointing up)
+      const entryAngle = Math.atan2(p1.lat - p0.lat, p1.lng - p0.lng);
+      const rotation = -entryAngle + Math.PI / 2;
+      
+      const rotatedPts = pts.map(p => {
+        const dx = p.lng - p0.lng;
+        const dy = p.lat - p0.lat;
+        const rx = dx * Math.cos(rotation) - dy * Math.sin(rotation);
+        const ry = dx * Math.sin(rotation) + dy * Math.cos(rotation);
+        return { x: rx, y: -ry }; // SVG y is inverted
+      });
+
+      // Find bounds to scale
+      let minX = 0, maxX = 0, minY = 0, maxY = 0;
+      rotatedPts.forEach((p, idx) => {
+        if (idx === 0) { minX = p.x; maxX = p.x; minY = p.y; maxY = p.y; }
+        else {
+          minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+          minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+        }
+      });
+
+      const width = maxX - minX || 0.001;
+      const height = maxY - minY || 0.001;
+      const padding = 25; // Increase padding to ensure arrow head is visible
+      const scale = Math.min((100 - padding * 2) / width, (100 - padding * 2) / height, 5000);
+
+      // Offset and scale points to fit 100x100 box, perfectly centered
+      const finalPts = rotatedPts.map(p => ({
+        x: 50 + (p.x - (minX + maxX) / 2) * scale,
+        y: 50 + (p.y - (minY + maxY) / 2) * scale
+      }));
+
+      let pathStr = `M ${finalPts[0].x} ${finalPts[0].y}`;
+      for (let i = 1; i < finalPts.length; i++) {
+        pathStr += ` L ${finalPts[i].x} ${finalPts[i].y}`;
+      }
+
+      // Arrowhead at the end
+      const last = finalPts[finalPts.length - 1];
+      const prev = finalPts[finalPts.length - 2];
+      const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
+      const headLen = isNormal ? 15 : 10;
+      const h1x = last.x - headLen * Math.cos(angle - 0.5);
+      const h1y = last.y - headLen * Math.sin(angle - 0.5);
+      const h2x = last.x - headLen * Math.cos(angle + 0.5);
+      const h2y = last.y - headLen * Math.sin(angle + 0.5);
+      const arrowHeadStr = `M ${h1x} ${h1y} L ${last.x} ${last.y} L ${h2x} ${h2y}`;
+
+      return { path: pathStr, arrowHead: arrowHeadStr };
+    };
+
+    const { path, arrowHead } = generateRealisticPath();
     
     return (
-      <div className={`relative ${isNormal ? 'w-56 h-56' : 'w-24 h-24'} flex items-center justify-center`}>
-         <motion.div animate={{ backgroundColor: color }} className={`absolute ${isNormal ? 'w-48 h-48 border-4' : 'w-20 h-20 border-2'} border-white/20 rounded-[2.5rem] shadow-2xl rotate-45`} />
-         <svg viewBox="0 0 100 100" className={`${isNormal ? 'w-32 h-32' : 'w-14 h-14'} relative z-10`}>
-            <motion.path d={path} fill="none" stroke="#fff" strokeWidth="12" strokeLinecap="round" animate={{ pathLength: 1 }} />
-            <motion.path d={arrowHead} fill="none" stroke="#fff" strokeWidth="12" strokeLinecap="round" />
+      <div className={`relative ${isNormal ? 'w-64 h-64' : 'w-24 h-24'} flex items-center justify-center`}>
+         <motion.div animate={{ backgroundColor: color }} className={`absolute ${isNormal ? 'w-56 h-56 border-[6px]' : 'w-20 h-20 border-2'} border-white/20 rounded-[3rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] rotate-45`} />
+         <svg viewBox="0 0 100 100" className={`${isNormal ? 'w-40 h-40' : 'w-16 h-16'} relative z-10`}>
+            <motion.path d={path} fill="none" stroke="#fff" strokeWidth={isNormal ? "16" : "12"} strokeLinecap="round" strokeLinejoin="round" animate={{ pathLength: 1 }} />
+            <motion.path d={arrowHead} fill="none" stroke="#fff" strokeWidth={isNormal ? "16" : "12"} strokeLinecap="round" strokeLinejoin="round" />
          </svg>
          {isNormal && curve.slope !== undefined && Math.abs(curve.slope) > 1 && (
-            <div className="absolute top-4 right-4 flex items-center gap-1 bg-black/40 px-2 py-1 rounded-full border border-white/10">
-               {curve.isUphill ? <ArrowUpRight className="w-3 h-3 text-emerald-400" /> : <ArrowDownRight className="w-3 h-3 text-red-400" />}
-               <span className="text-[8px] font-black text-white">{Math.abs(curve.slope)}%</span>
+            <div className="absolute top-4 right-4 flex items-center gap-1 bg-black/60 px-3 py-1.5 rounded-full border border-white/10">
+               {curve.isUphill ? <ArrowUpRight className="w-4 h-4 text-emerald-400" /> : <ArrowDownRight className="w-4 h-4 text-red-400" />}
+               <span className="text-xs font-black text-white">{Math.abs(curve.slope)}%</span>
             </div>
          )}
       </div>
@@ -160,6 +249,107 @@ export function CorneringAssistantHUD({
   return (
     <div className={`fixed inset-0 z-[200] flex flex-col font-display overflow-hidden transition-all duration-700 ${isMirrored ? 'scale-x-[-1]' : ''} bg-zinc-950`}>
       
+      {/* Safety Lock Overlay */}
+      <AnimatePresence>
+        {upcomingNodes.length === 0 && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[1000] bg-zinc-950 flex flex-col items-center justify-center p-8 text-center"
+          >
+            <div className="relative mb-12">
+              <motion.div 
+                animate={{ rotate: 360 }}
+                transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
+                className="w-32 h-32 border-t-2 border-r-2 border-brand-primary rounded-full"
+              />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Zap className="w-10 h-10 text-brand-primary animate-pulse" />
+              </div>
+            </div>
+            
+            <h2 className="text-2xl font-black italic text-white uppercase tracking-tighter mb-4">
+              Calibrando Segurança
+            </h2>
+            
+            <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.3em] max-w-xs leading-relaxed">
+              {hasNetwork 
+                ? "Sincronizando geometria da via e dados de altitude para garantir precisão absoluta..."
+                : "Aguardando conexão com a internet para baixar os dados da região."}
+            </p>
+
+            {!hasNetwork && (
+              <div className="mt-8 flex items-center gap-3 bg-red-500/10 border border-red-500/20 px-6 py-3 rounded-2xl text-red-500">
+                <CloudOff className="w-5 h-5" />
+                <span className="text-[10px] font-black uppercase">Modo Offline sem Cache</span>
+              </div>
+            )}
+
+            <div className="mt-12 flex flex-col items-center gap-6 w-full max-w-xs">
+               {isDownloading ? (
+                 <div className="w-full space-y-3">
+                   <div className="flex justify-between items-center">
+                     <span className="text-[10px] font-black text-brand-primary uppercase tracking-widest">{downloadMessage}</span>
+                     <span className="text-[10px] font-black text-white">{downloadProgress}%</span>
+                   </div>
+                   <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                     <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${downloadProgress}%` }}
+                        className="h-full bg-brand-primary"
+                     />
+                   </div>
+                 </div>
+               ) : (
+                 <button 
+                   onClick={handleDownloadOfflineMap}
+                   className="w-full py-4 bg-brand-primary/10 border border-brand-primary/30 rounded-2xl flex items-center justify-center gap-3 hover:bg-brand-primary/20 transition-all"
+                 >
+                   <CloudDownload className="w-5 h-5 text-brand-primary" />
+                   <span className="text-[10px] font-black text-white uppercase tracking-widest">Baixar Região Offline (20km)</span>
+                 </button>
+               )}
+               
+               <button onClick={onBack} className="text-zinc-600 text-[10px] font-black uppercase underline tracking-widest">Cancelar e Voltar</button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Download Overlay */}
+      <AnimatePresence>
+        {isDownloading && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed inset-x-0 top-0 z-[500] p-4 flex flex-col items-center pointer-events-none"
+          >
+            <div className="w-full max-w-sm bg-zinc-900/90 backdrop-blur-xl border border-white/10 p-4 rounded-2xl shadow-2xl space-y-3 pointer-events-auto">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <CloudDownload className="w-5 h-5 text-cyan-400 animate-pulse" />
+                  <span className="text-[10px] font-black text-white uppercase tracking-widest">{downloadMessage}</span>
+                </div>
+                <span className="text-xs font-black text-cyan-400 italic">{downloadProgress}%</span>
+              </div>
+              <div className="h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5">
+                <motion.div animate={{ width: `${downloadProgress}%` }} className="h-full bg-cyan-400 shadow-[0_0_10px_#22d3ee]" />
+              </div>
+            </div>
+          </motion.div>
+        )}
+        {showDownloadDone && (
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="fixed inset-x-0 top-10 flex justify-center z-[500] pointer-events-none">
+            <div className="bg-emerald-500 text-white px-6 py-3 rounded-full flex items-center gap-3 shadow-2xl border border-white/20">
+              <CheckCircle2 className="w-5 h-5" />
+              <span className="text-xs font-black uppercase tracking-widest">Mapas Offline Carregados!</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Mini Plate (Next-Next Curve) */}
       <AnimatePresence>
         {posteriorCurve && (
@@ -169,9 +359,12 @@ export function CorneringAssistantHUD({
             exit={{ opacity: 0, x: -20 }}
             className="absolute left-6 top-32 z-[60] flex flex-col items-center gap-1"
           >
-            <div className="text-[7px] font-black text-white/40 uppercase tracking-[0.3em] mb-1">PRÓXIMA</div>
+            <div className="text-[7px] font-black text-white/40 uppercase tracking-[0.3em] mb-1">DEPOIS</div>
             {renderPredefinedPlate(posteriorCurve, 'small')}
-            <div className="text-[10px] font-black text-white italic mt-1">{posteriorCurve.distance}m</div>
+            <div className="flex flex-col items-center mt-1">
+              <span className="text-[9px] font-black text-white italic leading-none">{posteriorCurve.distance}m</span>
+              <span className="text-[5px] font-bold text-zinc-600 uppercase tracking-widest mt-0.5">Pós-Curva 1</span>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -185,7 +378,20 @@ export function CorneringAssistantHUD({
         <div className="flex items-center gap-2">
           <button onClick={() => setShowFeedback(true)} className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400"><AlertTriangle className="w-5 h-5" /></button>
           <button onClick={() => setIsMuted(!isMuted)} className={`p-3 rounded-xl border ${isMuted ? 'bg-zinc-900 border-white/5 text-zinc-600' : 'bg-cyan-500/20 border-cyan-500 text-cyan-400'}`}>{isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}</button>
-          <div className={`${hasNetwork ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20'} px-3 py-1.5 rounded-xl flex items-center gap-2`}><SignalHigh className={`w-3 h-3 ${hasNetwork ? 'text-emerald-500' : 'text-red-500'}`} /><span className={`text-[8px] font-black ${hasNetwork ? 'text-emerald-400' : 'text-red-400'} uppercase`}>{hasNetwork ? 'DADOS ATIVOS' : 'OFFLINE'}</span></div>
+          
+          <div className="flex items-center">
+            {hasNetwork && (
+              <button 
+                onClick={handleDownloadOfflineMap} 
+                className="p-3 mr-2 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-cyan-400 hover:bg-cyan-500/30 transition-colors"
+                title="Pré-baixar Mapas"
+              >
+                <Download className="w-5 h-5" />
+              </button>
+            )}
+            <div className={`${hasNetwork ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-red-500/10 border-red-500/20'} px-3 py-1.5 rounded-xl flex items-center gap-2`}><SignalHigh className={`w-3 h-3 ${hasNetwork ? 'text-emerald-500' : 'text-red-500'}`} /><span className={`text-[8px] font-black ${hasNetwork ? 'text-emerald-400' : 'text-red-400'} uppercase`}>{hasNetwork ? 'DADOS ATIVOS' : 'MODO OFFLINE'}</span></div>
+          </div>
+          
           <button onClick={() => setIsMirrored(!isMirrored)} className={`p-3 rounded-xl border ${isMirrored ? 'bg-brand-primary/20 border-brand-primary text-brand-primary' : 'bg-white/5 border-white/10 text-zinc-400'}`}>{isMirrored ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}</button>
         </div>
       </div>
@@ -268,6 +474,9 @@ export function CorneringAssistantHUD({
                         {allRegionalWays.map((way, idx) => (
                            <polyline key={idx} points={way.map(n => `${50 + (n.lng - cLng) * mapScale},${50 - (n.lat - cLat) * mapScale}`).join(' ')} fill="none" stroke="#ffffff" strokeWidth="1.5" strokeOpacity="0.08" strokeLinecap="round" />
                         ))}
+                        {trailNodes.length > 0 && (
+                           <polyline points={trailNodes.map(n => `${50 + (n.lng - cLng) * mapScale},${50 - (n.lat - cLat) * mapScale}`).join(' ')} fill="none" stroke="#ef4444" strokeWidth="8" strokeOpacity="1.0" strokeLinecap="round" strokeLinejoin="round" />
+                        )}
                         {upcomingNodes.length > 0 && (
                           <motion.polyline points={upcomingNodes.map(n => `${50 + (n.lng - cLng) * mapScale},${50 - (n.lat - cLat) * mapScale}`).join(' ')} fill="none" stroke={isRouteMode ? "#22c55e" : "#ef4444"} strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
                         )}

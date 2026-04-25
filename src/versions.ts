@@ -1,3 +1,3 @@
-export const APP_VERSION = 'v2.0.6-TEST';
-export const APP_DATE = '2026-04-23';
-export const VERSION_NOTES = 'Otimização agressiva para Multimídias (Chrome 61+), Polyfills extras e manual chunking.';
+export const APP_VERSION = 'v2.2.3-ELITE';
+export const APP_DATE = '2026-04-24';
+export const VERSION_NOTES = 'Otimização Extrema (Chrome 49+), Sincronização GPS 50Hz, Estabilização 3s e Anti-Queima.';

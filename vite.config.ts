@@ -11,8 +11,9 @@ export default defineConfig(({mode}) => {
       react(), 
       tailwindcss(),
       legacy({
-        targets: ['chrome >= 61'],
-        additionalLegacyPolyfills: ['regenerator-runtime/runtime'],
+        targets: ['chrome >= 49', 'android >= 4.4', 'last 2 versions', 'not dead'],
+        additionalLegacyPolyfills: ['regenerator-runtime/runtime', 'core-js/stable'],
+        renderLegacyChunks: true,
         modernPolyfills: true
       })
     ],

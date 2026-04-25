@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { curveService, RoadNode, CurveData } from '../services/CurveAnalysisService';
+import { curveService } from '../services/CurveAnalysisService';
 import { fetchRoutePoints } from '../services/googleMapsService';
 import { sensorFusion, IMUData } from '../services/SensorFusionService';
-import { TelemetryConfig } from '../types';
+import { TelemetryConfig, RoadNode, CurveData } from '../types';
+import { offlineMapService } from '../services/OfflineMapService';
 
 interface UseCorneringAssistant {
   nextCurve: CurveData | null;
@@ -17,6 +18,7 @@ interface UseCorneringAssistant {
   currentRoadName: string | null;
   snappedLocation: RoadNode | null;
   smoothLocation: {lat: number, lng: number, heading: number} | null;
+  trailNodes: RoadNode[];
   imu: IMUData | null;
 }
 
@@ -40,8 +42,15 @@ export function useCorneringAssistant(
   const [snappedLocation, setSnappedLocation] = useState<RoadNode | null>(null);
   const [smoothLocation, setSmoothLocation] = useState<{lat: number, lng: number, heading: number} | null>(null);
   const [imu, setImu] = useState<IMUData | null>(null);
+  const [trailNodes, setTrailNodes] = useState<RoadNode[]>([]);
+  const preCalculatedRef = useRef<CurveData[]>([]);
   
   const lastFetchRef = useRef<{ lat: number, lng: number, heading: number } | null>(null);
+  const watchdogRef = useRef({
+    lastDistance: -1,
+    lastChangeTime: Date.now(),
+    frozenCount: 0
+  });
   const extrapolationRef = useRef<{
     lastLat: number;
     lastLng: number;
@@ -58,6 +67,10 @@ export function useCorneringAssistant(
         mediumThreshold: telemetryConfig.curveMediumThreshold,
         hardThreshold: telemetryConfig.curveHardThreshold,
         cacheRadius: telemetryConfig.regionalCacheRadius
+      });
+      offlineMapService.updateConfig({
+        calibrationRadius: telemetryConfig.calibrationRadius || 5000,
+        manualDownloadRadius: telemetryConfig.manualDownloadRadius || 20
       });
     }
   }, [telemetryConfig]);
@@ -101,7 +114,7 @@ export function useCorneringAssistant(
     if (distToLast > 30 || headingDiff > 30) {
       const updateGeometry = async () => {
         if (upcomingNodes.length === 0) setIsLoading(true);
-        const { nodes, roadName, allWays } = await curveService.getRoadGeometry(lat, lng, heading, speedKmh);
+        const { nodes, roadName, allWays, preCalculatedCurves } = await curveService.getRoadGeometry(lat, lng, heading, speedKmh);
         
         if (nodes.length > 0) {
           setUpcomingNodes(nodes);
@@ -109,9 +122,15 @@ export function useCorneringAssistant(
           setCurrentRoadName(roadName);
           setIsRouteMode(false);
           lastFetchRef.current = { lat, lng, heading: heading || 0 };
+          preCalculatedRef.current = preCalculatedCurves || [];
           
           // Background: Fetch elevation for key points
           fetchElevation(nodes.slice(0, 500));
+
+          // Intelligent Pre-loading for the path ahead
+          if (heading !== null) {
+            offlineMapService.smartPreload(lat, lng, heading, speedKmh);
+          }
         }
         setIsLoading(false);
       };
@@ -178,10 +197,83 @@ export function useCorneringAssistant(
     const targetLng = smoothLocation?.lng || lng;
     
     if (!upcomingNodes.length || targetLat === null || targetLng === null) return;
+
+    // Strategy: If we have pre-calculated curves, we just need to update their distances
+    // from the current position. If not, we run the heavy analysis.
+    let foundCurves: CurveData[] = [];
     
-    const foundCurves = curveService.findUpcomingCurves(targetLat, targetLng, heading, upcomingNodes, lookAheadDistance, speedKmh);
+    if (preCalculatedRef.current.length > 0) {
+      // Find current position in nodes
+      let closest = 0, minDist = Infinity;
+      upcomingNodes.forEach((n, idx) => {
+        const d = curveService.haversineDistance(targetLat, targetLng, n.lat, n.lng);
+        if (d < minDist) { minDist = d; closest = idx; }
+      });
+
+      foundCurves = preCalculatedRef.current
+        .map(c => {
+          // Calculate path distance from current closest node to the curve start
+          let pDist = 0;
+          let foundTarget = false;
+          for (let i = closest; i < upcomingNodes.length - 1; i++) {
+            const n1 = upcomingNodes[i], n2 = upcomingNodes[i+1];
+            pDist += curveService.haversineDistance(n1.lat, n1.lng, n2.lat, n2.lng);
+            if (n2.lat === c.points[0].lat && n2.lng === c.points[0].lng) {
+              foundTarget = true;
+              break;
+            }
+          }
+          return {
+            ...c,
+            distance: foundTarget ? Math.round(pDist) : Math.round(curveService.haversineDistance(targetLat, targetLng, c.points[0].lat, c.points[0].lng))
+          };
+        })
+        .filter(c => c.distance > -50 && c.distance < lookAheadDistance)
+        .sort((a, b) => a.distance - b.distance);
+    }
+    
+    if (foundCurves.length === 0) {
+      foundCurves = curveService.findUpcomingCurves(targetLat, targetLng, heading, upcomingNodes, lookAheadDistance, speedKmh);
+    }
+    
     setCurves(foundCurves);
-    setSnappedLocation(curveService.snapToRoad(targetLat, targetLng));
+    const snapped = curveService.snapToRoad(targetLat, targetLng);
+    setSnappedLocation(snapped);
+
+    // Watchdog: Anti-Freeze System
+    if (speedKmh > 10 && foundCurves.length > 0) {
+      const currentDist = foundCurves[0].distance;
+      const now = Date.now();
+      
+      if (currentDist === watchdogRef.current.lastDistance) {
+        const timeFrozen = (now - watchdogRef.current.lastChangeTime) / 1000;
+        if (timeFrozen > 7) { // 7 seconds frozen while moving > 10km/h
+          console.warn('Cornering Assistant frozen detected. Forcing reset...');
+          lastFetchRef.current = null; // Force geometry refresh
+          curveService.clearCache();
+          watchdogRef.current.lastChangeTime = now; // Reset timer to avoid infinite loop
+          // Optionally clear upcoming nodes to trigger a full re-fetch
+          setUpcomingNodes([]);
+        }
+      } else {
+        watchdogRef.current.lastDistance = currentDist;
+        watchdogRef.current.lastChangeTime = now;
+      }
+    }
+
+    // Trail Logic: Add snapped point to trail if it's far enough from last point
+    if (snapped) {
+      setTrailNodes(prev => {
+        if (prev.length === 0) return [snapped];
+        const last = prev[prev.length - 1];
+        const dist = curveService.haversineDistance(snapped.lat, snapped.lng, last.lat, last.lng);
+        if (dist > 10) { // Add every 10 meters
+           // Keep trail manageable (e.g., last 500 points)
+           return [...prev, snapped].slice(-500);
+        }
+        return prev;
+      });
+    }
   }, [lat, lng, heading, upcomingNodes, lookAheadDistance, speedKmh, smoothLocation]);
 
   return { 
@@ -197,6 +289,7 @@ export function useCorneringAssistant(
     currentRoadName,
     snappedLocation,
     smoothLocation,
+    trailNodes,
     imu
   };
 }

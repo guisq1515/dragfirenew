@@ -2912,12 +2912,12 @@ function VehicleSettings({
         allowEditing: false,
         resultType: CameraResultType.DataUrl,
         source: CameraSource.Photos,
-        width: 800,
-        height: 800
+        width: 1024,
+        height: 1024
       });
 
       if (!photo.dataUrl) throw new Error('Cà¢mera nà£o retornou os dados da imagem.');
-      await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'PHOTO_DATA_RECEIVED', details: { format: photo.format, size_est: photo.dataUrl.length } });
+      logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'PHOTO_DATA_RECEIVED', details: { format: photo.format, size_est: photo.dataUrl.length } });
       
       setUploadStatus('[S2] Preparando Foto...');
       const fileName = `main_${Date.now()}.jpg`;
@@ -2939,47 +2939,43 @@ function VehicleSettings({
       
       setUploadProgress(40);
       setUploadStatus('[S4] Iniciando Transferência...');
-      await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'STORAGE_UPLOAD_START_STRING', details: { path, format: photo.format } });
+      logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'STORAGE_UPLOAD_START_STRING', details: { path, format: photo.format } });
       
-      const uploadTask = uploadBytesResumable(storageRef, byteArray, { contentType: 'image/jpeg' });
+      const uploadTask = uploadString(storageRef, photo.dataUrl, 'data_url', { contentType: 'image/jpeg' });
       
       return new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {
-          uploadTask.cancel();
+          // Note: uploadString task doesn't have cancel() in the same way as resumable, 
+          // but we can reject the promise. 
           reject(new Error('Tempo limite excedido (120s). Verifique sua conexão.'));
         }, 120000);
 
-        uploadTask.on('state_changed',
-          (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            setUploadProgress(40 + (progress * 0.55));
-            setUploadStatus(`Enviando... ${Math.round(progress)}%`);
-          },
-          async (error) => {
-            clearTimeout(timeout);
-            console.error('Upload error:', error);
-            reject(error);
-          },
-          async () => {
-            clearTimeout(timeout);
-            setUploadStatus('[S5] Finalizando...');
-            setUploadProgress(95);
-            try {
-              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-              setFormData({ ...formData, photoURL: downloadURL });
-              setUploadStatus('Sucesso!');
-              setUploadProgress(100);
-              setTimeout(() => {
-                setIsUploading(false);
-                setUploadProgress(0);
-                setUploadStatus('');
-                resolve();
-              }, 1000);
-            } catch (err: any) {
-              reject(err);
-            }
+        // For uploadString, it's a promise, but we can't easily track progress unless we use resumable.
+        // If we want progress AND stability, we use uploadBytesResumable but with a Blob from fetch.
+        // HOWEVER, the user is stuck at 0% with resumable. Let's try direct upload first.
+        
+        uploadTask.then(async (snapshot) => {
+          clearTimeout(timeout);
+          setUploadStatus('[S5] Finalizando...');
+          setUploadProgress(95);
+          try {
+            const downloadURL = await getDownloadURL(snapshot.ref);
+            setFormData({ ...formData, photoURL: downloadURL });
+            setUploadStatus('Sucesso!');
+            setUploadProgress(100);
+            setTimeout(() => {
+              setIsUploading(false);
+              setUploadProgress(0);
+              setUploadStatus('');
+              resolve();
+            }, 1000);
+          } catch (err: any) {
+            reject(err);
           }
-        );
+        }).catch((error) => {
+          clearTimeout(timeout);
+          reject(error);
+        });
       });
     } catch (error: any) {
       console.error('Photo Error:', error);
@@ -3053,43 +3049,42 @@ function VehicleSettings({
         
         setUploadStatus('[S4] Enviando...');
         setUploadProgress(40);
+        logRemote({ uid: auth.currentUser!.uid, level: 'info', message: 'EXTRA_UPLOAD_START', details: { path } });
         
-        const uploadTask = uploadBytesResumable(storageRef, byteArray, { contentType: 'image/jpeg' });
+        const uploadTask = uploadString(storageRef, photo.dataUrl, 'data_url', { contentType: 'image/jpeg' });
         
         return new Promise<void>((resolve, reject) => {
-          uploadTask.on('state_changed',
-            (snapshot) => {
-              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-              setUploadProgress(40 + (progress * 0.55));
-              setUploadStatus(`Enviando Extra... ${Math.round(progress)}%`);
-            },
-            async (error) => {
-              console.error('Extra upload error:', error);
-              await logRemote({ uid: auth.currentUser!.uid, level: 'error', message: 'UPLOAD_EXTRA_ERROR_TASK', details: { code: error.code, message: error.message } });
-              reject(error);
-            },
-            async () => {
-              setUploadStatus('Finalizando...');
-              setUploadProgress(95);
-              
-              const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-              setFormData({
-                ...formData,
-                photoURLs: [...currentPhotos, downloadURL]
-              });
-              
-              await logRemote({ uid: auth.currentUser!.uid, level: 'info', message: 'EXTRA_UPLOAD_SUCCESS', details: { url: downloadURL } });
-              
-              setUploadStatus('Sucesso!');
-              setUploadProgress(100);
-              setTimeout(() => {
-                setIsUploading(false);
-                setUploadProgress(0);
-                setUploadStatus('');
-                resolve();
-              }, 1000);
-            }
-          );
+          const timeout = setTimeout(() => {
+            reject(new Error('Tempo limite excedido (120s).'));
+          }, 120000);
+
+          uploadTask.then(async (snapshot) => {
+            clearTimeout(timeout);
+            setUploadStatus('Finalizando...');
+            setUploadProgress(95);
+            
+            const downloadURL = await getDownloadURL(snapshot.ref);
+            setFormData({
+              ...formData,
+              photoURLs: [...currentPhotos, downloadURL]
+            });
+            
+            logRemote({ uid: auth.currentUser!.uid, level: 'info', message: 'EXTRA_UPLOAD_SUCCESS', details: { url: downloadURL } });
+            
+            setUploadStatus('Sucesso!');
+            setUploadProgress(100);
+            setTimeout(() => {
+              setIsUploading(false);
+              setUploadProgress(0);
+              setUploadStatus('');
+              resolve();
+            }, 1000);
+          }).catch(async (error) => {
+            clearTimeout(timeout);
+            console.error('Extra upload error:', error);
+            logRemote({ uid: auth.currentUser!.uid, level: 'error', message: 'UPLOAD_EXTRA_ERROR_TASK', details: { code: error.code, message: error.message } });
+            reject(error);
+          });
         });
       } else if (e) {
         const file = e.target.files?.[0];
@@ -4259,6 +4254,8 @@ interface TimerProps {
   requestPermission: () => void;
   setScreen: (screen: Screen) => void;
   handleAcceptChallenge: (c: Challenge) => void;
+  isSettling: boolean;
+  settlingCountdown: number;
 }
 
 function TimerClassic(props: TimerProps) {
@@ -4268,7 +4265,7 @@ function TimerClassic(props: TimerProps) {
     gForce, gpsStatus, accuracy, vehicles, runVehicleId, isQuickSwitchOpen,
     useRollout, error, setIsQuickSwitchOpen, setRunVehicleId, setUseRollout,
     reset, handleBack, handleStart, manualStart, manualStop, handleDuel,
-    requestPermission, setScreen, handleAcceptChallenge
+    requestPermission, setScreen, handleAcceptChallenge, isSettling, settlingCountdown
   } = props;
 
   return (
@@ -4760,7 +4757,7 @@ function TimerElite(props: TimerProps) {
     gForce, gpsStatus, accuracy, vehicles, runVehicleId, isQuickSwitchOpen,
     useRollout, error, setIsQuickSwitchOpen, setRunVehicleId, setUseRollout,
     reset, handleBack, handleStart, manualStart, manualStop, handleDuel,
-    requestPermission, setScreen, handleAcceptChallenge
+    requestPermission, setScreen, handleAcceptChallenge, isSettling, settlingCountdown
   } = props;
 
   const activeVehicle = vehicles.find(v => v.id === runVehicleId);
@@ -4937,24 +4934,24 @@ function TimerElite(props: TimerProps) {
                 {!isRunning ? (
                   <div className="mt-8 min-h-[100px] flex flex-col items-center justify-center">
                       <AnimatePresence mode="wait">
-                        {isWaiting ? (
-                          <motion.div 
-                            key="classic-waiting"
-                            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-                            className="flex flex-col items-center gap-3 text-center"
-                          >
-                            <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-500 ${isReady ? 'bg-brand-secondary shadow-[0_0_30px_rgba(34,197,94,0.6)]' : 'bg-zinc-900 border border-white/5 animate-pulse'}`}>
-                               {isReady ? <Play className="w-6 h-6 text-white fill-current" /> : <Clock className="w-6 h-6 text-zinc-600" />}
-                            </div>
-                            <div>
-                               <h4 className={`text-xl font-display font-black italic uppercase tracking-tighter transition-colors duration-500 ${isReady ? 'text-brand-secondary' : 'text-zinc-600'}`}>
-                                  {isReady ? 'SINAL VERDE: ARRANQUE!' : 'AGUARDANDO PARADA...'}
-                               </h4>
-                               <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-[0.2em] mt-0.5">
-                                  {isReady ? 'O cronà´metro iniciará ao detectar movimento' : 'O teste comeà§a com o carro parado'}
-                                </p>
-                            </div>
-                          </motion.div>
+                         {isWaiting ? (
+                           <motion.div 
+                             key="classic-waiting"
+                             initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                             className="flex flex-col items-center gap-3 text-center"
+                           >
+                             <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-500 ${isReady ? 'bg-brand-secondary shadow-[0_0_30px_rgba(34,197,94,0.6)]' : isSettling ? 'bg-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.4)]' : 'bg-zinc-900 border border-white/5 animate-pulse'}`}>
+                                {isReady ? <Play className="w-6 h-6 text-white fill-current" /> : isSettling ? <Clock className="w-6 h-6 text-white animate-spin" /> : <Clock className="w-6 h-6 text-zinc-600" />}
+                             </div>
+                             <div>
+                                <h4 className={`text-xl font-display font-black italic uppercase tracking-tighter transition-colors duration-500 ${isReady ? 'text-brand-secondary' : isSettling ? 'text-yellow-500' : 'text-zinc-600'}`}>
+                                   {isReady ? 'SINAL VERDE: ARRANQUE!' : isSettling ? `ESTABILIZANDO... ${settlingCountdown.toFixed(1)}s` : 'AGUARDANDO PARADA...'}
+                                </h4>
+                                <p className="text-[8px] text-zinc-500 font-bold uppercase tracking-[0.2em] mt-0.5">
+                                   {isReady ? 'O cronà´metro iniciará ao detectar movimento' : isSettling ? 'Não se mova enquanto o GPS estabiliza' : 'O teste comeà§a com o carro parado'}
+                                 </p>
+                             </div>
+                           </motion.div>
                         ) : (
                           <motion.div 
                             key="classic-setup"
@@ -5267,7 +5264,9 @@ export default function App() {
     setGpsSource,
     currentLat,
     currentLng,
-    currentHeading
+    currentHeading,
+    isSettling,
+    settlingCountdown
   } = usePerformanceTimer(telemetryConfig);
 
 
@@ -5411,6 +5410,7 @@ export default function App() {
     currentRoadName,
     snappedLocation,
     smoothLocation,
+    trailNodes,
     imu
   } = useCorneringAssistant(
     currentLat, 
@@ -7027,6 +7027,8 @@ export default function App() {
               currentRoadName={currentRoadName}
               snappedLocation={snappedLocation}
               smoothLocation={smoothLocation}
+              trailNodes={trailNodes}
+              telemetryConfig={telemetryConfig}
               isLoading={isLoading}
               allRegionalWays={allRegionalWays}
               imu={imu}
@@ -7263,6 +7265,8 @@ export default function App() {
                 requestPermission={requestPermission}
                 setScreen={setScreen}
                 handleAcceptChallenge={handleAcceptChallenge}
+                isSettling={isSettling}
+                settlingCountdown={settlingCountdown}
               />
             ) : (
               <TimerClassic 
@@ -7299,6 +7303,8 @@ export default function App() {
                 requestPermission={requestPermission}
                 setScreen={setScreen}
                 handleAcceptChallenge={handleAcceptChallenge}
+                isSettling={isSettling}
+                settlingCountdown={settlingCountdown}
               />
             )}
            </>

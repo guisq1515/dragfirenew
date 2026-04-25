@@ -502,37 +502,69 @@ export const fetchRoutePoints = async (
 };
 
 /**
+ * Fallback to Open-Meteo Elevation API (Free, no key needed)
+ */
+export const fetchElevationFallback = async (
+  points: { lat: number, lng: number }[]
+): Promise<{ elevation: number, location: { lat: number, lng: number } }[]> => {
+  try {
+    const lats = points.map(p => p.lat).join(',');
+    const lons = points.map(p => p.lng).join(',');
+    const url = `https://api.open-meteo.com/v1/elevation?latitude=${lats}&longitude=${lons}`;
+    
+    const response = await CapacitorHttp.get({ url });
+    const data = response.data;
+
+    if (data && data.elevation) {
+      return data.elevation.map((elev: number, i: number) => ({
+        elevation: elev,
+        location: { lat: points[i].lat, lng: points[i].lng }
+      }));
+    }
+    return [];
+  } catch (error) {
+    console.error('Error in fetchElevationFallback:', error);
+    return [];
+  }
+};
+
+/**
  * Fetches elevation data for multiple coordinates from Google Maps API
+ * with automatic fallback to Open-Meteo if Google fails or limit is reached.
  */
 export const fetchElevationPoints = async (
   points: { lat: number, lng: number }[],
   userId?: string,
   isGuest = false
 ): Promise<{ elevation: number, location: { lat: number, lng: number } }[]> => {
-  if (!GOOGLE_MAPS_API_KEY || points.length === 0) return [];
+  if (points.length === 0) return [];
 
-  // SAFETY CHECK
-  const guard = await checkAPILimits(userId, isGuest);
-  if (!guard.allowed) return [];
+  // 1. Try Google Maps First (Higher Precision)
+  if (GOOGLE_MAPS_API_KEY) {
+    const guard = await checkAPILimits(userId, isGuest);
+    if (guard.allowed) {
+      try {
+        const locations = points.map(p => `${p.lat},${p.lng}`).join('|');
+        const url = `${API_BASE}/maps/api/elevation/json?locations=${locations}&key=${GOOGLE_MAPS_API_KEY}`;
+        
+        const response = await CapacitorHttp.get({ url });
+        const data = response.data;
 
-  try {
-    const locations = points.map(p => `${p.lat},${p.lng}`).join('|');
-    const url = `${API_BASE}/maps/api/elevation/json?locations=${locations}&key=${GOOGLE_MAPS_API_KEY}`;
-    
-    const response = await CapacitorHttp.get({ url });
-    const data = response.data;
-
-    if (data.status === 'OK' && data.results) {
-      logGoogleAPIUsage('elevation_search');
-      return data.results.map((r: any) => ({
-        elevation: r.elevation,
-        location: { lat: r.location.lat, lng: r.location.lng }
-      }));
+        if (data.status === 'OK' && data.results) {
+          logGoogleAPIUsage('elevation_search');
+          return data.results.map((r: any) => ({
+            elevation: r.elevation,
+            location: { lat: r.location.lat, lng: r.location.lng }
+          }));
+        }
+      } catch (error) {
+        console.warn('Google Elevation failed, trying fallback...', error);
+      }
     }
-    return [];
-  } catch (error) {
-    console.error('Error in fetchElevationPoints:', error);
-    return [];
   }
+
+  // 2. Fallback to Open-Meteo (Always available, no limits)
+  console.log('Using Open-Meteo fallback for elevation...');
+  return fetchElevationFallback(points);
 };
 

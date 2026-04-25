@@ -1,36 +1,6 @@
 import { CapacitorHttp } from '@capacitor/core';
-
-export interface RoadNode {
-  lat: number;
-  lng: number;
-  elevation?: number;
-}
-
-export interface CurveData {
-  angle: number;
-  severity: 'soft' | 'medium' | 'hard' | 'hairpin' | 'straight' | 'chicane' | 's-curve';
-  distance: number;
-  direction: 'left' | 'right' | 'straight' | 'both';
-  points: RoadNode[];
-  slope?: number;
-  isUphill?: boolean;
-}
-
-export interface WayData {
-  id: number;
-  nodes: number[];
-  tags: any;
-  points: RoadNode[];
-}
-
-export interface TopologicalRegion {
-  lat: number;
-  lng: number;
-  radius: number;
-  ways: WayData[];
-  nodesMap: Record<number, RoadNode>;
-  timestamp: number;
-}
+import { RoadNode, WayData, CurveData, TopologicalRegion } from '../types';
+import { offlineMapService } from './OfflineMapService';
 
 class CurveAnalysisService {
   private regions: TopologicalRegion[] = [];
@@ -45,9 +15,7 @@ class CurveAnalysisService {
   private hardThreshold = 90;
   private cacheRadius = 7500;
 
-  constructor() {
-    this.loadCachedRegions();
-  }
+  constructor() {}
 
   public updateConfig(config: { 
     detectionThreshold?: number, 
@@ -61,25 +29,26 @@ class CurveAnalysisService {
     if (config.cacheRadius !== undefined) this.cacheRadius = config.cacheRadius;
   }
 
-  private async loadCachedRegions() {
-    try {
-      const cached = localStorage.getItem('dragfire_road_cache_v2');
-      if (cached) {
-        this.regions = JSON.parse(cached);
-      }
-    } catch (e) {}
-  }
-
-  private saveRegions() {
-    try {
-      const toSave = this.regions.slice(0, 10);
-      localStorage.setItem('dragfire_road_cache_v2', JSON.stringify(toSave));
-    } catch (e) {}
-  }
-
-  async getRoadGeometry(lat: number, lng: number, heading: number | null = null, speedKmh: number = 0): Promise<{ nodes: RoadNode[], roadName: string | null, allWays: RoadNode[][] }> {
+  async getRoadGeometry(lat: number, lng: number, heading: number | null = null, speedKmh: number = 0): Promise<{ 
+    nodes: RoadNode[], 
+    roadName: string | null, 
+    allWays: RoadNode[][],
+    preCalculatedCurves?: CurveData[]
+  }> {
+    // 1. Check in-memory cache
     let activeRegion = this.regions.find(r => this.haversineDistance(lat, lng, r.lat, r.lng) < 5000);
 
+    // 2. Check OfflineMapService (IndexedDB)
+    if (!activeRegion) {
+      const offline = await offlineMapService.getRegion(lat, lng);
+      if (offline) {
+        activeRegion = offline;
+        // Also add to in-memory for faster access
+        this.regions = [offline, ...this.regions].slice(0, 5);
+      }
+    }
+
+    // 3. Trigger background fetch if needed
     if (!activeRegion || (Date.now() - activeRegion.timestamp > 86400000)) {
       this.fetchRegionInBackground(lat, lng);
     }
@@ -97,7 +66,7 @@ class CurveAnalysisService {
 
   private async fetchRegionInBackground(lat: number, lng: number) {
     try {
-      const radius = this.cacheRadius;
+      const radius = 5000; // Reduced from 7500 for faster calibration
       const overpassQuery = `
         [out:json][timeout:25];
         (
@@ -116,33 +85,47 @@ class CurveAnalysisService {
 
       if (response.status === 200 && response.data.elements) {
         const nodesMap: Record<number, RoadNode> = {};
-        response.data.elements.forEach((el: any) => {
+        const elements = response.data.elements;
+        
+        elements.forEach((el: any) => {
           if (el.type === 'node') {
             nodesMap[el.id] = { lat: el.lat, lng: el.lon };
           }
         });
 
-        const ways: WayData[] = response.data.elements
+        const ways: WayData[] = elements
           .filter((el: any) => el.type === 'way')
-          .map((el: any) => ({
-            id: el.id,
-            nodes: el.nodes,
-            tags: el.tags,
-            points: el.nodes.map((id: number) => nodesMap[id]).filter(Boolean)
-          }));
+          .map((el: any) => {
+            const points = el.nodes.map((id: number) => nodesMap[id]).filter(Boolean);
+            // Pre-calculate curves in the background
+            const curves = this.findUpcomingCurves(points[0]?.lat || 0, points[0]?.lng || 0, null, points, 10000);
+            return {
+              id: el.id,
+              nodes: el.nodes,
+              tags: el.tags,
+              points,
+              curves
+            };
+          });
 
         const newRegion: TopologicalRegion = {
           lat, lng, radius, ways, nodesMap,
           timestamp: Date.now()
         };
 
-        this.regions = [newRegion, ...this.regions.filter(r => this.haversineDistance(lat, lng, r.lat, r.lng) > 5000)].slice(0, 10);
-        this.saveRegions();
+        this.regions = [newRegion, ...this.regions.filter(r => this.haversineDistance(lat, lng, r.lat, r.lng) > 5000)].slice(0, 5);
+        
+        // Save to persistent storage
+        await offlineMapService.saveRegion(newRegion);
       }
     } catch (e) {}
   }
 
-  private stitchLocalRoad(lat: number, lng: number, heading: number | null, speedKmh: number, region: TopologicalRegion): { nodes: RoadNode[], roadName: string | null } {
+  private stitchLocalRoad(lat: number, lng: number, heading: number | null, speedKmh: number, region: TopologicalRegion): { 
+    nodes: RoadNode[], 
+    roadName: string | null,
+    preCalculatedCurves?: CurveData[]
+  } {
     const { ways, nodesMap } = region;
     let bestWay: WayData | null = null;
     let minScore = Infinity;
@@ -194,7 +177,11 @@ class CurveAnalysisService {
     }
 
     this.activeNodes = orderedNodes.map(id => nodesMap[id]).filter(Boolean);
-    return { nodes: this.activeNodes, roadName: this.activeRoadName };
+    return { 
+      nodes: this.activeNodes, 
+      roadName: this.activeRoadName,
+      preCalculatedCurves: bestWay.curves 
+    };
   }
 
   snapToRoad(lat: number, lng: number): RoadNode {
@@ -285,16 +272,25 @@ class CurveAnalysisService {
         found.push({
           angle: Math.round(absAngle),
           severity: type,
-          distance: Math.round(scan * 0.9),
+          distance: Math.round(scan),
+          pathDistance: Math.round(scan),
           direction: cumAngle > 0 ? 'right' : 'left',
           points: nodes.slice(i, j + 1),
           slope: Math.round(slope),
           isUphill: slope > 1.5
         });
-        i = j + 2;
-      } else i++;
+        i = j; // Move exactly to where the curve ended
+      } else {
+        i++;
+      }
     }
     return found;
+  }
+
+  public clearCache() {
+    this.regions = [];
+    this.activeRoadName = null;
+    this.activeWayId = null;
   }
 }
 

@@ -77,9 +77,13 @@ export function usePerformanceTimer(
   const wheelSpinDetectedRef = useRef(false);
 
   const [isReady, setIsReady] = useState(false);
+  const [isSettling, setIsSettling] = useState(false);
+  const [settlingCountdown, setSettlingCountdown] = useState(0);
   const isReadyRef = useRef(false);
+  const isSettlingRef = useRef(false);
   const isWaitingRef = useRef(false);
   const isRunningRef = useRef(false);
+  const settlingTimerRef = useRef<number | null>(null);
 
   const distanceRef = useRef(0);
   const lastGpsSpeedRef = useRef(0);
@@ -106,26 +110,35 @@ export function usePerformanceTimer(
     let slopeCorrectedTime = finalTime; 
     let seaLevelTime = finalTime;
 
-    if (pointsRef.current.length >= 2) {
+    if (pointsRef.current.length >= 3) {
       const start = pointsRef.current[0];
+      const mid = pointsRef.current[Math.floor(pointsRef.current.length / 2)];
       const end = pointsRef.current[pointsRef.current.length - 1];
       
       try {
         const elevations = await fetchElevationPoints(
-          [{ lat: start.latitude, lng: start.longitude }, { lat: end.latitude, lng: end.longitude }],
+          [
+            { lat: start.latitude, lng: start.longitude }, 
+            { lat: mid.latitude, lng: mid.longitude },
+            { lat: end.latitude, lng: end.longitude }
+          ],
           userId,
           isGuest
         );
-
-        if (elevations.length === 2) {
+        
+        // Use 3 points to ensure we capture the profile even if it's undulating
+        if (elevations.length >= 2) {
           const startElev = elevations[0].elevation;
-          const endElev = elevations[1].elevation;
+          const endElev = elevations[elevations.length - 1].elevation;
           const elevationChange = endElev - startElev;
+          
+          // Calculate Net Slope
           slope = (elevationChange / distanceRef.current) * 100;
           isValidSlope = slope >= -1.0;
           verifiedDistance = Math.sqrt(Math.pow(distanceRef.current, 2) + Math.pow(elevationChange, 2));
           slopeCorrectedTime = finalTime / (1 + (slope * 0.015));
         } else {
+          // Fallback to GPS altitude if APIs fail
           if (start.altitude !== null && end.altitude !== null) {
             const elevationChange = end.altitude - start.altitude;
             slope = (elevationChange / distanceRef.current) * 100;
@@ -332,17 +345,38 @@ export function usePerformanceTimer(
                 const now = Date.now();
                 const dt = (now - lastTick) / 1000;
                 lastTick = now;
-                if (startTimeRef.current) setElapsedTime((now - startTimeRef.current) / 1000);
                 
-                // --- LINEAR FUSION (Legacy Fallback) ---
+                if (startTimeRef.current) {
+                  setElapsedTime((now - startTimeRef.current) / 1000);
+                  
+                  // --- HIGH-PRECISION DISTANCE INTEGRATION (Dead Reckoning) ---
+                  // Distance = Speed * dt + 0.5 * Accel * dt^2
+                  const currentSpeedMs = (kalmanRef.current?.x || (currentSpeed / 3.6));
+                  const accel = linearAccelRef.current;
+                  const deltaD = (currentSpeedMs * dt) + (0.5 * accel * dt * dt);
+                  
+                  if (deltaD > 0) {
+                    distanceRef.current += deltaD;
+                    setDistance(distanceRef.current);
+                    
+                    // Anticipatory Finish Detection (Check between GPS updates)
+                    const config = configRef.current;
+                    if (config?.mode === 'distance' && distanceRef.current >= config.target) {
+                      const finalTime = (now - (startTimeRef.current || now)) / 1000;
+                      stopRun(finalTime);
+                    }
+                  }
+                }
+                
+                // --- LINEAR FUSION (Legacy Fallback for Speed) ---
                 if (telemetryConfig?.fusionAlgorithm !== 'kalman') {
                   if (isRunningRef.current && linearAccelRef.current > 0.1 && (now - (startTimeRef.current || now)) > 300) {
                     setCurrentSpeed(prev => {
-                      const deltaV = (linearAccelRef.current * 0.02) * 3.6;
+                      const deltaV = (linearAccelRef.current * dt) * 3.6;
                       const dampenedDeltaV = deltaV * 0.2;
                       const newSpeed = prev + dampenedDeltaV;
-                      const maxAllowed = lastGpsSpeedRef.current + 5;
-                      const minAllowed = Math.max(0, lastGpsSpeedRef.current - 5);
+                      const maxAllowed = lastGpsSpeedRef.current + 10;
+                      const minAllowed = Math.max(0, lastGpsSpeedRef.current - 10);
                       return Math.min(maxAllowed, Math.max(minAllowed, newSpeed));
                     });
                   }
@@ -359,9 +393,19 @@ export function usePerformanceTimer(
             setGpsStatus('active');
             const { latitude, longitude, speed, accuracy, altitude, heading: systemHeading } = position.coords;
             let calculatedSpeed = speed;
-            if (calculatedSpeed === null && lastPointRef.current) {
-              const d = calculateDistance(lastPointRef.current, { latitude, longitude } as any), t = (position.timestamp - lastPointRef.current.timestamp) / 1000;
-              if (t > 0) calculatedSpeed = d / t;
+            
+            // Xiaomi/Android Fallback: If system reports 0 or null but we moved, calculate from distance
+            if ((calculatedSpeed === null || calculatedSpeed <= 0.05) && lastPointRef.current) {
+              const d = calculateDistance(lastPointRef.current, { latitude, longitude } as any);
+              const t = (position.timestamp - lastPointRef.current.timestamp) / 1000;
+              
+              if (t > 0 && t < 3) { // Only fallback if update is frequent enough
+                const speedFromDist = d / t;
+                // If moved more than 1.5m and calculated speed is > 2km/h, trust the calculation
+                if (d > 1.5 && speedFromDist > 0.5) {
+                  calculatedSpeed = speedFromDist;
+                }
+              }
             }
             
             const currentPoint: GPSPoint = { latitude, longitude, altitude: altitude, speed: calculatedSpeed || 0, accuracy: accuracy, timestamp: position.timestamp, gLong: gLongRef.current, gLat: gLatRef.current };
@@ -413,28 +457,39 @@ export function usePerformanceTimer(
               }
             }
 
-            // --- SPEED FUSION UPDATE ---
+            // --- SPEED FUSION UPDATE WITH IMU ASSISTANCE ---
+            const isStationaryIMU = linearAccelRef.current < 0.02 && currentRotationRef.current.alpha < 2 && currentRotationRef.current.beta < 2 && currentRotationRef.current.gamma < 2;
+            
             if (telemetryConfig?.fusionAlgorithm === 'kalman' && kalmanRef.current) {
-               kalmanRef.current.update(calculatedSpeed || 0);
+               let z = calculatedSpeed || 0;
+               // If IMU says stationary and GPS is low, force zero to kill jitter
+               if (isStationaryIMU && z < 2.22) z = 0; // 2.22 m/s = 8 km/h
+               
+               kalmanRef.current.update(z);
                setCurrentSpeed(kalmanRef.current.x * 3.6);
             } else {
               setCurrentSpeed(prev => {
-                if (calculatedSpeed === null) return speedKmh;
+                let s = speedKmh;
+                if (isStationaryIMU && s < 8) s = 0;
+                
+                if (calculatedSpeed === null) return s;
                 const gpsWeight = telemetryConfig?.fusionGpsWeight ?? 0.95;
-                if (speedKmh < 0.5) return 0;
-                if (Math.abs(prev - speedKmh) > 20) return speedKmh; 
-                return (prev * (1 - gpsWeight)) + (speedKmh * gpsWeight);
+                if (s < 0.5) return 0;
+                if (Math.abs(prev - s) > 20) return s; 
+                return (prev * (1 - gpsWeight)) + (s * gpsWeight);
               });
             }
             
-            lastGpsSpeedRef.current = speedKmh;
+            // Local shadowed speed for logic below
+            const effectiveSpeedKmh = isStationaryIMU && speedKmh < 8 ? 0 : speedKmh;
+            lastGpsSpeedRef.current = effectiveSpeedKmh;
 
             const config = configRef.current;
             if (!config) { lastPointRef.current = currentPoint; return; }
 
             if (isRunningRef.current) {
               let p = 0;
-              if (config.mode === 'speed') p = (speedKmh / config.target) * 100;
+              if (config.mode === 'speed') p = (effectiveSpeedKmh / config.target) * 100;
               else if (config.mode === 'distance') p = (distanceRef.current / config.target) * 100;
               setProgress(Math.min(100, Math.max(0, p)));
             } else setProgress(0);
@@ -453,19 +508,63 @@ export function usePerformanceTimer(
             if (isWaitingRef.current && !isRunningRef.current) {
               const isStandingStart = config.startSpeed === 0 || config.startSpeed === undefined;
               if (isStandingStart) {
-                if (speedKmh < 1.2) { lastStoppedTimestampRef.current = position.timestamp; if (!isReadyRef.current) { setIsReady(true); isReadyRef.current = true; } }
-                if (isReadyRef.current && speedKmh >= 1.8) {
-                  setIsWaiting(false); isWaitingRef.current = false; setIsRunning(true); isRunningRef.current = true;
-                  const lastStopped = lastStoppedTimestampRef.current || (position.timestamp - 500);
-                  if (config.useRollout) { rolloutStartedRef.current = true; startTimeRef.current = null; }
-                  else startTimeRef.current = lastStopped;
-                  pointsRef.current = [currentPoint]; distanceRef.current = 0; setDistance(0);
-                  if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-                  timerIntervalRef.current = window.setInterval(() => {
-                    const now = Date.now(); if (startTimeRef.current) setElapsedTime((now - startTimeRef.current) / 1000);
-                  }, 20);
+                // Vibration-Tolerant Stationary Detection
+                // Engine idle vibration usually stays below 0.15G.
+                // We use a slightly higher threshold here to avoid false jump-starts.
+                const isStationaryVibrationTolerant = linearAccelRef.current < 0.2 && currentRotationRef.current.alpha < 5 && currentRotationRef.current.beta < 5 && currentRotationRef.current.gamma < 5;
+                const isStopped = effectiveSpeedKmh < 1.2 || isStationaryVibrationTolerant;
+                
+                if (isStopped) {
+                  lastStoppedTimestampRef.current = position.timestamp;
+                  
+                  // Start settling if not already settling or ready
+                  if (!isSettlingRef.current && !isReadyRef.current) {
+                    setIsSettling(true);
+                    isSettlingRef.current = true;
+                    setSettlingCountdown(3.0);
+                    
+                    if (settlingTimerRef.current) clearInterval(settlingTimerRef.current);
+                    let timeLeft = 3.0;
+                    settlingTimerRef.current = window.setInterval(() => {
+                      timeLeft -= 0.1;
+                      setSettlingCountdown(Math.max(0, timeLeft));
+                      if (timeLeft <= 0) {
+                        if (settlingTimerRef.current) clearInterval(settlingTimerRef.current);
+                        setIsSettling(false);
+                        isSettlingRef.current = false;
+                        setIsReady(true);
+                        isReadyRef.current = true;
+                      }
+                    }, 100);
+                  }
+                } else {
+                  // If we detect REAL movement while settling: JUMP START!
+                  // Movement must be sustained or significant to trigger Jump Start
+                  const isRealMovement = effectiveSpeedKmh > 2.5 || linearAccelRef.current > 0.5;
+                  
+                  if (isSettlingRef.current && isRealMovement) {
+                    if (settlingTimerRef.current) clearInterval(settlingTimerRef.current);
+                    setIsSettling(false);
+                    isSettlingRef.current = false;
+                    setSettlingCountdown(0);
+                    setError("QUEIMA DE LARGADA: AGUARDE 3S PARADO!");
+                  }
+                  
+                  // If already ready, start the run normally (Uses motionSensitivity)
+                  if (isReadyRef.current && effectiveSpeedKmh >= 1.8) {
+                    setIsWaiting(false); isWaitingRef.current = false; setIsRunning(true); isRunningRef.current = true;
+                    const lastStopped = lastStoppedTimestampRef.current || (position.timestamp - 500);
+                    if (config.useRollout) { rolloutStartedRef.current = true; startTimeRef.current = null; }
+                    else startTimeRef.current = lastStopped;
+                    pointsRef.current = [currentPoint]; distanceRef.current = 0; setDistance(0);
+                    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+                    timerIntervalRef.current = window.setInterval(() => {
+                      const now = Date.now(); if (startTimeRef.current) setElapsedTime((now - startTimeRef.current) / 1000);
+                    }, 20);
+                  }
                 }
               } else if (speedKmh >= config.startSpeed) {
+                // Rolling start: no settling needed
                 setIsWaiting(false); isWaitingRef.current = false; setIsRunning(true); isRunningRef.current = true;
                 startTimeRef.current = position.timestamp; pointsRef.current = [currentPoint]; distanceRef.current = 0; setDistance(0);
                 if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
@@ -478,14 +577,41 @@ export function usePerformanceTimer(
             if (isRunningRef.current) {
               pointsRef.current.push(currentPoint);
               if (lastPointRef.current) {
-                const timeDelta = (currentPoint.timestamp - lastPointRef.current.timestamp) / 1000, dPos = calculateDistance(lastPointRef.current, currentPoint);
-                const avgSpeedMs = (currentPoint.speed + lastPointRef.current.speed) / 2, dSpeed = avgSpeedMs * timeDelta;
-                const d = (accuracy && accuracy < 15) ? (dSpeed * 0.9 + dPos * 0.1) : dPos;
-                const newDist = distanceRef.current + d;
-                distanceRef.current = newDist; setDistance(newDist);
-                if (rolloutStartedRef.current && !startTimeRef.current && newDist >= 0.3048) { startTimeRef.current = currentPoint.timestamp; rolloutStartedRef.current = false; }
-                if (config.mode === 'distance' && newDist >= config.target) { stopRun((currentPoint.timestamp - (startTimeRef.current || 0)) / 1000); return; }
-                if (config.mode === 'speed' && speedKmh >= config.target) { stopRun((currentPoint.timestamp - (startTimeRef.current || 0)) / 1000); return; }
+                // --- DISTANCE CALIBRATION (Sync IMU with GPS) ---
+                const dPos = calculateDistance(lastPointRef.current, currentPoint);
+                const timeDelta = (currentPoint.timestamp - lastPointRef.current.timestamp) / 1000;
+                const avgSpeedMs = (currentPoint.speed + lastPointRef.current.speed) / 2;
+                const dSpeed = avgSpeedMs * timeDelta;
+                
+                // Calculated GPS delta (fused)
+                const dGps = (accuracy && accuracy < 15) ? (dSpeed * 0.8 + dPos * 0.2) : dPos;
+                
+                // Drift Correction: We subtly nudge distanceRef towards the GPS truth
+                // We use a rolling average approach to prevent "teleporting"
+                if (dGps > 0) {
+                  const currentTotalGpsDist = calculateDistance(pointsRef.current[0], currentPoint);
+                  const drift = currentTotalGpsDist - distanceRef.current;
+                  
+                  // If accuracy is high (< 10m), trust GPS more for the nudge
+                  const correctionFactor = (accuracy && accuracy < 10) ? 0.2 : 0.05;
+                  distanceRef.current += drift * correctionFactor;
+                  setDistance(distanceRef.current);
+                }
+              }
+              
+              if (rolloutStartedRef.current && !startTimeRef.current && distanceRef.current >= 0.3048) { 
+                startTimeRef.current = currentPoint.timestamp; 
+                rolloutStartedRef.current = false; 
+              }
+              
+              const config = configRef.current;
+              if (config?.mode === 'distance' && distanceRef.current >= config.target) { 
+                stopRun((currentPoint.timestamp - (startTimeRef.current || 0)) / 1000); 
+                return; 
+              }
+              if (config?.mode === 'speed' && speedKmh >= config.target) { 
+                stopRun((currentPoint.timestamp - (startTimeRef.current || 0)) / 1000); 
+                return; 
               }
             }
             lastPointRef.current = currentPoint;
@@ -498,10 +624,13 @@ export function usePerformanceTimer(
   }, [stopRun, gpsSource, gpsRefreshKey, telemetryConfig]); 
 
   const reset = () => {
-    setIsRunning(false); isRunningRef.current = false; setIsWaiting(false); isWaitingRef.current = false; setIsReady(false); isReadyRef.current = false;
+    setIsRunning(false); isRunningRef.current = false; setIsWaiting(false); isWaitingRef.current = false; 
+    setIsReady(false); isReadyRef.current = false; setIsSettling(false); isSettlingRef.current = false;
+    setSettlingCountdown(0);
     lastStoppedTimestampRef.current = null; setDistance(0); distanceRef.current = 0; setElapsedTime(0); setProgress(0); setLastResult(null);
     setGForce(0); maxGRef.current = 0; rolloutStartedRef.current = false; configRef.current = null; activeAxisRef.current = null;
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    if (settlingTimerRef.current) clearInterval(settlingTimerRef.current);
     kalmanRef.current = null;
     wheelSpinDetectedRef.current = false;
     wheelSpinCounterRef.current = 0;
@@ -516,5 +645,11 @@ export function usePerformanceTimer(
     }, { enableHighAccuracy: true, timeout: 5000 });
   }, []);
   const refreshGPS = useCallback(() => { setGpsRefreshKey(prev => prev + 1); requestPermission(); }, [requestPermission]);
-  return { currentSpeed, distance, isRunning, isWaiting, isReady, progress, elapsedTime, gForce, lastResult, error, accuracy, gpsStatus, lastPosition, currentLat: lastPosition?.latitude ?? null, currentLng: lastPosition?.longitude ?? null, currentHeading, startRun, manualStart, manualStop, reset, setMockResult, requestPermission, refreshGPS, gpsSource, setGpsSource };
+  return { 
+    currentSpeed, distance, isRunning, isWaiting, isReady, isSettling, settlingCountdown,
+    progress, elapsedTime, gForce, lastResult, error, accuracy, gpsStatus, lastPosition, 
+    currentLat: lastPosition?.latitude ?? null, currentLng: lastPosition?.longitude ?? null, 
+    currentHeading, startRun, manualStart, manualStop, reset, setMockResult, requestPermission, 
+    refreshGPS, gpsSource, setGpsSource 
+  };
 }
