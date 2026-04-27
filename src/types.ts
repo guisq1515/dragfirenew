@@ -222,6 +222,8 @@ export interface TelemetryConfig {
   regionalCacheRadius?: number;     // Radius for topological loading in meters (default 7500)
   manualDownloadRadius?: number;    // Radius for manual area download in km (default 20)
   calibrationRadius?: number;       // Radius for initial calibration lock in meters (default 5000)
+  smartPreloadTriggerDistance?: number; // Distance in meters to trigger projection (default 2000)
+  smartPreloadProjectDistance?: number; // Distance in meters to project ahead (default 15000)
 }
 
 export interface TelemetryProfile extends TelemetryConfig {

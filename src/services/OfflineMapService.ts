@@ -10,6 +10,9 @@ const DB_VERSION = 2;
 class OfflineMapService {
   private db: IDBDatabase | null = null;
   private lastPreloadPoint: { lat: number, lng: number } | null = null;
+  private isPreloading = false;
+  private retryQueue: { lat: number, lng: number }[] = [];
+  private lastCleanupTime = 0;
   private config = {
     calibrationRadius: 20000,
     manualDownloadRadius: 40
@@ -56,8 +59,10 @@ class OfflineMapService {
     if (!this.db) return;
 
     const id = this.getGridKey(region.lat, region.lng);
+    
+    // Idea 1: Serialization/Compression by shortening keys
     const data = {
-      ...region,
+      ...this.serializeRegion(region),
       id,
       lat_grid: Math.floor(region.lat * 10) / 10,
       lng_grid: Math.floor(region.lng * 10) / 10
@@ -68,9 +73,64 @@ class OfflineMapService {
       const store = transaction.objectStore(STORE_NAME);
       const request = store.put(data);
 
+      // Idea 3: Run cleanup once per session
+      const now = Date.now();
+      if (now - this.lastCleanupTime > 86400000) {
+        this.lastCleanupTime = now;
+        this.cleanupOldRegions(store);
+      }
+
       request.onsuccess = () => resolve();
       request.onerror = (event: any) => reject(event.target.error);
     });
+  }
+
+  private serializeRegion(region: TopologicalRegion): any {
+    return {
+      la: region.lat,
+      ln: region.lng,
+      r: region.radius,
+      t: region.timestamp || Date.now(),
+      w: region.ways.map(w => ({
+        i: w.id,
+        t: w.tags,
+        p: w.points.map(p => ({ a: p.lat, g: p.lng, e: p.elevation })),
+        c: w.curves
+      })),
+      n: region.nodesMap
+    };
+  }
+
+  private deserializeRegion(data: any): TopologicalRegion {
+    if (!data.la) return data; // Already in full format
+    return {
+      lat: data.la,
+      lng: data.ln,
+      radius: data.r,
+      timestamp: data.t,
+      ways: data.w.map((w: any) => ({
+        id: w.i,
+        tags: w.t,
+        points: w.p.map((p: any) => ({ lat: p.a, lng: p.g, elevation: p.e })),
+        curves: w.c
+      })),
+      nodesMap: data.n
+    };
+  }
+
+  private async cleanupOldRegions(store: IDBObjectStore) {
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    const request = store.openCursor();
+    request.onsuccess = (event: any) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        const timestamp = cursor.value.t || cursor.value.timestamp;
+        if (timestamp < thirtyDaysAgo) {
+          cursor.delete();
+        }
+        cursor.continue();
+      }
+    };
   }
 
   async getRegion(lat: number, lng: number): Promise<TopologicalRegion | null> {
@@ -85,7 +145,8 @@ class OfflineMapService {
       const request = store.get(id);
 
       request.onsuccess = (event: any) => {
-        resolve(event.target.result || null);
+        const result = event.target.result;
+        resolve(result ? this.deserializeRegion(result) : null);
       };
       request.onerror = () => resolve(null);
     });
@@ -107,27 +168,73 @@ class OfflineMapService {
     });
   }
 
-  async smartPreload(lat: number, lng: number, heading: number, speed: number): Promise<void> {
-    if (speed < 10 || !navigator.onLine) return;
+  async smartPreload(lat: number, lng: number, heading: number, speed: number, config: { triggerDist?: number, projectDist?: number } = {}): Promise<void> {
+    if (this.isPreloading) return;
 
-    // Only preload if we moved > 5km from last preload
-    if (this.lastPreloadPoint) {
-      const dist = this.haversineDistance(lat, lng, this.lastPreloadPoint.lat, this.lastPreloadPoint.lng);
-      if (dist < 5000) return;
+    this.isPreloading = true;
+    
+    try {
+      const isHighway = speed > 70; // Proxy for being on a highway/avenue
+      
+      if (isHighway) {
+        // Super Highway Mode: Project 250km in steps of 30km
+        // Inclusion of secondary/tertiary roads (vicinais) for safety
+        console.log("Smart Preload: Super Highway Mode (250km Corridor)");
+        const steps = [30000, 60000, 90000, 120000, 150000, 180000, 210000, 250000];
+        for (const dist of steps) {
+          const p = this.calculateFuturePoint(lat, lng, heading, dist);
+          const exists = await this.getRegion(p.lat, p.lng);
+          if (!exists) {
+            if (navigator.onLine) {
+              // Now including tertiary and unclassified (vicinais)
+              await this.fetchAndStoreRegion(p.lat, p.lng, 25000, true); 
+            } else {
+              this.addToRetryQueue(p.lat, p.lng);
+            }
+          }
+        }
+      } else {
+        // Urban mode: Project 10km, including all streets
+        console.log("Smart Preload: Urban Mode (10km)");
+        const p = this.calculateFuturePoint(lat, lng, heading, 10000);
+        const exists = await this.getRegion(p.lat, p.lng);
+        if (!exists) {
+          if (navigator.onLine) {
+            await this.fetchAndStoreRegion(p.lat, p.lng, 10000, false);
+          } else {
+            this.addToRetryQueue(p.lat, p.lng);
+          }
+        }
+      }
+      
+      if (navigator.onLine) await this.processRetryQueue();
+
+    } catch (e) {
+      console.error("Smart preload failed:", e);
+    } finally {
+      this.isPreloading = false;
     }
+  }
 
-    this.lastPreloadPoint = { lat, lng };
+  private addToRetryQueue(lat: number, lng: number) {
+    // Avoid duplicates in queue
+    const exists = this.retryQueue.some(p => Math.abs(p.lat - lat) < 0.01 && Math.abs(p.lng - lng) < 0.01);
+    if (!exists) {
+      this.retryQueue.push({ lat, lng });
+      if (this.retryQueue.length > 10) this.retryQueue.shift(); // Keep queue small
+    }
+  }
 
-    // Predict points at 15km and 30km ahead
-    const pointsAhead = [
-      this.calculateFuturePoint(lat, lng, heading, 15000),
-      this.calculateFuturePoint(lat, lng, heading, 30000)
-    ];
-
-    for (const p of pointsAhead) {
-      const exists = await this.getRegion(p.lat, p.lng);
-      if (!exists) {
-        await this.fetchAndStoreRegion(p.lat, p.lng);
+  private async processRetryQueue() {
+    if (!navigator.onLine || this.retryQueue.length === 0) return;
+    
+    const next = this.retryQueue.shift();
+    if (next) {
+      try {
+        await this.fetchAndStoreRegion(next.lat, next.lng);
+      } catch (e) {
+        // Put back at end of queue
+        this.retryQueue.push(next);
       }
     }
   }
@@ -188,23 +295,60 @@ class OfflineMapService {
     onProgress?.(100, 'Download concluído!');
   }
 
-  private async fetchAndStoreRegion(lat: number, lng: number): Promise<void> {
-    const radius = this.config.calibrationRadius;
+  async preloadRoute(points: {lat: number, lng: number}[]): Promise<void> {
+    if (points.length < 2) return;
+    
+    console.log(`Preloading route with ${points.length} points...`);
+    
+    // Pick points every ~20km to cover the whole path
+    let lastP = points[0];
+    let distSum = 0;
+    const preloadPoints = [points[0]];
+    
+    for (let i = 1; i < points.length; i++) {
+      const p = points[i];
+      distSum += this.haversineDistance(lastP.lat, lastP.lng, p.lat, p.lng);
+      if (distSum > 20000) {
+        preloadPoints.push(p);
+        distSum = 0;
+      }
+      lastP = p;
+    }
+    
+    // Download these points in background
+    for (const p of preloadPoints) {
+      const exists = await this.getRegion(p.lat, p.lng);
+      if (!exists) {
+        this.fetchAndStoreRegion(p.lat, p.lng, 25000, true);
+      }
+    }
+  }
+
+  private async fetchAndStoreRegion(lat: number, lng: number, radius?: number, highwaysOnly: boolean = false): Promise<TopologicalRegion | null> {
+    const finalRadius = radius || this.config.calibrationRadius;
+    
+    // Road types filter based on mode
+    const roadFilter = highwaysOnly 
+      ? 'way["highway"~"motorway|trunk|primary|secondary|tertiary|unclassified"]'
+      : 'way["highway"~"motorway|trunk|primary|secondary|tertiary|residential|unclassified|service"]';
+
     const overpassQuery = `
       [out:json][timeout:30];
       (
-        way["highway"](around:${radius},${lat},${lng});
+        ${roadFilter}(around:${finalRadius},${lat},${lng});
       );
       out body;
       >;
       out skel qt;
     `;
 
-    const response = await CapacitorHttp.post({
-      url: 'https://overpass-api.de/api/interpreter',
-      data: overpassQuery,
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-    });
+      const response = await CapacitorHttp.post({
+        url: 'https://overpass-api.de/api/interpreter',
+        data: overpassQuery,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        connectTimeout: 10000,
+        readTimeout: 15000
+      });
 
     if (response.status === 200 && response.data.elements) {
       const nodesMap: Record<number, RoadNode> = {};
@@ -268,12 +412,13 @@ class OfflineMapService {
         });
 
       const newRegion: TopologicalRegion = {
-        lat, lng, radius, ways, nodesMap,
+        lat, lng, radius: finalRadius, ways, nodesMap,
         timestamp: Date.now()
       };
-
       await this.saveRegion(newRegion);
+      return newRegion;
     }
+    return null;
   }
 }
 

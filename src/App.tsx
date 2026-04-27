@@ -176,6 +176,62 @@ const base64ToUint8Array = (base64String: string): Uint8Array => {
   return bytes;
 };
 
+// --- LEADERBOARD MANAGEMENT (Stabilized Top 20) ---
+const updateLeaderboard = async (entry: RankingEntry | Omit<RankingEntry, 'id'>) => {
+  if (!entry.performanceScore || !entry.category) return;
+  
+  const date = new Date(entry.timestamp);
+  const monthId = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  const docId = `global_${entry.category}_${monthId}`;
+  const leaderboardRef = doc(db, 'leaderboards', docId);
+
+  try {
+    const snap = await getDoc(leaderboardRef);
+    let entries: RankingEntry[] = [];
+    
+    if (snap.exists()) {
+      entries = snap.data().entries || [];
+    }
+
+    // Identify user in the current list
+    const existingIndex = entries.findIndex(e => e.uid === entry.uid);
+    const score = entry.performanceScore || 0;
+
+    if (existingIndex !== -1) {
+      const existingScore = entries[existingIndex].performanceScore || 0;
+      if (score > existingScore) {
+        // Update to better score
+        const entryWithId = { ...entry, id: `entry_${Date.now()}` } as RankingEntry;
+        entries[existingIndex] = entryWithId;
+      } else {
+        // User already has a better or equal score in the list
+        return;
+      }
+    } else {
+      // New user for the list
+      const entryWithId = { ...entry, id: `entry_${Date.now()}` } as RankingEntry;
+      entries.push(entryWithId);
+    }
+
+    // Sort by score DESC
+    entries.sort((a, b) => (b.performanceScore || 0) - (a.performanceScore || 0));
+
+    // Slice to Top 20
+    const top20 = entries.slice(0, 20);
+
+    await setDoc(leaderboardRef, {
+      entries: top20,
+      lastUpdated: Date.now(),
+      category: entry.category,
+      month: monthId
+    }, { merge: true });
+
+    console.log(`Leaderboard ${docId} updated successfully.`);
+  } catch (error) {
+    console.error("Error updating leaderboard document:", error);
+  }
+};
+
 // --- Error Boundary ---
 class ErrorBoundary extends React.Component<any, any> {
   state = { hasError: false, errorInfo: null };
@@ -784,6 +840,7 @@ function HistoryView({
           performanceScore
         };
         await addDoc(collection(db, 'rankings'), rankingData);
+        await updateLeaderboard(rankingData);
         syncedCount++;
       }
 
@@ -1660,28 +1717,24 @@ function RegionalRanking({
 
   useEffect(() => {
     setLoading(true);
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
+    const date = new Date();
+    const monthId = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const categoryId = filter.includes('201') || filter === 'regional-201' ? '201m' : '0-100';
+    const docId = `global_${categoryId}_${monthId}`;
 
-    const q = query(
-      collection(db, 'rankings'), 
-      where('category', '==', filter.includes('201') || filter === 'regional-201' ? '201m' : '0-100'),
-      where('timestamp', '>=', startOfMonth.getTime()),
-      orderBy('performanceScore', 'desc'), 
-      limit(100)
-    );
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RankingEntry));
-      setRankings(data);
+    const unsubscribe = onSnapshot(doc(db, 'leaderboards', docId), (snapshot) => {
+      if (snapshot.exists()) {
+        setRankings(snapshot.data().entries || []);
+      } else {
+        setRankings([]);
+      }
       setLoading(false);
     }, (error) => {
-      console.error("Error fetching rankings:", error);
+      console.error("Error fetching leaderboard:", error);
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [filter]); // Re-fetch when filter changes
+  }, [filter]);
 
   const filteredRankings = useMemo(() => {
     let result = rankings;
@@ -1866,27 +1919,19 @@ function RegionalRankingElite({
 
   useEffect(() => {
     setLoading(true);
-    const mode = category === '201m' ? 'distance' : 'speed';
-    const target = category === '201m' ? 201 : 100;
+    const date = new Date();
+    const monthId = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    const docId = `global_${category}_${monthId}`;
 
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
-    const q = query(
-      collection(db, 'rankings'), 
-      where('category', '==', category),
-      where('timestamp', '>=', startOfMonth.getTime()),
-      orderBy('performanceScore', 'desc'), 
-      limit(100)
-    );
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as RankingEntry));
-      setRankings(data);
+    const unsubscribe = onSnapshot(doc(db, 'leaderboards', docId), (snapshot) => {
+      if (snapshot.exists()) {
+        setRankings(snapshot.data().entries || []);
+      } else {
+        setRankings([]);
+      }
       setLoading(false);
     }, (error) => {
-      console.error("Error fetching rankings:", error);
+      console.error("Error fetching leaderboard:", error);
       setLoading(false);
     });
     return () => unsubscribe();
@@ -6153,6 +6198,7 @@ export default function App() {
                   vehicleId: selectedVehicle?.id || undefined
                 };
               await addDoc(collection(db, 'rankings'), rankingData);
+              await updateLeaderboard(rankingData);
             }
           } catch (e) {
             console.error("Error in saveRun:", e);

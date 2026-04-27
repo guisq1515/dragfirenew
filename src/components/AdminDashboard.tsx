@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { doc, getDoc, query, collection, where, limit, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
+﻿import React, { useEffect, useState, useRef } from 'react';
+import { doc, getDoc, query, collection, where, limit, getDocs, setDoc, deleteDoc, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { 
   ChevronLeft, 
@@ -31,7 +31,8 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { UserProfile, TelemetryConfig, SystemSettings, TelemetryProfile, PowerReference } from '../types';
+import { UserProfile, TelemetryConfig, SystemSettings, TelemetryProfile, PowerReference, RankingEntry } from '../types';
+import { sensorFusion } from '../services/SensorFusionService';
 
 export function AdminDashboard({ 
   onBack,
@@ -69,13 +70,15 @@ export function AdminDashboard({
     lookAheadSpeedFactor: 5,
     lookAheadMaxDistance: 2500,
     manualDownloadRadius: 40,
-    calibrationRadius: 20000
+    calibrationRadius: 30000,
+    smartPreloadTriggerDistance: 5000,
+    smartPreloadProjectDistance: 40000
   });
   
   const [profiles, setProfiles] = useState<Record<string, TelemetryProfile>>({
     'v1.5.3-balanced': {
       id: 'v1.5.3-balanced',
-      name: 'Padrão (v1.5.3)',
+      name: 'PadrÃ£o (v1.5.3)',
       isDefault: true,
       motionSensitivity: 1.4,
       noiseFloor: 0.05,
@@ -94,7 +97,9 @@ export function AdminDashboard({
       wheelSpinDetectionEnabled: false,
       lookAheadBaseDistance: 1000,
       manualDownloadRadius: 40,
-      calibrationRadius: 20000
+      calibrationRadius: 30000,
+      smartPreloadTriggerDistance: 5000,
+      smartPreloadProjectDistance: 40000
     }
   });
   const [activeProfileId, setActiveProfileId] = useState('v1.5.3-balanced');
@@ -102,6 +107,7 @@ export function AdminDashboard({
   const [saveLoading, setSaveLoading] = useState(false);
   const [profileNameInput, setProfileNameInput] = useState('');
   const [showNewProfileModal, setShowNewProfileModal] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
   
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'settings' | 'power'>('overview');
   const [coinAmount, setCoinAmount] = useState<Record<string, number>>({});
@@ -121,6 +127,55 @@ export function AdminDashboard({
   const MONTHLY_CAP = 15000;
   const SAFETY_MARGIN = 0.70;
   const LOCK_THRESHOLD = MONTHLY_CAP * SAFETY_MARGIN;
+
+  const [stressTestData, setStressTestData] = useState<{
+    peaks: { x: number, y: number, z: number },
+    current: { x: number, y: number, z: number },
+    vibrationRMS: number
+  }>({
+    peaks: { x: 0, y: 0, z: 0 },
+    current: { x: 0, y: 0, z: 0 },
+    vibrationRMS: 0
+  });
+
+  const [isStressTestActive, setIsStressTestActive] = useState(false);
+  const vibrationBuffer = useRef<number[]>([]);
+
+  useEffect(() => {
+    if (!isStressTestActive) return;
+
+    const unsub = sensorFusion.addListener((data) => {
+      setStressTestData(prev => {
+        const nx = data.accel.x;
+        const ny = data.accel.y;
+        const nz = data.accel.z;
+
+        // Peak detection
+        const newPeaks = {
+          x: Math.max(prev.peaks.x, Math.abs(nx)),
+          y: Math.max(prev.peaks.y, Math.abs(ny)),
+          z: Math.max(prev.peaks.z, Math.abs(nz))
+        };
+
+        // RMS Vibration (Simple window)
+        const totalMag = Math.sqrt(nx*nx + ny*ny + nz*nz);
+        vibrationBuffer.current.push(totalMag);
+        if (vibrationBuffer.current.length > 50) vibrationBuffer.current.shift();
+        
+        const sumSq = vibrationBuffer.current.reduce((acc, v) => acc + v*v, 0);
+        const rms = Math.sqrt(sumSq / vibrationBuffer.current.length);
+
+        return {
+          peaks: newPeaks,
+          current: { x: nx, y: ny, z: nz },
+          vibrationRMS: rms
+        };
+      });
+    });
+
+    sensorFusion.start();
+    return () => unsub();
+  }, [isStressTestActive]);
 
   useEffect(() => {
     const fetchUsage = async () => {
@@ -160,12 +215,11 @@ export function AdminDashboard({
               setTelemetrySettings(data.profiles[data.activeProfileId]);
             }
           } else {
-            const legacyData = snapshot.data() as TelemetryConfig;
             setTelemetrySettings({
-               ...telemetrySettings,
-               ...legacyData
+               ...telemetrySettings
             });
           }
+          setHasChanges(false);
         }
       } catch (e) {
         console.error('Failed to load telemetry settings', e);
@@ -196,16 +250,30 @@ export function AdminDashboard({
         activeProfileId: activeId,
         profiles: updatedProfiles
       }, { merge: true });
-      alert('Configurações salvas e aplicadas a todos os clientes!');
+      alert('ConfiguraÃ§Ãµes salvas e aplicadas a todos os clientes!');
     } catch (e) {
       console.error('Failed to save settings', e);
-      alert('Erro ao salvar configurações');
+      alert('Erro ao salvar configuraÃ§Ãµes');
     } finally {
       setSaveLoading(false);
     }
   };
+  const saveChanges = async () => {
+    const updatedProfiles = {
+      ...profiles,
+      [activeProfileId]: {
+        ...profiles[activeProfileId],
+        ...telemetrySettings,
+        id: activeProfileId
+      }
+    };
+    setProfiles(updatedProfiles);
+    setHasChanges(false);
+    await updateGlobalSettings(updatedProfiles, activeProfileId);
+  };
 
-  const saveToCurrentProfile = async () => {
+  const activateProfile = async () => {
+    // Also save current settings to this profile when activating
     const updatedProfiles = {
       ...profiles,
       [selectedProfileId]: {
@@ -215,12 +283,9 @@ export function AdminDashboard({
       }
     };
     setProfiles(updatedProfiles);
-    await updateGlobalSettings(updatedProfiles, activeProfileId);
-  };
-
-  const activateProfile = async () => {
     setActiveProfileId(selectedProfileId);
-    await updateGlobalSettings(profiles, selectedProfileId);
+    setHasChanges(false);
+    await updateGlobalSettings(updatedProfiles, selectedProfileId);
   };
 
   const createNewProfile = async () => {
@@ -248,11 +313,11 @@ export function AdminDashboard({
 
   const deleteProfile = async (id: string) => {
     if (profiles[id].isDefault) {
-      alert('O perfil padrão não pode ser excluído.');
+      alert('O perfil padrão nÃ£o pode ser excluÃ­do.');
       return;
     }
 
-    if (!window.confirm('Excluir este perfil de configuração?')) return;
+    if (!window.confirm('Excluir este perfil de configuraÃ§Ã£o?')) return;
 
     const newProfiles = { ...profiles };
     delete newProfiles[id];
@@ -345,22 +410,65 @@ export function AdminDashboard({
       setPowerRefs([newRef, ...powerRefs]);
       setShowPowerForm(false);
       setRefFormData({ carName: '', weight: 0, time: 0, distance: 201, slope: 0, verifiedCV: 0 });
-      alert('Referência salva com sucesso!');
+      alert('ReferÃªncia salva com sucesso!');
     } catch (e) {
       console.error('Failed to save power ref', e);
-      alert('Erro ao salvar referência');
+      alert('Erro ao salvar referÃªncia');
     } finally {
       setSaveLoading(false);
     }
   };
 
   const deletePowerRef = async (id: string) => {
-    if (!window.confirm('Excluir esta referência de potência?')) return;
+    if (!window.confirm('Excluir esta referÃªncia de potÃªncia?')) return;
     try {
       await deleteDoc(doc(db, 'power_references', id));
       setPowerRefs(powerRefs.filter(r => r.id !== id));
     } catch (e) {
       console.error('Failed to delete power ref', e);
+    }
+  };
+
+  const rebuildLeaderboards = async () => {
+    if (!window.confirm('Deseja reconstruir os rankings Top 20 de todas as categorias do mÃªs atual? Isso lerÃ¡ todos os dados brutos e atualizarÃ¡ o "arquivo" de ranking.')) return;
+    setSaveLoading(true);
+    try {
+      const today = new Date();
+      const monthId = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).getTime();
+      
+      const categories: ('0-100' | '201m')[] = ['0-100', '201m'];
+      let totalProcessed = 0;
+      
+      for (const cat of categories) {
+        const q = query(
+          collection(db, 'rankings'),
+          where('category', '==', cat),
+          where('timestamp', '>=', startOfMonth),
+          orderBy('performanceScore', 'desc'),
+          limit(20)
+        );
+        
+        const snap = await getDocs(q);
+        const entries = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as RankingEntry));
+        
+        const docId = `global_${cat}_${monthId}`;
+        await setDoc(doc(db, 'leaderboards', docId), {
+          entries,
+          lastUpdated: Date.now(),
+          category: cat,
+          month: monthId
+        }, { merge: true });
+        
+        totalProcessed += entries.length;
+      }
+      
+      alert(`Rankings reconstruÃ­dos com sucesso! ${totalProcessed} entradas processadas.`);
+    } catch (e: any) {
+      console.error('Failed to rebuild rankings', e);
+      alert('Erro ao reconstruir rankings: ' + e.message);
+    } finally {
+      setSaveLoading(false);
     }
   };
 
@@ -393,9 +501,10 @@ export function AdminDashboard({
         <div className="flex bg-zinc-900/50 p-1 rounded-[22px] border border-white/5 backdrop-blur-md">
           {[
             { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
-            { id: 'users', label: 'Usuários', icon: Users },
+            { id: 'users', label: 'UsuÃ¡rios', icon: Users },
             { id: 'settings', label: 'Aux. Curvas', icon: Navigation },
-            { id: 'power', label: 'Potência', icon: Gauge }
+            { id: 'power', label: 'PotÃªncia', icon: Gauge },
+            { id: 'sensors', label: 'Sensores', icon: Radio }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -452,7 +561,7 @@ export function AdminDashboard({
                         <div className="absolute top-0 bottom-0 w-0.5 bg-red-500/50 z-10" style={{ left: `${lockPercentage}%` }} />
                         <motion.div initial={{ width: 0 }} animate={{ width: `${usagePercentage}%` }} className={`h-full rounded-full ${isLocked ? 'bg-red-600' : isDanger ? 'bg-yellow-500' : 'bg-green-500'}`} />
                       </div>
-                      <p className="text-[8px] font-black uppercase text-zinc-600 text-right tracking-[0.1em]">Segurança em 70%</p>
+                      <p className="text-[8px] font-black uppercase text-zinc-600 text-right tracking-[0.1em]">SeguranÃ§a em 70%</p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
@@ -489,7 +598,7 @@ export function AdminDashboard({
               <div className="space-y-4">
                 <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
                   <User className="w-3 h-3 text-brand-primary" />
-                  CRM & Gestão Comercial
+                  CRM & GestÃ£o Comercial
                 </h3>
 
                 <div className="relative group h-14">
@@ -527,7 +636,7 @@ export function AdminDashboard({
                             onClick={() => togglePremium(u)}
                             className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${u.isPremium ? 'bg-yellow-500 text-black' : 'bg-zinc-800 text-zinc-500'}`}
                           >
-                            {u.isPremium ? 'PREMIUM âœ…' : 'ATIVAR PRO'}
+                            {u.isPremium ? 'PREMIUM Ã¢Å“â€¦' : 'ATIVAR PRO'}
                           </button>
                         </div>
 
@@ -566,6 +675,81 @@ export function AdminDashboard({
             </motion.div>
           )}
 
+          {activeTab === 'sensors' && (
+            <motion.div
+              key="sensors"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              className="space-y-6 pt-2"
+            >
+              <div className="glass-panel p-6 rounded-3xl border border-white/5 space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-black italic text-white uppercase tracking-tighter">Teste de Stress de Sensores</h3>
+                    <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">MediÃ§Ã£o de VibraÃ§Ã£o e InterferÃªncia</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      if (isStressTestActive) {
+                        setIsStressTestActive(false);
+                      } else {
+                        setStressTestData({ peaks: { x: 0, y: 0, z: 0 }, current: { x: 0, y: 0, z: 0 }, vibrationRMS: 0 });
+                        vibrationBuffer.current = [];
+                        setIsStressTestActive(true);
+                      }
+                    }}
+                    className={`px-6 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all ${isStressTestActive ? 'bg-red-500 text-white animate-pulse' : 'bg-emerald-500 text-white'}`}
+                  >
+                    {isStressTestActive ? 'PARAR TESTE' : 'INICIAR TESTE'}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  {[
+                    { label: 'Eixo X (Lat)', val: stressTestData.current.x, peak: stressTestData.peaks.x, color: 'text-blue-400' },
+                    { label: 'Eixo Y (Long)', val: stressTestData.current.y, peak: stressTestData.peaks.y, color: 'text-emerald-400' },
+                    { label: 'Eixo Z (Vert)', val: stressTestData.current.z, peak: stressTestData.peaks.z, color: 'text-purple-400' }
+                  ].map((axis, i) => (
+                    <div key={i} className="bg-zinc-950 p-4 rounded-2xl border border-white/5 space-y-1">
+                      <p className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">{axis.label}</p>
+                      <p className={`text-xl font-display font-black italic ${axis.color}`}>{axis.val.toFixed(3)}<span className="text-[10px] ml-1">G</span></p>
+                      <div className="pt-2 border-t border-white/5">
+                        <p className="text-[7px] font-bold text-zinc-500 uppercase">Pico Detectado</p>
+                        <p className="text-xs font-black text-white">{axis.peak.toFixed(3)}G</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-zinc-900/50 p-6 rounded-2xl border border-white/10 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.2em] mb-1">Intensidade de VibraÃ§Ã£o (RMS)</p>
+                    <div className="flex items-baseline gap-2">
+                       <h4 className={`text-4xl font-display font-black italic ${stressTestData.vibrationRMS > 0.5 ? 'text-red-500' : 'text-white'}`}>
+                        {stressTestData.vibrationRMS.toFixed(4)}
+                       </h4>
+                       <span className="text-xs font-bold text-zinc-500 uppercase">G-Vib</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[8px] font-bold text-zinc-600 uppercase tracking-widest">Filtro Sugerido</p>
+                    <p className="text-xs font-black text-brand-primary uppercase">
+                      {stressTestData.vibrationRMS > 0.8 ? 'Noise Floor 0.15+' : stressTestData.vibrationRMS > 0.4 ? 'Noise Floor 0.08' : 'PadrÃ£o 0.05'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-2xl flex gap-4">
+                  <Info className="w-5 h-5 text-blue-400 shrink-0" />
+                  <p className="text-[9px] font-medium text-zinc-400 leading-relaxed uppercase">
+                    Use este teste em carros com muita vibraÃ§Ã£o mecÃ¢nica ou escapamento direto. Se o RMS ficar acima de <span className="text-white">0.5000</span>, recomenda-se aumentar o <span className="text-white">Noise Floor</span> nas configuraÃ§Ãµes do Auxiliar de Curvas para evitar detecÃ§Ã£o de movimento falso.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           {activeTab === 'settings' && (
             <motion.div 
               key="settings"
@@ -577,7 +761,7 @@ export function AdminDashboard({
               <div className="space-y-4">
                 <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
                   <Navigation className="w-3 h-3 text-cyan-500" />
-                  Configurações Aux. Curvas
+                  ConfiguraÃ§Ãµes Aux. Curvas
                 </h3>
 
                 <div className="glass-panel p-6 rounded-[34px] border border-white/5 bg-zinc-900/40 space-y-6">
@@ -607,39 +791,51 @@ export function AdminDashboard({
                        <div className="space-y-3 bg-brand-primary/5 p-4 rounded-2xl border border-brand-primary/10">
                          <div className="flex justify-between items-center mb-2">
                             <label className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
-                              <Activity className="w-3 h-3 text-brand-primary" /> Algoritmo de Fusão
+                              <Activity className="w-3 h-3 text-brand-primary" /> Algoritmo de FusÃ£o
                             </label>
                             <div className="flex bg-zinc-950 p-1 rounded-lg border border-white/5">
                               <button 
-                                onClick={() => setTelemetrySettings({...telemetrySettings, fusionAlgorithm: "linear"})}
+                                onClick={() => {
+                                  setTelemetrySettings({...telemetrySettings, fusionAlgorithm: "linear"});
+                                  setHasChanges(true);
+                                }}
                                 className={`px-3 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${telemetrySettings.fusionAlgorithm === "linear" ? "bg-zinc-800 text-white" : "text-zinc-600"}`}
                               >
                                 Linear
                               </button>
                               <button 
-                                onClick={() => setTelemetrySettings({...telemetrySettings, fusionAlgorithm: "kalman"})}
+                                onClick={() => {
+                                  setTelemetrySettings({...telemetrySettings, fusionAlgorithm: "kalman"});
+                                  setHasChanges(true);
+                                }}
                                 className={`px-3 py-1.5 rounded-md text-[8px] font-black uppercase transition-all ${telemetrySettings.fusionAlgorithm === "kalman" ? "bg-brand-primary text-white" : "text-zinc-600"}`}
                               >
                                 Kalman
                               </button>
                             </div>
                          </div>
-                         <p className="text-[8px] text-zinc-500 font-medium leading-tight mb-2">Algoritmo de processamento de dados GPS + AcelerÃ´metro. Kalman é o padrão Dragy/Racebox.</p>
+                         <p className="text-[8px] text-zinc-500 font-medium leading-tight mb-2">Algoritmo de processamento de dados GPS + AcelerÃ´metro. Kalman Ã© o padrão Dragy/Racebox.</p>
                          
                          <div className="space-y-2 pt-2 border-t border-white/5">
                             <div className="flex justify-between items-center">
-                               <label className="text-[9px] font-bold text-zinc-400 uppercase">Correção Sea Level (DA)</label>
+                               <label className="text-[9px] font-bold text-zinc-400 uppercase">CorreÃ§Ã£o Sea Level (DA)</label>
                                <button 
-                                 onClick={() => setTelemetrySettings({...telemetrySettings, daCorrectionEnabled: !telemetrySettings.daCorrectionEnabled})}
+                                 onClick={() => {
+                                   setTelemetrySettings({...telemetrySettings, daCorrectionEnabled: !telemetrySettings.daCorrectionEnabled});
+                                   setHasChanges(true);
+                                 }}
                                  className={`w-10 h-5 rounded-full relative transition-all ${telemetrySettings.daCorrectionEnabled ? "bg-green-500" : "bg-zinc-800"}`}
                                >
                                  <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${telemetrySettings.daCorrectionEnabled ? "right-1" : "left-1"}`} />
                                </button>
                             </div>
                             <div className="flex justify-between items-center">
-                               <label className="text-[9px] font-bold text-zinc-400 uppercase">Detecção de Destracionamento</label>
+                               <label className="text-[9px] font-bold text-zinc-400 uppercase">DetecÃ§Ã£o de Destracionamento</label>
                                <button 
-                                 onClick={() => setTelemetrySettings({...telemetrySettings, wheelSpinDetectionEnabled: !telemetrySettings.wheelSpinDetectionEnabled})}
+                                 onClick={() => {
+                                   setTelemetrySettings({...telemetrySettings, wheelSpinDetectionEnabled: !telemetrySettings.wheelSpinDetectionEnabled});
+                                   setHasChanges(true);
+                                 }}
                                  className={`w-10 h-5 rounded-full relative transition-all ${telemetrySettings.wheelSpinDetectionEnabled ? "bg-green-500" : "bg-zinc-800"}`}
                                >
                                  <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${telemetrySettings.wheelSpinDetectionEnabled ? "right-1" : "left-1"}`} />
@@ -650,22 +846,22 @@ export function AdminDashboard({
                     </div>
                     <div className="space-y-6">
                        <h4 className="text-[8px] font-black text-zinc-700 uppercase tracking-widest flex items-center gap-2">
-                         <Compass className="w-3 h-3" /> Algoritmo de IA & Visão
+                         <Compass className="w-3 h-3" /> Algoritmo de IA & VisÃ£o
                        </h4>
                        
                        {[
                          { 
                            id: 'lookAheadBaseDistance', 
-                           label: 'Alcance de Detecção', 
+                           label: 'Alcance de DetecÃ§Ã£o', 
                            min: 200, max: 4000, step: 100, icon: Eye,
-                           desc: 'O que faz: Controla o quão longe a IA "enxerga" na via.',
-                           utility: 'Utilidade: Em altas velocidades, aumente para dar mais tempo de reação.'
+                           desc: 'O que faz: Controla o quÃ£o longe a IA "enxerga" na via.',
+                           utility: 'Utilidade: Em altas velocidades, aumente para dar mais tempo de reaÃ§Ã£o.'
                          },
                          { 
                            id: 'curveDetectionThreshold', 
                            label: 'Sensibilidade de Curva', 
                            min: 5, max: 45, step: 1, icon: Compass,
-                           desc: 'O que faz: Ângulo mínimo para considerar um trecho como curva.',
+                           desc: 'O que faz: Ã‚ngulo mÃ­nimo para considerar um trecho como curva.',
                            utility: 'Utilidade: Aumente se houver muitos alertas falsos em retas leves.'
                          },
                          { 
@@ -679,22 +875,36 @@ export function AdminDashboard({
                            id: 'regionalCacheRadius', 
                            label: 'Raio de Cache do Mapa', 
                            min: 1000, max: 15000, step: 500, icon: Map,
-                           desc: 'O que faz: Tamanho da área baixada para uso offline.',
+                           desc: 'O que faz: Tamanho da Ã¡rea baixada para uso offline.',
                            utility: 'Utilidade: Valores maiores garantem funcionamento sem internet por mais tempo.'
                          },
                          { 
                            id: 'manualDownloadRadius', 
                            label: 'Download Manual (km)', 
                            min: 5, max: 100, step: 5, icon: Download,
-                           desc: 'O que faz: Raio da área baixada manualmente.',
+                           desc: 'O que faz: Raio da Ã¡rea baixada manualmente.',
                            utility: 'Utilidade: 40km garante cobertura total para trajetos longos.'
                          },
                          { 
                            id: 'calibrationRadius', 
                            label: 'Raio de Calibração (m)', 
-                           min: 1000, max: 40000, step: 1000, icon: ShieldAlert,
+                           min: 1000, max: 60000, step: 1000, icon: ShieldAlert,
                            desc: 'O que faz: Raio inicial necessário para liberar o uso.',
-                           utility: 'Utilidade: 20000m (20km) é o novo padrão de segurança.'
+                           utility: 'Utilidade: 30000m (30km) garante cobertura total inicial.'
+                         },
+                         { 
+                           id: 'smartPreloadTriggerDistance', 
+                           label: 'Gatilho de Projeção (m)', 
+                           min: 500, max: 20000, step: 500, icon: Activity,
+                           desc: 'O que faz: Distância percorrida para disparar o download à frente.',
+                           utility: 'Utilidade: 5000m mantém o mapa atualizado com eficiência.'
+                         },
+                         { 
+                           id: 'smartPreloadProjectDistance', 
+                           label: 'Distância de Projeção (m)', 
+                           min: 5000, max: 100000, step: 1000, icon: Navigation,
+                           desc: 'O que faz: Quão longe a IA deve projetar e baixar o mapa.',
+                           utility: 'Utilidade: 40000m (40km) é o novo padrão ultra-seguro.'
                          }
                        ].map(field => (
                          <div key={field.id} className="space-y-3 bg-black/20 p-4 rounded-2xl border border-white/5">
@@ -727,9 +937,9 @@ export function AdminDashboard({
                        </h4>
                        {[
                          { id: 'motionSensitivity', label: 'Sensibilidade Largada (G)', min: 1.0, max: 2.5, step: 0.1, icon: Radio },
-                         { id: 'noiseFloor', label: 'Noise Floor (Ruído)', min: 0.01, max: 0.5, step: 0.01, icon: Gauge },
-                         { id: 'maxAccelG', label: 'Aceleração Máxima (CAP)', min: 1.5, max: 5.0, step: 0.1, icon: Zap },
-                         { id: 'fusionGpsWeight', label: 'Confiança GPS', min: 0.5, max: 1.0, step: 0.05, icon: Activity }
+                         { id: 'noiseFloor', label: 'Noise Floor (RuÃ­do)', min: 0.01, max: 0.5, step: 0.01, icon: Gauge },
+                         { id: 'maxAccelG', label: 'AceleraÃ§Ã£o MÃ¡xima (CAP)', min: 1.5, max: 5.0, step: 0.1, icon: Zap },
+                         { id: 'fusionGpsWeight', label: 'ConfianÃ§a GPS', min: 0.5, max: 1.0, step: 0.05, icon: Activity }
                        ].map(field => (
                          <div key={field.id} className="space-y-3">
                            <div className="flex justify-between items-center">
@@ -750,9 +960,35 @@ export function AdminDashboard({
                     </div>
                   </div>
 
+                  <div className="grid grid-cols-2 gap-4">
+                    <button 
+                      onClick={rebuildLeaderboards}
+                      disabled={saveLoading}
+                      className="p-6 bg-zinc-900 border border-white/5 rounded-3xl flex flex-col items-center justify-center gap-3 active:scale-95 transition-all group hover:border-brand-primary/30"
+                    >
+                       <div className="w-12 h-12 bg-brand-primary/10 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                          <RotateCw className={`w-6 h-6 text-brand-primary ${saveLoading ? 'animate-spin' : ''}`} />
+                       </div>
+                       <div className="text-center">
+                          <p className="text-[10px] font-black text-white uppercase tracking-widest">Reconstruir</p>
+                          <p className="text-[8px] text-zinc-500 font-bold uppercase mt-0.5">Top 20 Rankings</p>
+                       </div>
+                    </button>
+
+                    <div className="p-6 bg-zinc-900 border border-white/5 rounded-3xl flex flex-col items-center justify-center gap-3 opacity-50 cursor-not-allowed">
+                       <div className="w-12 h-12 bg-zinc-800 rounded-2xl flex items-center justify-center">
+                          <Anchor className="w-6 h-6 text-zinc-600" />
+                       </div>
+                       <div className="text-center">
+                          <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">ManutenÃ§Ã£o</p>
+                          <p className="text-[8px] text-zinc-700 font-bold uppercase mt-0.5">Servidor</p>
+                       </div>
+                    </div>
+                  </div>
+
                   <div className="pt-4 border-t border-white/5 flex gap-2">
-                    <button onClick={saveToCurrentProfile} disabled={saveLoading} className="flex-1 py-4 bg-zinc-950 border border-white/5 text-xs font-black uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2">
-                      <Save className="w-4 h-4 text-zinc-500" /> Salvar Perfil
+                    <button onClick={saveChanges} disabled={saveLoading} className={`flex-1 py-4 border rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest transition-all ${hasChanges ? "bg-zinc-900 border-yellow-500/50 text-yellow-500 shadow-lg shadow-yellow-500/10" : "bg-zinc-950 border-white/5 text-zinc-500"}`}>
+                      <Save className={`w-4 h-4 ${hasChanges ? "text-yellow-500" : "text-zinc-500"}`} /> {hasChanges ? "Salvar Pendentes" : "Perfil Salvo"}
                     </button>
                     {selectedProfileId !== activeProfileId && (
                       <button onClick={activateProfile} disabled={saveLoading} className="flex-1 py-4 bg-brand-primary text-white text-xs font-black uppercase tracking-widest rounded-2xl flex items-center justify-center gap-2">
@@ -777,7 +1013,7 @@ export function AdminDashboard({
                 <div className="flex items-center justify-between px-1">
                   <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] flex items-center gap-2">
                     <Gauge className="w-3 h-3 text-brand-primary" />
-                    Gestão de Calibração
+                    GestÃ£o de Calibração
                   </h3>
                   <button onClick={() => setShowPowerForm(!showPowerForm)} className="p-2 bg-zinc-900 rounded-lg text-brand-primary border border-brand-primary/20">
                     {showPowerForm ? <ChevronLeft className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
@@ -791,7 +1027,7 @@ export function AdminDashboard({
                       <input type="number" value={refFormData.weight || ''} onChange={e => setRefFormData({...refFormData, weight: Number(e.target.value)})} placeholder="Peso(kg)" className="bg-zinc-950 border-white/5 rounded-xl p-4 text-sm text-white" />
                       <input type="number" value={refFormData.verifiedCV || ''} onChange={e => setRefFormData({...refFormData, verifiedCV: Number(e.target.value)})} placeholder="CV Real" className="bg-zinc-950 border-white/5 rounded-xl p-4 text-sm text-white" />
                     </div>
-                    <button onClick={handleSavePowerRef} className="w-full py-4 bg-brand-primary text-white rounded-2xl font-black uppercase text-[10px]">Cadastrar Referência</button>
+                    <button onClick={handleSavePowerRef} className="w-full py-4 bg-brand-primary text-white rounded-2xl font-black uppercase text-[10px]">Cadastrar ReferÃªncia</button>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -799,12 +1035,12 @@ export function AdminDashboard({
                       <div key={ref.id} className="glass-panel p-4 rounded-[26px] border border-white/5 bg-zinc-900/40 flex items-center justify-between">
                         <div>
                           <h4 className="text-sm font-black text-white italic uppercase">{ref.carName}</h4>
-                          <p className="text-[10px] text-zinc-500 font-bold uppercase mt-1">MT: {ref.weight}kg â€¢ PW: {ref.verifiedCV} CV</p>
+                          <p className="text-[10px] text-zinc-500 font-bold uppercase mt-1">MT: {ref.weight}kg Ã¢â‚¬Â¢ PW: {ref.verifiedCV} CV</p>
                         </div>
                         <button onClick={() => deletePowerRef(ref.id)} className="p-3 text-zinc-700 hover:text-red-500 transition-colors"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     )) : (
-                      <div className="p-12 border-2 border-dashed border-white/5 rounded-[40px] text-center opacity-20">Nenhuma calibração.</div>
+                      <div className="p-12 border-2 border-dashed border-white/5 rounded-[40px] text-center opacity-20">Nenhuma calibraÃ§Ã£o.</div>
                     )}
                   </div>
                 )}
@@ -832,6 +1068,7 @@ export function AdminDashboard({
     </div>
   );
 }
+
 
 
 

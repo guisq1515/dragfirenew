@@ -131,36 +131,58 @@ class CurveAnalysisService {
     let minScore = Infinity;
 
     ways.forEach(w => {
-      let d = Infinity;
-      w.points.forEach(p => {
-        const dist = this.haversineDistance(lat, lng, p.lat, p.lng);
-        if (dist < d) d = dist;
-      });
+      let minDist = Infinity;
+      let segmentHeading = 0;
 
-      if (d < 50) {
-        let hScore = 0;
-        if (heading !== null && w.points.length >= 2) {
-           const wH = this.calculateHeading(w.points[0], w.points[w.points.length-1]);
-           let diff = Math.abs(heading - wH);
-           if (diff > 180) diff = 360 - diff;
-           hScore = diff;
+      // Find closest segment and its heading
+      for (let i = 0; i < w.points.length - 1; i++) {
+        const p1 = w.points[i];
+        const p2 = w.points[i+1];
+        const snapped = this.projectPointOnSegment({ lat, lng }, p1, p2);
+        const dist = this.haversineDistance(lat, lng, snapped.lat, snapped.lng);
+        
+        if (dist < minDist) {
+          minDist = dist;
+          segmentHeading = this.calculateHeading(p1, p2);
         }
-        const totalScore = d + hScore * 0.5;
-        if (totalScore < minScore) { minScore = totalScore; bestWay = w; }
+      }
+
+      if (minDist < 60) {
+        let hScore = 0;
+        if (heading !== null) {
+          let diff = Math.abs(heading - segmentHeading);
+          if (diff > 180) diff = 360 - diff;
+          // Reverse direction check (one-way or just driving backwards on OSM data)
+          let revDiff = Math.abs(heading - (segmentHeading + 180) % 360);
+          if (revDiff > 180) revDiff = 360 - revDiff;
+          hScore = Math.min(diff, revDiff);
+        }
+
+        // Hysteresis: Give a significant bonus to the currently active road
+        const isCurrentRoad = w.id === this.activeWayId;
+        const hysteresisBonus = isCurrentRoad ? -20 : 0; // Increased to 20 meters "advantage"
+
+        // Increased heading weight (1.2 instead of 1.0) to better handle crossroads
+        const totalScore = minDist + (hScore * 1.2) + hysteresisBonus;
+        
+        if (totalScore < minScore) {
+          minScore = totalScore;
+          bestWay = w;
+        }
       }
     });
 
     if (!bestWay) return { nodes: this.activeNodes, roadName: this.activeRoadName };
-    const roadName = bestWay.tags?.name || bestWay.tags?.ref || 'Via Mapeada';
+    const roadName = (bestWay as WayData).tags?.name || (bestWay as WayData).tags?.ref || 'Via Mapeada';
     
-    if (this.activeRoadName && roadName !== this.activeRoadName && minScore < 30) {
-    } else {
-       this.activeRoadName = roadName;
-       this.activeWayId = bestWay.id;
+    // Smooth transition: only update if the new way is significantly better or we have no current road
+    if (!this.activeWayId || minScore < 20 || (bestWay as WayData).id === this.activeWayId) {
+      this.activeRoadName = roadName;
+      this.activeWayId = (bestWay as WayData).id;
     }
 
-    let orderedNodes = [...bestWay.nodes];
-    let joinedWays = new Set([bestWay.id]);
+    let orderedNodes = [...(bestWay as WayData).nodes];
+    let joinedWays = new Set([(bestWay as WayData).id]);
     let added = true;
     while (added) {
       added = false;
@@ -180,7 +202,7 @@ class CurveAnalysisService {
     return { 
       nodes: this.activeNodes, 
       roadName: this.activeRoadName,
-      preCalculatedCurves: bestWay.curves 
+      preCalculatedCurves: (bestWay as WayData).curves 
     };
   }
 

@@ -110,7 +110,16 @@
         };
 
         window.onunhandledrejection = function(event) {
-          showError(event.reason, "Promise", 0, 0, event.reason, "Async Error");
+          var reason = event.reason || {};
+          var msg = reason.message || String(reason);
+          
+          // Ignore non-critical Firebase offline/installation errors
+          if (msg.indexOf('installations/app-offline') !== -1 || msg.indexOf('installations/request-failed') !== -1) {
+            console.warn("Ignored Firebase Installations Error (Offline):", msg);
+            return;
+          }
+
+          showError(reason, "Promise", 0, 0, reason, "Async Error");
         };
 
         // Conditional Google Maps loading with legacy support

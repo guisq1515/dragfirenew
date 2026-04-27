@@ -43,22 +43,34 @@ export function useCorneringAssistant(
   const [smoothLocation, setSmoothLocation] = useState<{lat: number, lng: number, heading: number} | null>(null);
   const [imu, setImu] = useState<IMUData | null>(null);
   const [trailNodes, setTrailNodes] = useState<RoadNode[]>([]);
-  const preCalculatedRef = useRef<CurveData[]>([]);
   
+  // Refs for smooth prediction
+  const preCalculatedRef = useRef<CurveData[]>([]);
   const lastFetchRef = useRef<{ lat: number, lng: number, heading: number } | null>(null);
+  const lastSyncTimeRef = useRef<number>(Date.now());
+  const lastSyncDistancesRef = useRef<Record<string, number>>({});
+  const speedRef = useRef<number>(speedKmh);
+  const imuRef = useRef<IMUData | null>(null);
+
   const watchdogRef = useRef({
     lastDistance: -1,
     lastChangeTime: Date.now(),
     frozenCount: 0
   });
+
   const extrapolationRef = useRef<{
     lastLat: number;
     lastLng: number;
     lastHeading: number;
-    lastSpeed: number;
     lastTime: number;
   } | null>(null);
+  const distanceSinceLastPreloadRef = useRef<number>(0);
+  const lastLatRef = useRef<number | null>(null);
+  const lastLngRef = useRef<number | null>(null);
 
+  // Keep speed and imu updated via refs for high-frequency access
+  useEffect(() => { speedRef.current = speedKmh; }, [speedKmh]);
+  
   // Sync Service Config
   useEffect(() => {
     if (telemetryConfig) {
@@ -77,7 +89,10 @@ export function useCorneringAssistant(
 
   useEffect(() => {
     sensorFusion.start();
-    const unsub = sensorFusion.addListener(data => setImu(data));
+    const unsub = sensorFusion.addListener(data => {
+      setImu(data);
+      imuRef.current = data;
+    });
     return () => {
       sensorFusion.stop();
       unsub();
@@ -101,6 +116,8 @@ export function useCorneringAssistant(
           setUpcomingNodes(points);
           setCurrentRoadName(routeName || null);
           setIsRouteMode(true);
+          // Idea 2: Pre-download the whole route path
+          offlineMapService.preloadRoute(points.map(p => ({ lat: p.lat, lng: p.lng })));
         }
         setIsLoading(false);
       };
@@ -114,7 +131,7 @@ export function useCorneringAssistant(
     if (distToLast > 30 || headingDiff > 30) {
       const updateGeometry = async () => {
         if (upcomingNodes.length === 0) setIsLoading(true);
-        const { nodes, roadName, allWays, preCalculatedCurves } = await curveService.getRoadGeometry(lat, lng, heading, speedKmh);
+        const { nodes, roadName, allWays, preCalculatedCurves } = await curveService.getRoadGeometry(lat, lng, heading, speedRef.current);
         
         if (nodes.length > 0) {
           setUpcomingNodes(nodes);
@@ -124,157 +141,191 @@ export function useCorneringAssistant(
           lastFetchRef.current = { lat, lng, heading: heading || 0 };
           preCalculatedRef.current = preCalculatedCurves || [];
           
-          // Background: Fetch elevation for key points
-          fetchElevation(nodes.slice(0, 500));
-
-          // Intelligent Pre-loading for the path ahead
           if (heading !== null) {
-            offlineMapService.smartPreload(lat, lng, heading, speedKmh);
+            offlineMapService.smartPreload(lat, lng, heading, speedRef.current);
           }
         }
         setIsLoading(false);
       };
       updateGeometry();
     }
-  }, [lat, lng, heading, speedKmh, destination]);
+  }, [lat, lng, heading, destination]);
 
-  const fetchElevation = async (nodes: RoadNode[]) => {
-    // Only fetch for a subset of points to save API quota
-    const sample = nodes.filter((_, i) => i % 10 === 0);
-    const locations = sample.map(n => `${n.lat},${n.lng}`).join('|');
-    const key = process.env.GOOGLE_MAPS_API_KEY;
-    if (!key) return;
-
-    try {
-      const resp = await fetch(`https://maps.googleapis.com/maps/api/elevation/json?locations=${locations}&key=${key}`);
-      const data = await resp.json();
-      if (data.status === 'OK') {
-        // Map back to nodes
-        const elevMap: Record<string, number> = {};
-        data.results.forEach((r: any) => {
-           elevMap[`${r.location.lat.toFixed(5)},${r.location.lng.toFixed(5)}`] = r.elevation;
-        });
-        
-        setUpcomingNodes(prev => prev.map(n => ({
-          ...n,
-          elevation: elevMap[`${n.lat.toFixed(5)},${n.lng.toFixed(5)}`] || n.elevation
-        })));
-      }
-    } catch (e) {}
-  };
-
-  // Dead Reckoning & GPS Sync
+  // High-Frequency Extrapolation (Dead Reckoning)
   useEffect(() => {
     const interval = setInterval(() => {
-      if (!extrapolationRef.current || speedKmh < 5) return;
       const now = Date.now();
-      const dt = (now - extrapolationRef.current.lastTime) / 1000;
-      if (dt > 0.05 && dt < 2.0) {
-        const speedMs = (speedKmh / 3.6);
-        const distance = speedMs * dt;
-        const R = 6371000;
-        const brng = (extrapolationRef.current.lastHeading * Math.PI) / 180;
-        const lat1 = (extrapolationRef.current.lastLat * Math.PI) / 180;
-        const lon1 = (extrapolationRef.current.lastLng * Math.PI) / 180;
-        const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distance / R) + Math.cos(lat1) * Math.sin(distance / R) * Math.cos(brng));
-        const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(distance / R) * Math.cos(lat1), Math.cos(distance / R) - Math.sin(lat1) * Math.sin(lat2));
-        setSmoothLocation({ lat: (lat2 * 180) / Math.PI, lng: (lon2 * 180) / Math.PI, heading: extrapolationRef.current.lastHeading });
+      const dt = (now - lastSyncTimeRef.current) / 1000;
+      if (dt <= 0) return;
+
+      // Calculate travel distance since last GPS sync
+      // Use acceleration if available for better prediction
+      const accelLong = imuRef.current?.accelLong || 0;
+      const currentSpeedMs = (speedRef.current / 3.6);
+      const predictedSpeedMs = currentSpeedMs + (accelLong * 9.8 * dt); // v = v0 + at
+      const travelDist = predictedSpeedMs * dt;
+
+      // Update curves distance smoothly
+      setCurves(prev => prev.map(c => {
+        const syncDist = lastSyncDistancesRef.current[c.id] ?? c.distance;
+        const newDist = Math.max(0, Math.round(syncDist - travelDist));
+        
+        // Prevent distance from "jumping up" during extrapolation
+        if (newDist > c.distance + 2) return c; 
+        return { ...c, distance: newDist };
+      }).filter(c => c.distance > 5)); // Tight removal filter
+
+      // Also extrapolate GPS position for minimap smoothness
+      if (extrapolationRef.current && speedRef.current > 5) {
+        const GPS_dt = (now - extrapolationRef.current.lastTime) / 1000;
+        if (GPS_dt < 2.0) {
+          const dist = predictedSpeedMs * GPS_dt;
+          const R = 6371000;
+          const brng = (extrapolationRef.current.lastHeading * Math.PI) / 180;
+          const lat1 = (extrapolationRef.current.lastLat * Math.PI) / 180;
+          const lon1 = (extrapolationRef.current.lastLng * Math.PI) / 180;
+          const lat2 = Math.asin(Math.sin(lat1) * Math.cos(dist / R) + Math.cos(lat1) * Math.sin(dist / R) * Math.cos(brng));
+          const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(dist / R) * Math.cos(lat1), Math.cos(dist / R) - Math.sin(lat1) * Math.sin(lat2));
+          setSmoothLocation({ lat: (lat2 * 180) / Math.PI, lng: (lon2 * 180) / Math.PI, heading: extrapolationRef.current.lastHeading });
+        }
       }
     }, 50);
     return () => clearInterval(interval);
-  }, [speedKmh]);
+  }, []);
 
+  // GPS Sync Trigger
   useEffect(() => {
     if (lat !== null && lng !== null) {
-      extrapolationRef.current = { lastLat: lat, lastLng: lng, lastHeading: heading || extrapolationRef.current?.lastHeading || 0, lastSpeed: speedKmh, lastTime: Date.now() };
+      extrapolationRef.current = { lastLat: lat, lastLng: lng, lastHeading: heading || extrapolationRef.current?.lastHeading || 0, lastTime: Date.now() };
       setSmoothLocation({ lat, lng, heading: heading || 0 });
-    }
-  }, [lat, lng, heading, speedKmh]);
-
-  // Curve Analysis
-  useEffect(() => {
-    const targetLat = smoothLocation?.lat || lat;
-    const targetLng = smoothLocation?.lng || lng;
-    
-    if (!upcomingNodes.length || targetLat === null || targetLng === null) return;
-
-    // Strategy: If we have pre-calculated curves, we just need to update their distances
-    // from the current position. If not, we run the heavy analysis.
-    let foundCurves: CurveData[] = [];
-    
-    if (preCalculatedRef.current.length > 0) {
-      // Find current position in nodes
-      let closest = 0, minDist = Infinity;
-      upcomingNodes.forEach((n, idx) => {
-        const d = curveService.haversineDistance(targetLat, targetLng, n.lat, n.lng);
-        if (d < minDist) { minDist = d; closest = idx; }
-      });
-
-      foundCurves = preCalculatedRef.current
-        .map(c => {
-          // Calculate path distance from current closest node to the curve start
-          let pDist = 0;
-          let foundTarget = false;
-          for (let i = closest; i < upcomingNodes.length - 1; i++) {
-            const n1 = upcomingNodes[i], n2 = upcomingNodes[i+1];
-            pDist += curveService.haversineDistance(n1.lat, n1.lng, n2.lat, n2.lng);
-            if (n2.lat === c.points[0].lat && n2.lng === c.points[0].lng) {
-              foundTarget = true;
-              break;
-            }
-          }
-          return {
-            ...c,
-            distance: foundTarget ? Math.round(pDist) : Math.round(curveService.haversineDistance(targetLat, targetLng, c.points[0].lat, c.points[0].lng))
-          };
-        })
-        .filter(c => c.distance > -50 && c.distance < lookAheadDistance)
-        .sort((a, b) => a.distance - b.distance);
-    }
-    
-    if (foundCurves.length === 0) {
-      foundCurves = curveService.findUpcomingCurves(targetLat, targetLng, heading, upcomingNodes, lookAheadDistance, speedKmh);
-    }
-    
-    setCurves(foundCurves);
-    const snapped = curveService.snapToRoad(targetLat, targetLng);
-    setSnappedLocation(snapped);
-
-    // Watchdog: Anti-Freeze System
-    if (speedKmh > 10 && foundCurves.length > 0) {
-      const currentDist = foundCurves[0].distance;
-      const now = Date.now();
       
-      if (currentDist === watchdogRef.current.lastDistance) {
-        const timeFrozen = (now - watchdogRef.current.lastChangeTime) / 1000;
-        if (timeFrozen > 7) { // 7 seconds frozen while moving > 10km/h
-          console.warn('Cornering Assistant frozen detected. Forcing reset...');
-          lastFetchRef.current = null; // Force geometry refresh
-          curveService.clearCache();
-          watchdogRef.current.lastChangeTime = now; // Reset timer to avoid infinite loop
-          // Optionally clear upcoming nodes to trigger a full re-fetch
-          setUpcomingNodes([]);
-        }
-      } else {
-        watchdogRef.current.lastDistance = currentDist;
-        watchdogRef.current.lastChangeTime = now;
-      }
-    }
+      // Perform path-based distance calculation (Heavy sync)
+      if (upcomingNodes.length > 0) {
+        let foundCurves: CurveData[] = [];
+        let closest = 0, minDist = Infinity;
+        
+        upcomingNodes.forEach((n, idx) => {
+          const d = curveService.haversineDistance(lat, lng, n.lat, n.lng);
+          if (d < minDist) { minDist = d; closest = idx; }
+        });
 
-    // Trail Logic: Add snapped point to trail if it's far enough from last point
-    if (snapped) {
-      setTrailNodes(prev => {
-        if (prev.length === 0) return [snapped];
-        const last = prev[prev.length - 1];
-        const dist = curveService.haversineDistance(snapped.lat, snapped.lng, last.lat, last.lng);
-        if (dist > 10) { // Add every 10 meters
-           // Keep trail manageable (e.g., last 500 points)
-           return [...prev, snapped].slice(-500);
+        if (preCalculatedRef.current.length > 0) {
+          foundCurves = preCalculatedRef.current
+            .map(c => {
+              let pDist = 0;
+              let foundTarget = false;
+              
+              // Use a small tolerance for coordinate matching
+              const TOLERANCE = 0.0005; 
+              
+              for (let i = closest; i < Math.min(closest + 500, upcomingNodes.length - 1); i++) {
+                const n1 = upcomingNodes[i], n2 = upcomingNodes[i+1];
+                pDist += curveService.haversineDistance(n1.lat, n1.lng, n2.lat, n2.lng);
+                
+                if (Math.abs(n2.lat - c.points[0].lat) < TOLERANCE && Math.abs(n2.lng - c.points[0].lng) < TOLERANCE) {
+                  foundTarget = true;
+                  break;
+                }
+              }
+
+              const haversineDist = Math.round(curveService.haversineDistance(lat, lng, c.points[0].lat, c.points[0].lng));
+              
+              return {
+                ...c,
+                distance: foundTarget ? Math.round(pDist) : haversineDist,
+                // Track if we are using the accurate path distance
+                isPathAccurate: foundTarget
+              };
+            })
+            .filter(c => {
+              const dist = c.distance;
+              if (dist <= 5 || dist > lookAheadDistance) return false;
+              
+              // If using haversine fallback, check if curve is roughly ahead
+              if (!c.isPathAccurate && heading !== null) {
+                const bearing = curveService.calculateHeading({ lat, lng }, c.points[0]);
+                let diff = Math.abs(heading - bearing);
+                if (diff > 180) diff = 360 - diff;
+                if (diff > 90) return false; // Filter if > 90 degrees away from current heading
+              }
+              return true;
+            })
+            .sort((a, b) => a.distance - b.distance);
+        } else {
+          foundCurves = curveService.findUpcomingCurves(lat, lng, heading, upcomingNodes, lookAheadDistance, speedRef.current);
         }
-        return prev;
-      });
+
+        // Store sync point for extrapolation
+        const syncMap: Record<string, number> = {};
+        foundCurves.forEach(c => syncMap[c.id] = c.distance);
+        lastSyncDistancesRef.current = syncMap;
+        lastSyncTimeRef.current = Date.now();
+        
+        // Smoothly merge new GPS curves with current state to prevent jumping
+        setCurves(prev => {
+          return foundCurves.map(newC => {
+            const existing = prev.find(p => p.id === newC.id);
+            if (existing) {
+              // Blend logic: if jump is small (<15m), use EMA to smooth it
+              const diff = Math.abs(newC.distance - existing.distance);
+              if (diff < 15) {
+                // 70% current (extrapolated), 30% new (GPS sync)
+                const blendedDist = Math.round(existing.distance * 0.7 + newC.distance * 0.3);
+                // Also update sync map to start extrapolation from the blended value
+                lastSyncDistancesRef.current[newC.id] = blendedDist;
+                return { ...newC, distance: blendedDist };
+              }
+            }
+            return newC;
+          });
+        });
+        
+        // Watchdog check
+        if (speedRef.current > 10 && foundCurves.length > 0) {
+          const currentDist = foundCurves[0].distance;
+          const isIncreasing = watchdogRef.current.lastDistance !== -1 && currentDist > watchdogRef.current.lastDistance + 20;
+          if (isIncreasing) {
+            console.warn("Distance anomaly: resetting geometry.");
+            lastFetchRef.current = null;
+            setUpcomingNodes([]);
+          }
+          watchdogRef.current.lastDistance = currentDist;
+        }
+      }
+
+      const snapped = curveService.snapToRoad(lat, lng);
+      setSnappedLocation(snapped);
+      if (snapped) {
+        setTrailNodes(prev => {
+          if (prev.length === 0) return [snapped];
+          const last = prev[prev.length - 1];
+          if (curveService.haversineDistance(snapped.lat, snapped.lng, last.lat, last.lng) > 15) {
+            return [...prev, snapped].slice(-300);
+          }
+          return prev;
+        });
+      }
+
+      // Track distance for smart preloading
+      if (lastLatRef.current !== null && lastLngRef.current !== null) {
+        const d = curveService.haversineDistance(lat, lng, lastLatRef.current, lastLngRef.current);
+        distanceSinceLastPreloadRef.current += d;
+        
+        const triggerDist = telemetryConfig?.smartPreloadTriggerDistance || 2000;
+        const projectDist = telemetryConfig?.smartPreloadProjectDistance || 15000;
+
+        if (distanceSinceLastPreloadRef.current >= triggerDist) {
+          if (heading !== null) {
+            console.log(`Smart Preload Triggered: ${distanceSinceLastPreloadRef.current.toFixed(0)}m traveled.`);
+            offlineMapService.smartPreload(lat, lng, heading, speedRef.current, projectDist);
+            distanceSinceLastPreloadRef.current = 0;
+          }
+        }
+      }
+      lastLatRef.current = lat;
+      lastLngRef.current = lng;
     }
-  }, [lat, lng, heading, upcomingNodes, lookAheadDistance, speedKmh, smoothLocation]);
+  }, [lat, lng, heading, upcomingNodes, lookAheadDistance]);
 
   return { 
     nextCurve: curves[0] || null, 

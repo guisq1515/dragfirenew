@@ -73,6 +73,7 @@ export function usePerformanceTimer(
   
   // Advanced Diagnostics
   const kalmanRef = useRef<KalmanFilter | null>(null);
+  const launchSignRef = useRef<number>(1);
   const wheelSpinCounterRef = useRef(0);
   const wheelSpinDetectedRef = useRef(false);
 
@@ -249,6 +250,7 @@ export function usePerformanceTimer(
     lastPointRef.current = null;
     lastStoppedTimestampRef.current = null;
     kalmanRef.current = new KalmanFilter(0, 0.2, 1.0);
+    launchSignRef.current = 1;
     wheelSpinDetectedRef.current = false;
     wheelSpinCounterRef.current = 0;
   }, []);
@@ -281,27 +283,35 @@ export function usePerformanceTimer(
           accelerometerRef.current = { x: x || 0, y: y || 0, z: z || 0 };
           
           let currentAccelMag = 0;
+          let signedAccel = 0;
           const mode = telemetryConfig?.mountingAxis || 'auto';
           
-          if (isRunningRef.current && activeAxisRef.current && mode === 'auto') {
+          if (isRunningRef.current && activeAxisRef.current) {
             const axisValue = activeAxisRef.current === 'x' ? lx : activeAxisRef.current === 'y' ? ly : lz;
-            currentAccelMag = Math.abs(axisValue || 0);
+            signedAccel = (axisValue || 0) * launchSignRef.current;
+            currentAccelMag = Math.abs(signedAccel);
           } else if (mode !== 'auto' && mode !== 'all') {
             const axisValue = mode === 'x' ? lx : mode === 'y' ? ly : lz;
-            currentAccelMag = Math.abs(axisValue || 0);
+            signedAccel = axisValue || 0;
+            currentAccelMag = Math.abs(signedAccel);
           } else {
             currentAccelMag = Math.sqrt((lx || 0)**2 + (ly || 0)**2 + (lz || 0)**2);
+            signedAccel = currentAccelMag; // Fallback to magnitude if no axis yet
           }
 
           const accelGain = telemetryConfig?.fusionAccelGain ?? 1.0;
           currentAccelMag *= accelGain;
+          signedAccel *= accelGain;
+
           const rotThreshold = telemetryConfig?.rotationThreshold || 60; 
           const isRotating = currentRotationRef.current.alpha > rotThreshold || currentRotationRef.current.beta > rotThreshold || currentRotationRef.current.gamma > rotThreshold;
           
-          if (isRotating) linearAccelRef.current = 0;
-          else {
+          if (isRotating) {
+            linearAccelRef.current = 0;
+          } else {
             const noiseFloor = telemetryConfig?.noiseFloor || 0.05;
-            linearAccelRef.current = currentAccelMag > noiseFloor ? currentAccelMag : 0;
+            // Use signed acceleration for prediction, but keep magnitude for noise filtering
+            linearAccelRef.current = currentAccelMag > noiseFloor ? signedAccel : 0;
           }
           
           gLongRef.current = (ly || 0) / 9.81;
@@ -327,9 +337,21 @@ export function usePerformanceTimer(
             if (isStandingStart && totalG > threshold) {
               if ((telemetryConfig?.mountingAxis || 'auto') === 'auto') {
                 const absX = Math.abs(lx || 0), absY = Math.abs(ly || 0), absZ = Math.abs(lz || 0);
-                if (absX > absY && absX > absZ) activeAxisRef.current = 'x';
-                else if (absY > absX && absY > absZ) activeAxisRef.current = 'y';
-                else activeAxisRef.current = 'z';
+                if (absX > absY && absX > absZ) {
+                  activeAxisRef.current = 'x';
+                  launchSignRef.current = (lx || 0) > 0 ? 1 : -1;
+                } else if (absY > absX && absY > absZ) {
+                  activeAxisRef.current = 'y';
+                  launchSignRef.current = (ly || 0) > 0 ? 1 : -1;
+                } else {
+                  activeAxisRef.current = 'z';
+                  launchSignRef.current = (lz || 0) > 0 ? 1 : -1;
+                }
+              } else {
+                // Fixed axis mode
+                const mode = telemetryConfig?.mountingAxis;
+                const axisValue = mode === 'x' ? lx : mode === 'y' ? ly : lz;
+                launchSignRef.current = (axisValue || 0) > 0 ? 1 : -1;
               }
               setIsWaiting(false);
               isWaitingRef.current = false;
@@ -370,7 +392,7 @@ export function usePerformanceTimer(
                 
                 // --- LINEAR FUSION (Legacy Fallback for Speed) ---
                 if (telemetryConfig?.fusionAlgorithm !== 'kalman') {
-                  if (isRunningRef.current && linearAccelRef.current > 0.1 && (now - (startTimeRef.current || now)) > 300) {
+                  if (isRunningRef.current && Math.abs(linearAccelRef.current) > 0.1 && (now - (startTimeRef.current || now)) > 300) {
                     setCurrentSpeed(prev => {
                       const deltaV = (linearAccelRef.current * dt) * 3.6;
                       const dampenedDeltaV = deltaV * 0.2;
@@ -458,7 +480,7 @@ export function usePerformanceTimer(
             }
 
             // --- SPEED FUSION UPDATE WITH IMU ASSISTANCE ---
-            const isStationaryIMU = linearAccelRef.current < 0.02 && currentRotationRef.current.alpha < 2 && currentRotationRef.current.beta < 2 && currentRotationRef.current.gamma < 2;
+            const isStationaryIMU = Math.abs(linearAccelRef.current) < 0.02 && currentRotationRef.current.alpha < 2 && currentRotationRef.current.beta < 2 && currentRotationRef.current.gamma < 2;
             
             if (telemetryConfig?.fusionAlgorithm === 'kalman' && kalmanRef.current) {
                let z = calculatedSpeed || 0;
@@ -632,6 +654,7 @@ export function usePerformanceTimer(
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     if (settlingTimerRef.current) clearInterval(settlingTimerRef.current);
     kalmanRef.current = null;
+    launchSignRef.current = 1;
     wheelSpinDetectedRef.current = false;
     wheelSpinCounterRef.current = 0;
   };
