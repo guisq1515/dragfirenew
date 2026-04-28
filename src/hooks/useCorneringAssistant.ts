@@ -126,7 +126,11 @@ export function useCorneringAssistant(
     }
 
     const distToLast = lastFetchRef.current ? curveService.haversineDistance(lat, lng, lastFetchRef.current.lat, lastFetchRef.current.lng) : Infinity;
-    const headingDiff = lastFetchRef.current ? Math.abs((heading || 0) - lastFetchRef.current.heading) : Infinity;
+    let headingDiff = Infinity;
+    if (lastFetchRef.current && heading !== null) {
+      headingDiff = Math.abs(heading - lastFetchRef.current.heading);
+      if (headingDiff > 180) headingDiff = 360 - headingDiff;
+    }
     
     if (distToLast > 30 || headingDiff > 30) {
       const updateGeometry = async () => {
@@ -138,13 +142,21 @@ export function useCorneringAssistant(
           setAllRegionalWays(allWays);
           setCurrentRoadName(roadName);
           setIsRouteMode(false);
-          lastFetchRef.current = { lat, lng, heading: heading || 0 };
           preCalculatedRef.current = preCalculatedCurves || [];
           
           if (heading !== null) {
             offlineMapService.smartPreload(lat, lng, heading, speedRef.current);
           }
+        } else {
+          setUpcomingNodes([]);
+          setCurrentRoadName(null);
+          setCurves([]);
+          preCalculatedRef.current = [];
         }
+        
+        // ALWAYS update lastFetchRef to prevent infinite loop of network requests
+        // when offline and no nodes are found.
+        lastFetchRef.current = { lat, lng, heading: heading || 0 };
         setIsLoading(false);
       };
       updateGeometry();
@@ -160,14 +172,14 @@ export function useCorneringAssistant(
 
       // Calculate travel distance since last GPS sync
       // Use acceleration if available for better prediction
-      const accelLong = imuRef.current?.accelLong || 0;
+      const accelLong = imuRef.current?.longitudinalG || 0;
       const currentSpeedMs = (speedRef.current / 3.6);
       const predictedSpeedMs = currentSpeedMs + (accelLong * 9.8 * dt); // v = v0 + at
       const travelDist = predictedSpeedMs * dt;
 
       // Update curves distance smoothly
       setCurves(prev => prev.map(c => {
-        const syncDist = lastSyncDistancesRef.current[c.id] ?? c.distance;
+        const syncDist = lastSyncDistancesRef.current[c.id!] ?? c.distance;
         const newDist = Math.max(0, Math.round(syncDist - travelDist));
         
         // Prevent distance from "jumping up" during extrapolation
@@ -211,53 +223,86 @@ export function useCorneringAssistant(
 
         if (preCalculatedRef.current.length > 0) {
           foundCurves = preCalculatedRef.current
-            .map(c => {
+            .map((c, index) => {
               let pDist = 0;
-              let foundTarget = false;
+              let foundStart = false;
+              let foundEnd = false;
               
               // Use a small tolerance for coordinate matching
               const TOLERANCE = 0.0005; 
               
               for (let i = closest; i < Math.min(closest + 500, upcomingNodes.length - 1); i++) {
                 const n1 = upcomingNodes[i], n2 = upcomingNodes[i+1];
-                pDist += curveService.haversineDistance(n1.lat, n1.lng, n2.lat, n2.lng);
                 
-                if (Math.abs(n2.lat - c.points[0].lat) < TOLERANCE && Math.abs(n2.lng - c.points[0].lng) < TOLERANCE) {
-                  foundTarget = true;
+                if (!foundStart) {
+                  if (Math.abs(n2.lat - c.points[0].lat) < TOLERANCE && Math.abs(n2.lng - c.points[0].lng) < TOLERANCE) {
+                    foundStart = true;
+                  } else {
+                    pDist += curveService.haversineDistance(n1.lat, n1.lng, n2.lat, n2.lng);
+                  }
+                }
+                
+                if (Math.abs(n2.lat - c.points[c.points.length-1].lat) < TOLERANCE && Math.abs(n2.lng - c.points[c.points.length-1].lng) < TOLERANCE) {
+                  foundEnd = true;
                   break;
                 }
               }
 
-              const haversineDist = Math.round(curveService.haversineDistance(lat, lng, c.points[0].lat, c.points[0].lng));
+              let distance = -1;
+              if (foundStart) {
+                // Curve is ahead of us
+                distance = Math.round(pDist);
+              } else if (foundEnd) {
+                // Curve start is behind us, but end is ahead of us. We are INSIDE the curve.
+                distance = 0; 
+              } else {
+                // Both start and end are behind us, or curve is completely off-path.
+                distance = Math.round(curveService.haversineDistance(lat, lng, c.points[0].lat, c.points[0].lng));
+              }
               
               return {
                 ...c,
-                distance: foundTarget ? Math.round(pDist) : haversineDist,
-                // Track if we are using the accurate path distance
-                isPathAccurate: foundTarget
+                id: (c as any).id || `pre_${c.severity}_${c.direction}_${c.points[0]?.lat.toFixed(4)}_${c.points[0]?.lng.toFixed(4)}_${index}`,
+                distance,
+                isPathAccurate: foundStart || foundEnd,
+                isInside: !foundStart && foundEnd
               };
             })
             .filter(c => {
               const dist = c.distance;
+              
+              // Instantly pop the curve if we are inside it or very close
               if (dist <= 5 || dist > lookAheadDistance) return false;
               
-              // If using haversine fallback, check if curve is roughly ahead
-              if (!c.isPathAccurate && heading !== null) {
-                const bearing = curveService.calculateHeading({ lat, lng }, c.points[0]);
-                let diff = Math.abs(heading - bearing);
-                if (diff > 180) diff = 360 - diff;
-                if (diff > 90) return false; // Filter if > 90 degrees away from current heading
+              // If using haversine fallback
+              if (!c.isPathAccurate) {
+                // If it's close but wasn't found in the path ahead, it's already behind us.
+                if (dist < 1000) return false;
+                
+                if (heading !== null) {
+                  const bearing = curveService.calculateHeading({ lat, lng }, c.points[0]);
+                  let diff = Math.abs(heading - bearing);
+                  if (diff > 180) diff = 360 - diff;
+                  if (diff > 90) return false; // Filter if > 90 degrees away from current heading
+                }
               }
               return true;
             })
             .sort((a, b) => a.distance - b.distance);
         } else {
-          foundCurves = curveService.findUpcomingCurves(lat, lng, heading, upcomingNodes, lookAheadDistance, speedRef.current);
+          foundCurves = curveService.findUpcomingCurves(lat, lng, heading, upcomingNodes, lookAheadDistance, speedRef.current)
+            .map((c, index) => ({
+              ...c,
+              id: (c as any).id || `dyn_${c.severity}_${c.direction}_${c.points[0]?.lat.toFixed(4)}_${c.points[0]?.lng.toFixed(4)}_${index}`
+            }))
+            .sort((a, b) => a.distance - b.distance);
         }
 
         // Store sync point for extrapolation
         const syncMap: Record<string, number> = {};
-        foundCurves.forEach(c => syncMap[c.id] = c.distance);
+        foundCurves.forEach(c => {
+          if (c.id) syncMap[c.id] = c.distance;
+        });
         lastSyncDistancesRef.current = syncMap;
         lastSyncTimeRef.current = Date.now();
         
@@ -272,7 +317,7 @@ export function useCorneringAssistant(
                 // 70% current (extrapolated), 30% new (GPS sync)
                 const blendedDist = Math.round(existing.distance * 0.7 + newC.distance * 0.3);
                 // Also update sync map to start extrapolation from the blended value
-                lastSyncDistancesRef.current[newC.id] = blendedDist;
+                if (newC.id) lastSyncDistancesRef.current[newC.id] = blendedDist;
                 return { ...newC, distance: blendedDist };
               }
             }
@@ -317,7 +362,7 @@ export function useCorneringAssistant(
         if (distanceSinceLastPreloadRef.current >= triggerDist) {
           if (heading !== null) {
             console.log(`Smart Preload Triggered: ${distanceSinceLastPreloadRef.current.toFixed(0)}m traveled.`);
-            offlineMapService.smartPreload(lat, lng, heading, speedRef.current, projectDist);
+            offlineMapService.smartPreload(lat, lng, heading, speedRef.current, { triggerDist, projectDist });
             distanceSinceLastPreloadRef.current = 0;
           }
         }

@@ -86,6 +86,23 @@ export function CorneringAssistantHUD({
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [downloadMessage, setDownloadMessage] = useState('');
   const [showDownloadDone, setShowDownloadDone] = useState(false);
+  
+  // Boot & Sync State to prevent blocking the screen during usage
+  const [hasEverSynced, setHasEverSynced] = useState(false);
+  const [bootTimeout, setBootTimeout] = useState(false);
+
+  useEffect(() => {
+    if (upcomingNodes.length > 0) {
+      setHasEverSynced(true);
+    }
+  }, [upcomingNodes]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setBootTimeout(true);
+    }, 8000);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const updateStatus = () => setHasNetwork(navigator.onLine);
@@ -172,7 +189,59 @@ export function CorneringAssistantHUD({
       const fallback = { path: "M 50 85 L 50 15", arrowHead: "M 35 35 L 50 15 L 65 35" };
       if (!curve.points || curve.points.length < 2) return fallback;
       
-      const pts = curve.points.slice(0, 100); 
+      let pts = curve.points;
+      
+      // Local lightweight distance approximation
+      const getApproxDistance = (p1: RoadNode, p2: RoadNode) => {
+        const dx = (p2.lng - p1.lng) * Math.cos(p1.lat * Math.PI / 180);
+        const dy = p2.lat - p1.lat;
+        return Math.sqrt(dx * dx + dy * dy) * 111320;
+      };
+
+      // Find curve context in upcomingNodes
+      if (upcomingNodes && upcomingNodes.length > 0) {
+        const firstPt = curve.points[0];
+        const lastPt = curve.points[curve.points.length - 1];
+        
+        let startIndex = -1;
+        for (let i = 0; i < upcomingNodes.length; i++) {
+          if (Math.abs(upcomingNodes[i].lat - firstPt.lat) < 0.0001 && Math.abs(upcomingNodes[i].lng - firstPt.lng) < 0.0001) {
+            startIndex = i;
+            break;
+          }
+        }
+        
+        let endIndex = -1;
+        if (startIndex !== -1) {
+          for (let i = startIndex; i < upcomingNodes.length; i++) {
+            if (Math.abs(upcomingNodes[i].lat - lastPt.lat) < 0.0001 && Math.abs(upcomingNodes[i].lng - lastPt.lng) < 0.0001) {
+              endIndex = i;
+              break;
+            }
+          }
+        }
+        
+        if (startIndex !== -1 && endIndex !== -1) {
+          // Include up to 120 meters of context before the curve
+          let expandedStart = startIndex;
+          let distStart = 0;
+          while (expandedStart > 0 && distStart < 120) {
+            expandedStart--;
+            distStart += getApproxDistance(upcomingNodes[expandedStart], upcomingNodes[expandedStart + 1]);
+          }
+          
+          // Include up to 80 meters of context after the curve
+          let expandedEnd = endIndex;
+          let distEnd = 0;
+          while (expandedEnd < upcomingNodes.length - 1 && distEnd < 80) {
+            expandedEnd++;
+            distEnd += getApproxDistance(upcomingNodes[expandedEnd - 1], upcomingNodes[expandedEnd]);
+          }
+          
+          pts = upcomingNodes.slice(expandedStart, expandedEnd + 1);
+        }
+      }
+
       const p0 = pts[0];
       const p1 = pts[1];
       
@@ -222,7 +291,7 @@ export function CorneringAssistantHUD({
       const last = centeredPts[centeredPts.length - 1];
       const prev = centeredPts[Math.max(0, centeredPts.length - 2)];
       const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
-      const headLen = isNormal ? 16 : 10;
+      const headLen = isNormal ? 24 : 14;
       const h1x = last.x - headLen * Math.cos(angle - 0.7);
       const h1y = last.y - headLen * Math.sin(angle - 0.7);
       const h2x = last.x - headLen * Math.cos(angle + 0.7);
@@ -238,8 +307,8 @@ export function CorneringAssistantHUD({
       <div className={`relative ${isNormal ? 'w-64 h-64' : 'w-24 h-24'} flex items-center justify-center`}>
          <motion.div animate={{ backgroundColor: color }} className={`absolute ${isNormal ? 'w-56 h-56 border-[6px]' : 'w-20 h-20 border-2'} border-white/20 rounded-[3rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] rotate-45`} />
          <svg viewBox="0 0 100 100" className={`${isNormal ? 'w-44 h-44' : 'w-16 h-16'} relative z-10`}>
-            <path d={path} fill="none" stroke="#fff" strokeWidth={isNormal ? "8" : "6"} strokeLinecap="round" strokeLinejoin="round" />
-            <path d={arrowHead} fill="none" stroke="#fff" strokeWidth={isNormal ? "8" : "6"} strokeLinecap="round" strokeLinejoin="round" />
+            <path d={path} fill="none" stroke="#fff" strokeWidth={isNormal ? "12" : "8"} strokeLinecap="round" strokeLinejoin="round" />
+            <path d={arrowHead} fill="none" stroke="#fff" strokeWidth={isNormal ? "12" : "8"} strokeLinecap="round" strokeLinejoin="round" />
          </svg>
          
          {/* Angle Badge Integrated into the Plate */}
@@ -269,7 +338,7 @@ export function CorneringAssistantHUD({
       
       {/* Safety Lock Overlay */}
       <AnimatePresence>
-        {upcomingNodes.length === 0 && (
+        {!hasEverSynced && !bootTimeout && upcomingNodes.length === 0 && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

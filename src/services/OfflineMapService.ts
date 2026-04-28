@@ -5,7 +5,7 @@ import { curveService } from './CurveAnalysisService';
 
 const DB_NAME = 'DragFireOfflineMaps';
 const STORE_NAME = 'regions';
-const DB_VERSION = 2;
+const DB_VERSION = 4; // Bump to v4 for new polyline/optimized format
 
 class OfflineMapService {
   private db: IDBDatabase | null = null;
@@ -30,6 +30,12 @@ class OfflineMapService {
 
       request.onupgradeneeded = (event: any) => {
         const db = event.target.result;
+        // If upgrading, delete old data because formats have changed
+        if (event.oldVersion > 0 && event.oldVersion < 4) {
+          if (db.objectStoreNames.contains(STORE_NAME)) {
+            db.deleteObjectStore(STORE_NAME);
+          }
+        }
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
           store.createIndex('location', ['lat_grid', 'lng_grid'], { unique: false });
@@ -93,9 +99,21 @@ class OfflineMapService {
       t: region.timestamp || Date.now(),
       w: region.ways.map(w => ({
         i: w.id,
+        n: w.nodes,
         t: w.tags,
-        p: w.points.map(p => ({ a: p.lat, g: p.lng, e: p.elevation })),
-        c: w.curves
+        // We drop `points` because we can reconstruct it from `nodes` and `nodesMap`
+        // We also strip out large objects from curves to save space, keeping only what's needed
+        c: w.curves?.map(c => ({
+          a: c.angle,
+          s: c.severity,
+          d: c.distance,
+          p: c.pathDistance,
+          di: c.direction,
+          sl: c.slope,
+          u: c.isUphill,
+          // Store only the node IDs for the curve points to reconstruct later
+          n: c.points.map(pt => region.ways.find(way => way.id === w.id)?.nodes[way.points.indexOf(pt)])
+        }))
       })),
       n: region.nodesMap
     };
@@ -108,12 +126,25 @@ class OfflineMapService {
       lng: data.ln,
       radius: data.r,
       timestamp: data.t,
-      ways: data.w.map((w: any) => ({
-        id: w.i,
-        tags: w.t,
-        points: w.p.map((p: any) => ({ lat: p.a, lng: p.g, elevation: p.e })),
-        curves: w.c
-      })),
+      ways: data.w.map((w: any) => {
+        const points = (w.n || []).map((id: number) => data.n[id]).filter(Boolean);
+        return {
+          id: w.i,
+          nodes: w.n || [],
+          tags: w.t,
+          points: points,
+          curves: w.c?.map((c: any) => ({
+            angle: c.a,
+            severity: c.s,
+            distance: c.d,
+            pathDistance: c.p,
+            direction: c.di,
+            slope: c.sl,
+            isUphill: c.u,
+            points: (c.n || []).map((id: number) => data.n[id]).filter(Boolean)
+          })) || []
+        };
+      }),
       nodesMap: data.n
     };
   }
@@ -134,22 +165,24 @@ class OfflineMapService {
   }
 
   async getRegion(lat: number, lng: number): Promise<TopologicalRegion | null> {
-    await this.init();
-    if (!this.db) return null;
+    const allRegions = await this.getAllRegions();
+    if (!allRegions || allRegions.length === 0) return null;
 
-    const id = this.getGridKey(lat, lng);
+    let bestRegion: TopologicalRegion | null = null;
+    let minDistance = Infinity;
 
-    return new Promise((resolve) => {
-      const transaction = this.db!.transaction([STORE_NAME], 'readonly');
-      const store = transaction.objectStore(STORE_NAME);
-      const request = store.get(id);
+    for (const region of allRegions) {
+      const dist = this.haversineDistance(lat, lng, region.lat, region.lng);
+      // Check if we are inside the downloaded region's radius (95% to avoid edge cases)
+      if (dist < (region.radius || this.config.calibrationRadius) * 0.95) {
+        if (dist < minDistance) {
+          minDistance = dist;
+          bestRegion = region;
+        }
+      }
+    }
 
-      request.onsuccess = (event: any) => {
-        const result = event.target.result;
-        resolve(result ? this.deserializeRegion(result) : null);
-      };
-      request.onerror = () => resolve(null);
-    });
+    return bestRegion;
   }
 
   async getAllRegions(): Promise<TopologicalRegion[]> {

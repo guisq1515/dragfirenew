@@ -142,6 +142,7 @@ import { AIPhotoEditor } from './components/AIPhotoEditor';
 import { GasStations } from './components/GasStations';
 import { AntigravityImporter } from './components/AntigravityImporter';
 import { AdminDashboard } from './components/AdminDashboard';
+import { OfflineMapManager } from './components/OfflineMapManager';
 import { getThemeById, PROFILE_THEMES, BADGES, NEON_COLORS, TITLES } from './constants/themes';
 import { ThemeStoreModal } from './components/ThemeStoreModal';
 import { MissionsView } from './components/MissionsView';
@@ -443,7 +444,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 const TERMS_VERSION = '1.0.0';
 const ADMIN_EMAILS = ['guisq1515@gmail.com'];
 
-type Screen = 'home' | 'timer' | 'challenge' | 'duel-result' | 'settings' | 'login' | 'terms' | 'vehicle-settings' | 'profile-settings' | 'theme-store' | 'regional-ranking' | 'history' | 'gps-guide' | 'custom-setup' | 'trip-view' | 'fuel-calculator' | 'public-profile' | 'feed' | 'search' | 'ai-editor' | 'fuel-stations' | 'anp-import' | 'admin-dashboard' | 'cornering-assistant' | 'vehicle-catalog' | 'missions' | 'trip-explorer' | 'curve-radar' | 'banned';
+type Screen = 'home' | 'timer' | 'challenge' | 'duel-result' | 'settings' | 'login' | 'terms' | 'vehicle-settings' | 'profile-settings' | 'theme-store' | 'regional-ranking' | 'history' | 'gps-guide' | 'custom-setup' | 'trip-view' | 'fuel-calculator' | 'public-profile' | 'feed' | 'search' | 'ai-editor' | 'fuel-stations' | 'anp-import' | 'admin-dashboard' | 'cornering-assistant' | 'vehicle-catalog' | 'missions' | 'trip-explorer' | 'curve-radar' | 'banned' | 'offline-maps';
 
 function GPSGuide({ onBack }: { onBack: () => void }) {
   const tips = [
@@ -2701,6 +2702,23 @@ function SettingsMenu({
             <button 
               onClick={() => onNavigate('anp-import')}
               className="px-4 py-2 bg-brand-primary rounded-lg text-[9px] font-black uppercase tracking-widest text-white transition-all active:scale-95"
+            >
+              Abrir
+            </button>
+          </div>
+          <div className="p-4 flex items-center justify-between bg-cyan-500/5">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-cyan-500/10 flex items-center justify-center">
+                <MapIcon className="w-4 h-4 text-cyan-500" />
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-white">Mapas Offline</h4>
+                <p className="text-[9px] text-zinc-500 uppercase font-black">Navegação sem Internet</p>
+              </div>
+            </div>
+            <button 
+              onClick={() => onNavigate('offline-maps')}
+              className="px-4 py-2 bg-cyan-500 rounded-lg text-[9px] font-black uppercase tracking-widest text-white transition-all active:scale-95"
             >
               Abrir
             </button>
@@ -7272,6 +7290,16 @@ export default function App() {
             <div className="flex-1 flex items-center justify-center text-zinc-600 uppercase font-black text-[10px] tracking-widest bg-zinc-950">
                Em breve: Feed Global
             </div>
+          </motion.div>
+        ) : screen === 'offline-maps' ? (
+          <motion.div
+            key="offline-maps"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="flex-1 flex flex-col overflow-hidden"
+          >
+            <OfflineMapManager onBack={() => setScreen('settings')} />
           </motion.div>
         ) : screen === 'timer' ? (
 

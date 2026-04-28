@@ -8,6 +8,7 @@ class CurveAnalysisService {
   private activeRoadName: string | null = null;
   private activeNodes: RoadNode[] = [];
   private allRegionalNodes: RoadNode[][] = [];
+  private lastFetchAttemptTime: number = 0;
 
   // Admin Configurable Thresholds
   private detectionThreshold = 15;
@@ -35,8 +36,8 @@ class CurveAnalysisService {
     allWays: RoadNode[][],
     preCalculatedCurves?: CurveData[]
   }> {
-    // 1. Check in-memory cache
-    let activeRegion = this.regions.find(r => this.haversineDistance(lat, lng, r.lat, r.lng) < 5000);
+    // 1. Check in-memory cache (respecting the region's actual downloaded radius)
+    let activeRegion = this.regions.find(r => this.haversineDistance(lat, lng, r.lat, r.lng) < (r.radius || 5000) * 0.95);
 
     // 2. Check OfflineMapService (IndexedDB)
     if (!activeRegion) {
@@ -49,7 +50,9 @@ class CurveAnalysisService {
     }
 
     // 3. Trigger background fetch if needed
-    if (!activeRegion || (Date.now() - activeRegion.timestamp > 86400000)) {
+    const now = Date.now();
+    if ((!activeRegion || (now - activeRegion.timestamp > 86400000)) && (now - this.lastFetchAttemptTime > 15000)) {
+      this.lastFetchAttemptTime = now;
       this.fetchRegionInBackground(lat, lng);
     }
 
@@ -80,7 +83,9 @@ class CurveAnalysisService {
       const response = await CapacitorHttp.post({
         url: 'https://overpass-api.de/api/interpreter',
         data: overpassQuery,
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        connectTimeout: 5000,
+        readTimeout: 15000
       });
 
       if (response.status === 200 && response.data.elements) {
@@ -172,7 +177,12 @@ class CurveAnalysisService {
       }
     });
 
-    if (!bestWay) return { nodes: this.activeNodes, roadName: this.activeRoadName };
+    if (!bestWay || !(bestWay as WayData).nodes || (bestWay as WayData).nodes.length === 0) {
+      this.activeNodes = [];
+      this.activeRoadName = null;
+      this.activeWayId = null;
+      return { nodes: [], roadName: null };
+    }
     const roadName = (bestWay as WayData).tags?.name || (bestWay as WayData).tags?.ref || 'Via Mapeada';
     
     // Smooth transition: only update if the new way is significantly better or we have no current road
@@ -199,10 +209,29 @@ class CurveAnalysisService {
     }
 
     this.activeNodes = orderedNodes.map(id => nodesMap[id]).filter(Boolean);
+
+    let isReversed = false;
+    // FIX: Check if heading is inverted relative to the stitched nodes
+    if (heading !== null && this.activeNodes.length >= 2) {
+      // Calculate average heading of the first few segments to get the general direction
+      const p1 = this.activeNodes[0];
+      const p2 = this.activeNodes[Math.min(5, this.activeNodes.length - 1)];
+      const roadHeading = this.calculateHeading(p1, p2);
+      
+      let diff = Math.abs(heading - roadHeading);
+      if (diff > 180) diff = 360 - diff;
+      
+      if (diff > 90) {
+        // Vehicle is driving in the opposite direction of the node array
+        this.activeNodes.reverse();
+        isReversed = true;
+      }
+    }
+
     return { 
       nodes: this.activeNodes, 
       roadName: this.activeRoadName,
-      preCalculatedCurves: (bestWay as WayData).curves 
+      preCalculatedCurves: isReversed ? undefined : (bestWay as WayData).curves 
     };
   }
 
@@ -233,7 +262,7 @@ class CurveAnalysisService {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   }
 
-  private calculateHeading(p1: RoadNode, p2: RoadNode): number {
+  public calculateHeading(p1: RoadNode, p2: RoadNode): number {
     const y = Math.sin((p2.lng - p1.lng) * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180);
     const x = Math.cos(p1.lat * Math.PI / 180) * Math.sin(p2.lat * Math.PI / 180) - Math.sin(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) * Math.cos((p2.lng - p1.lng) * Math.PI / 180);
     return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
@@ -295,7 +324,6 @@ class CurveAnalysisService {
           angle: Math.round(absAngle),
           severity: type,
           distance: Math.round(scan),
-          pathDistance: Math.round(scan),
           direction: cumAngle > 0 ? 'right' : 'left',
           points: nodes.slice(i, j + 1),
           slope: Math.round(slope),

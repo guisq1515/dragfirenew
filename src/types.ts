@@ -307,6 +307,7 @@ export interface WayData {
 }
 
 export interface CurveData {
+  id?: string;
   angle: number;
   severity: 'soft' | 'medium' | 'hard' | 'hairpin' | 'straight' | 'chicane' | 's-curve';
   distance: number;
