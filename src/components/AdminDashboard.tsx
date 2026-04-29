@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { doc, getDoc, query, collection, where, limit, getDocs, setDoc, deleteDoc, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import { 
@@ -109,7 +109,7 @@ export function AdminDashboard({
   const [showNewProfileModal, setShowNewProfileModal] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'settings' | 'power'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'settings' | 'power' | 'sensors'>('overview');
   const [coinAmount, setCoinAmount] = useState<Record<string, number>>({});
 
   // Power References state

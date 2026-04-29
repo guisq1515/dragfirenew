@@ -101,19 +101,19 @@ class OfflineMapService {
         i: w.id,
         n: w.nodes,
         t: w.tags,
-        // We drop `points` because we can reconstruct it from `nodes` and `nodesMap`
-        // We also strip out large objects from curves to save space, keeping only what's needed
-        c: w.curves?.map(c => ({
-          a: c.angle,
-          s: c.severity,
-          d: c.distance,
-          p: c.pathDistance,
-          di: c.direction,
-          sl: c.slope,
-          u: c.isUphill,
-          // Store only the node IDs for the curve points to reconstruct later
-          n: c.points.map(pt => region.ways.find(way => way.id === w.id)?.nodes[way.points.indexOf(pt)])
-        }))
+        c: w.curves?.map(c => {
+          const parentWay = region.ways.find(way => way.id === w.id);
+          return {
+            a: c.angle,
+            s: c.severity,
+            d: c.distance,
+            p: c.distance,
+            di: c.direction,
+            sl: c.slope,
+            u: c.isUphill,
+            n: c.points.map(pt => parentWay ? parentWay.nodes[parentWay.points.indexOf(pt)] : null).filter(Boolean)
+          };
+        })
       })),
       n: region.nodesMap
     };

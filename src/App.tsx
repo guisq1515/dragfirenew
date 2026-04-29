@@ -235,7 +235,7 @@ const updateLeaderboard = async (entry: RankingEntry | Omit<RankingEntry, 'id'>)
 
 // --- Error Boundary ---
 class ErrorBoundary extends React.Component<any, any> {
-  state = { hasError: false, errorInfo: null };
+  state: { hasError: boolean, errorInfo: any } = { hasError: false, errorInfo: null };
 
   static getDerivedStateFromError(error: any) {
     try {
@@ -835,8 +835,8 @@ function HistoryView({
           category: r.config.mode === 'speed' ? '0-100' : '201m',
           mode: r.config.mode === 'speed' ? 'speed' : 'distance',
           target: r.config.target,
-          latitude: r.location.latitude,
-          longitude: r.location.longitude,
+          latitude: r.location?.latitude || 0,
+          longitude: r.location?.longitude || 0,
           slope: r.slope || 0,
           performanceScore
         };
@@ -1125,7 +1125,7 @@ function SearchUsers({
             >
               <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-800">
                 {u.photoURL ? (
-                  <img src={u.photoURL} alt={u.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  <img src={u.photoURL || undefined} alt={u.displayName || undefined} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
                     <User className="w-6 h-6 text-zinc-600" />
@@ -1387,8 +1387,8 @@ function PublicProfile({
 
   const handleShare = async () => {
     const shareData = {
-      title: `Perfil de ${profile.displayName} no DragFire`,
-      text: `Confira a garagem e os tempos de ${profile.displayName} no DragFire!`,
+      title: `Perfil de ${profile?.displayName || 'Piloto'} no DragFire`,
+      text: `Confira a garagem e os tempos de ${profile?.displayName || 'Piloto'} no DragFire!`,
       url: window.location.href
     };
 
@@ -2958,7 +2958,7 @@ function VehicleSettings({
     setUploadProgress(1);
     
     try {
-      if (!auth.currentUser) throw new Error('Usuário nà£o autenticado.');
+      if (!auth.currentUser) throw new Error('Usuário não autenticado.');
       
       // Forçar pedido de permissão no Android 13+
       const permission = await Camera.checkPermissions();
@@ -2968,78 +2968,50 @@ function VehicleSettings({
 
       await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'UPLOAD_MAIN_START', details: { vehicleId: formData.id } });
       
-      setUploadStatus('[S1] Abrindo Galeria...');
+      let finalDataUrl = '';
       
-      const photo = await Camera.getPhoto({
-        quality: 60,
-        allowEditing: false,
-        resultType: CameraResultType.DataUrl,
-        source: CameraSource.Photos,
-        width: 1024,
-        height: 1024
-      });
-
-      if (!photo.dataUrl) throw new Error('Cà¢mera nà£o retornou os dados da imagem.');
-      logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'PHOTO_DATA_RECEIVED', details: { format: photo.format, size_est: photo.dataUrl.length } });
-      
-      setUploadStatus('[S2] Preparando Foto...');
-      const fileName = `main_${Date.now()}.jpg`;
-      const path = `vehicles/${auth.currentUser.uid}/${formData.id || 'new'}/${fileName}`;
-      const storageRef = ref(storage, path);
-      
-      setUploadProgress(15);
-      setUploadStatus('[S3] Convertendo Binário...');
-      
-      // Manual Base64 to Blob conversion (more stable on some Androids than fetch)
-      const base64Data = photo.dataUrl.split(',')[1];
-      const byteCharacters = atob(base64Data);
-      const byteNumbers = new Array(byteCharacters.length);
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
-      }
-      const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'image/jpeg' });
-      
-      setUploadProgress(40);
-      setUploadStatus('[S4] Iniciando Transferência...');
-      logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'STORAGE_UPLOAD_START_STRING', details: { path, format: photo.format } });
-      
-      const uploadTask = uploadString(storageRef, photo.dataUrl, 'data_url', { contentType: 'image/jpeg' });
-      
-      return new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          // Note: uploadString task doesn't have cancel() in the same way as resumable, 
-          // but we can reject the promise. 
-          reject(new Error('Tempo limite excedido (120s). Verifique sua conexão.'));
-        }, 120000);
-
-        // For uploadString, it's a promise, but we can't easily track progress unless we use resumable.
-        // If we want progress AND stability, we use uploadBytesResumable but with a Blob from fetch.
-        // HOWEVER, the user is stuck at 0% with resumable. Let's try direct upload first.
-        
-        uploadTask.then(async (snapshot) => {
-          clearTimeout(timeout);
-          setUploadStatus('[S5] Finalizando...');
-          setUploadProgress(95);
-          try {
-            const downloadURL = await getDownloadURL(snapshot.ref);
-            setFormData({ ...formData, photoURL: downloadURL });
-            setUploadStatus('Sucesso!');
-            setUploadProgress(100);
-            setTimeout(() => {
-              setIsUploading(false);
-              setUploadProgress(0);
-              setUploadStatus('');
-              resolve();
-            }, 1000);
-          } catch (err: any) {
-            reject(err);
-          }
-        }).catch((error) => {
-          clearTimeout(timeout);
-          reject(error);
+      if (Capacitor.isNativePlatform() && !e) {
+        setUploadStatus('[S1] Abrindo Galeria...');
+        const photo = await Camera.getPhoto({
+          quality: 60,
+          allowEditing: false,
+          resultType: CameraResultType.DataUrl,
+          source: CameraSource.Photos,
+          width: 1024,
+          height: 1024
         });
-      });
+
+        if (!photo.dataUrl) throw new Error('Câmera não retornou os dados da imagem.');
+        finalDataUrl = photo.dataUrl;
+      } else if (e && e.target.files && e.target.files[0]) {
+        setUploadStatus('[S1] Lendo arquivo...');
+        const file = e.target.files[0];
+        finalDataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (error) => reject(error);
+          reader.readAsDataURL(file);
+        });
+      }
+
+      if (!finalDataUrl) throw new Error('Nenhuma imagem foi fornecida.');
+      
+      logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'PHOTO_DATA_RECEIVED', details: { size_est: finalDataUrl.length } });
+      
+      setUploadStatus('[S2] Processando Foto...');
+      setUploadProgress(50);
+      
+      setFormData({ ...formData, photoURL: finalDataUrl });
+      
+      setUploadProgress(90);
+      setUploadStatus('Sucesso!');
+      
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+        setUploadStatus('');
+      }, 1000);
+
     } catch (error: any) {
       console.error('Photo Error:', error);
       await logRemote({ 
@@ -3062,13 +3034,6 @@ function VehicleSettings({
     setUploadProgress(1);
 
     try {
-      // Forçar pedido de permissão no Android 13+
-      const permission = await Camera.checkPermissions();
-      if (permission.photos !== 'granted' || permission.camera !== 'granted') {
-        await Camera.requestPermissions({ permissions: ['photos', 'camera'] });
-      }
-
-      setUploadStatus('[S1] Abrindo Galeria...');
       const currentPhotos = formData.photoURLs || [];
       if (currentPhotos.length >= 6) {
         alert('Limite de 6 fotos extras atingido.');
@@ -3076,13 +3041,16 @@ function VehicleSettings({
         return;
       }
 
-      const fileName = `extra_${Date.now()}.jpg`;
-      const path = `vehicles/${auth.currentUser.uid}/${formData.id || 'new'}/${fileName}`;
-      const storageRef = ref(storage, path);
-      let payloadBlob: Blob | Uint8Array | null = null;
+      // Forçar pedido de permissão no Android 13+
+      const permission = await Camera.checkPermissions();
+      if (permission.photos !== 'granted' || permission.camera !== 'granted') {
+        await Camera.requestPermissions({ permissions: ['photos', 'camera'] });
+      }
+
+      let finalDataUrl = '';
 
       if (Capacitor.isNativePlatform() && !e) {
-        setUploadStatus('[S1] Capturando Foto...');
+        setUploadStatus('[S1] Abrindo Galeria...');
         const photo = await Camera.getPhoto({
           quality: 60,
           allowEditing: false,
@@ -3091,120 +3059,56 @@ function VehicleSettings({
           width: 800,
           height: 800
         });
-        
-        if (!photo.dataUrl) throw new Error('Cà¢mera nà£o retornou os dados da imagem.');
-        await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'EXTRA_PHOTO_DATA_RECEIVED', details: { format: photo.format } });
-        
-        setUploadStatus('[S2] Preparando Binário...');
-        setUploadProgress(20);
-        
-        // Convert to blob for robust upload
-        const response = await fetch(photo.dataUrl);
-        const blob = await response.blob();
-        
-        const base64Data = photo.dataUrl.split(',')[1];
-        const byteCharacters = atob(base64Data);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        
-        setUploadStatus('[S4] Enviando...');
-        setUploadProgress(40);
-        logRemote({ uid: auth.currentUser!.uid, level: 'info', message: 'EXTRA_UPLOAD_START', details: { path } });
-        
-        const uploadTask = uploadString(storageRef, photo.dataUrl, 'data_url', { contentType: 'image/jpeg' });
-        
-        return new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error('Tempo limite excedido (120s).'));
-          }, 120000);
 
-          uploadTask.then(async (snapshot) => {
-            clearTimeout(timeout);
-            setUploadStatus('Finalizando...');
-            setUploadProgress(95);
-            
-            const downloadURL = await getDownloadURL(snapshot.ref);
-            setFormData({
-              ...formData,
-              photoURLs: [...currentPhotos, downloadURL]
-            });
-            
-            logRemote({ uid: auth.currentUser!.uid, level: 'info', message: 'EXTRA_UPLOAD_SUCCESS', details: { url: downloadURL } });
-            
-            setUploadStatus('Sucesso!');
-            setUploadProgress(100);
-            setTimeout(() => {
-              setIsUploading(false);
-              setUploadProgress(0);
-              setUploadStatus('');
-              resolve();
-            }, 1000);
-          }).catch(async (error) => {
-            clearTimeout(timeout);
-            console.error('Extra upload error:', error);
-            logRemote({ uid: auth.currentUser!.uid, level: 'error', message: 'UPLOAD_EXTRA_ERROR_TASK', details: { code: error.code, message: error.message } });
-            reject(error);
-          });
-        });
-      } else if (e) {
-        const file = e.target.files?.[0];
-        if (!file) throw new Error('Nenhum arquivo selecionado.');
-        
-        setUploadStatus('[S2] Enviando Arquivo...');
-        const uploadTask = uploadBytesResumable(storageRef, file, { contentType: file.type });
-
-        return new Promise<void>((resolve, reject) => {
-          uploadTask.on('state_changed', 
-            (snapshot) => {
-              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-              setUploadProgress(20 + (progress * 0.75));
-              setUploadStatus(`Enviando Extra... ${Math.round(progress)}%`);
-            }, 
-            (error) => {
-              console.error('Extra upload failed:', error);
-              reject(error);
-            }, 
-            async () => {
-              try {
-                setUploadStatus('Finalizando...');
-                setUploadProgress(96);
-                const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                setFormData({
-                  ...formData,
-                  photoURLs: [...currentPhotos, downloadURL]
-                });
-                setUploadStatus('Sucesso!');
-                setUploadProgress(100);
-                setTimeout(() => {
-                  setIsUploading(false);
-                  setUploadProgress(0);
-                  setUploadStatus('');
-                }, 1000);
-                resolve();
-              } catch (err) {
-                reject(err);
-              }
-            }
-          );
+        if (!photo.dataUrl) throw new Error('Câmera não retornou os dados da imagem.');
+        finalDataUrl = photo.dataUrl;
+      } else if (e && e.target.files && e.target.files[0]) {
+        setUploadStatus('[S1] Lendo arquivo...');
+        const file = e.target.files[0];
+        finalDataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = (error) => reject(error);
+          reader.readAsDataURL(file);
         });
       }
+
+      if (!finalDataUrl) throw new Error('Nenhuma imagem foi fornecida.');
+      
+      await logRemote({ uid: auth.currentUser.uid, level: 'info', message: 'EXTRA_PHOTO_DATA_RECEIVED', details: { size: finalDataUrl.length } });
+      
+      setUploadStatus('[S2] Adicionando Foto...');
+      setUploadProgress(50);
+      
+      setFormData({
+        ...formData,
+        photoURLs: [...currentPhotos, finalDataUrl]
+      });
+      
+      setUploadProgress(90);
+      setUploadStatus('Sucesso!');
+      
+      setTimeout(() => {
+        setIsUploading(false);
+        setUploadProgress(0);
+        setUploadStatus('');
+      }, 1000);
+
     } catch (error: any) {
-      console.error('Extra Photo Error:', error);
+      console.error('Extra photo error:', error);
       await logRemote({ 
         uid: auth?.currentUser?.uid || 'unknown', 
         level: 'error', 
         message: 'UPLOAD_EXTRA_ERROR', 
         details: { message: error.message, stack: error.stack } 
       });
-      alert(`Erro ao processar foto: ${error.message || 'Erro desconhecido'}`);
+      alert(`Erro ao processar foto extra: ${error.message || 'Erro desconhecido'}`);
       setIsUploading(false);
       setUploadProgress(0);
       setUploadStatus('');
     }
   };
+
 
   const removeExtraPhoto = async (url: string) => {
     try {
@@ -3272,16 +3176,7 @@ function VehicleSettings({
       await onSave(finalData);
       
       setEditingVehicle(null);
-      setFormData({
-        year: YEARS[0],
-        nickname: '',
-        hp: 0,
-        weight: 0,
-        engine: '',
-        transmission: '',
-        stockHp: 0,
-        stockWeight: 0
-      });
+      setFormData(baseVehicle);
     } catch (error: any) {
       console.error('Error in handleSubmit:', error);
       setSaveError(error?.message || 'Erro inesperado ao salvar. Tente novamente.');
@@ -3718,7 +3613,7 @@ function VehicleSettings({
                   disabled={!formData.model}
                 >
                   <option value="">Selecione a Versà£o</option>
-                  {specs.map(s => <option key={s} value={s}>{s}</option>)}
+                  {specs.map((s: string) => <option key={s} value={s}>{s}</option>)}
                   <option value="Custom">Outra / Customizada</option>
                 </select>
                 {(!specs.includes(formData.engine) && formData.engine !== '') && (
@@ -3814,7 +3709,7 @@ function DuelComparison({ challenge }: { challenge: Challenge }) {
   const chartData = challenge.result.path.map((p, i) => ({
     time: i,
     [challenge.creatorName]: p.speed * 3.6,
-    Você: challenge.opponentResult?.path[i]?.speed * 3.6 || 0
+    Você: (challenge.opponentResult?.path[i]?.speed || 0) * 3.6
   }));
 
   const creatorChartData = challenge.result.path.map((p, i) => ({
@@ -5366,7 +5261,7 @@ export default function App() {
             return currentScreen;
           }
           
-          if (currentScreen === 'timer' || currentScreen === 'duel') {
+          if (currentScreen === 'timer') {
             reset();
             setActiveConfig(null);
           }
@@ -5785,17 +5680,17 @@ export default function App() {
 
     try {
       const currentMonth = new Date().toISOString().substring(0, 7);
-      const newCoins = (userProfile.dragfireCoins || 0) + pendingReward.rewardAmount;
+      const newCoins = (userProfile.dfCoins || 0) + pendingReward.rewardAmount;
       const ref = doc(db, 'users', user.uid);
       
       await updateDoc(ref, {
-        dragfireCoins: newCoins,
+        dfCoins: newCoins,
         lastRewardClaimMonth: currentMonth
       });
 
       setUserProfile({ 
         ...userProfile, 
-        dragfireCoins: newCoins, 
+        dfCoins: newCoins, 
         lastRewardClaimMonth: currentMonth 
       });
 
@@ -6370,7 +6265,7 @@ export default function App() {
         p.target === updated.result.config.target
       ) || PRESETS[0];
 
-      setActiveConfig(preset);
+      setActiveConfig(preset as RunPreset);
       setScreen('timer');
       
       const config: RunConfig = {
@@ -6554,14 +6449,14 @@ export default function App() {
             <VehicleSettings 
               vehicles={vehicles} 
               userProfile={userProfile}
-              isPremium={isUserPremium}
+              isPremium={isUserPremium || false}
               userId={user?.uid || ''}
               editingVehicle={editingVehicle}
               setEditingVehicle={setEditingVehicle}
               onSave={saveVehicle} 
               onDelete={deleteVehicle}
               onBack={() => setScreen('settings')} 
-              setScreen={setScreen}
+              setScreen={(v: string) => setScreen(v as Screen)}
               setCatalogVehicle={setCatalogVehicle}
             />
           </motion.div>
@@ -6590,7 +6485,7 @@ export default function App() {
           >
             {(userProfile?.uiPreference === 'elite' || !userProfile?.uiPreference) ? (
               <RegionalRankingElite 
-                userLocation={lastPosition} 
+                userLocation={lastPosition}
                 onBack={() => setScreen('home')} 
                 onViewProfile={(uid) => {
                   setSelectedProfileUid(uid);
@@ -6599,7 +6494,7 @@ export default function App() {
               />
             ) : (
               <RegionalRanking 
-                userLocation={lastPosition} 
+                userLocation={lastPosition}
                 onBack={() => setScreen('home')} 
                 onViewProfile={(uid) => {
                   setSelectedProfileUid(uid);
@@ -6637,14 +6532,14 @@ export default function App() {
         ) : screen === 'trip-explorer' && userProfile ? (
             <TripExplorer 
               onBack={() => setScreen('home')}
-              userLocation={lastPosition}
+              userLocation={lastPosition ? { lat: lastPosition.latitude, lng: lastPosition.longitude } : null}
               userId={user?.uid}
               isGuest={isGuest}
             />
           ) : screen === 'curve-radar' && userProfile ? (
             <CurveRadar 
               onBack={() => setScreen('home')}
-              userLocation={lastPosition}
+              userLocation={lastPosition ? { lat: lastPosition.latitude, lng: lastPosition.longitude } : null}
               userId={user?.uid}
               isGuest={isGuest}
             />
@@ -7323,7 +7218,7 @@ export default function App() {
                 gpsStatus={gpsStatus}
                 accuracy={accuracy}
                 vehicles={vehicles}
-                runVehicleId={runVehicleId}
+                runVehicleId={runVehicleId || ''}
                 isQuickSwitchOpen={isQuickSwitchOpen}
                 useRollout={useRollout}
                 error={error}
@@ -7361,7 +7256,7 @@ export default function App() {
                 gpsStatus={gpsStatus}
                 accuracy={accuracy}
                 vehicles={vehicles}
-                runVehicleId={runVehicleId}
+                runVehicleId={runVehicleId || ''}
                 isQuickSwitchOpen={isQuickSwitchOpen}
                 useRollout={useRollout}
                 error={error}
@@ -8402,7 +8297,7 @@ function CurveRadar({ onBack, userLocation, userId, isGuest }: { onBack: () => v
 
             <button 
               onClick={() => {
-                const url = `https://www.google.com/maps/dir/?api=1&origin=${userLocation.lat},${userLocation.lng}&destination=${encodeURIComponent(searchQuery)}&travelmode=driving`;
+                const url = `https://www.google.com/maps/dir/?api=1&origin=${userLocation?.lat || 0},${userLocation?.lng || 0}&destination=${encodeURIComponent(searchQuery)}&travelmode=driving`;
                 window.open(url, '_blank');
               }}
               className="w-full py-5 bg-zinc-900 border border-white/10 rounded-2xl flex items-center justify-center gap-3 group active:scale-95 transition-all"

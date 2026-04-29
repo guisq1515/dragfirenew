@@ -275,32 +275,49 @@ class CurveAnalysisService {
     nodes.forEach((n, idx) => { const d = this.haversineDistance(currentLat, currentLng, n.lat, n.lng); if (d < minDist) { minDist = d; closest = idx; } });
 
     let i = closest, scan = 0;
-    while (i < nodes.length - 3 && found.length < 5) {
+    while (i < nodes.length - 3 && found.length < 10) {
       scan += this.haversineDistance(nodes[i].lat, nodes[i].lng, nodes[i+1].lat, nodes[i+1].lng);
       if (scan > lookAheadMeters) break;
 
       let cumAngle = 0, win = 0, j = i;
       let signChanges = 0, lastAngle = 0;
+      let straightDist = 0;
       
-      while (j < nodes.length - 2 && win < 150) {
-        win += this.haversineDistance(nodes[j].lat, nodes[j].lng, nodes[j+1].lat, nodes[j+1].lng);
+      while (j < nodes.length - 2 && win < 250) {
+        const dist = this.haversineDistance(nodes[j].lat, nodes[j].lng, nodes[j+1].lat, nodes[j+1].lng);
+        win += dist;
         const v1 = { x: nodes[j+1].lng - nodes[j].lng, y: nodes[j+1].lat - nodes[j].lat };
         const v2 = { x: nodes[j+2].lng - nodes[j+1].lng, y: nodes[j+2].lat - nodes[j+1].lat };
         const dot = v1.x * v2.x + v1.y * v2.y;
         const mag1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y), mag2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
         
+        let signedAngle = 0;
         if (mag1 > 0 && mag2 > 0) {
            const angle = Math.acos(Math.max(-1, Math.min(1, dot / (mag1 * mag2)))) * (180 / Math.PI);
            const currentSign = (v1.x * v2.y - v1.y * v2.x) < 0 ? 1 : -1;
-           const signedAngle = currentSign * angle;
+           signedAngle = currentSign * angle;
            
            if (lastAngle !== 0 && Math.sign(signedAngle) !== Math.sign(lastAngle) && Math.abs(signedAngle) > 5) {
+              if (Math.abs(cumAngle) > 15) {
+                  break;
+              }
               signChanges++;
            }
            
            cumAngle += signedAngle;
            lastAngle = signedAngle;
         }
+
+        if (Math.abs(signedAngle) < 3) {
+            straightDist += dist;
+        } else {
+            straightDist = 0;
+        }
+
+        if (straightDist > 35 && Math.abs(cumAngle) > 10) {
+            break;
+        }
+
         j++;
       }
 
