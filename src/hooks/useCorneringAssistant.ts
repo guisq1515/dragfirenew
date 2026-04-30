@@ -132,7 +132,7 @@ export function useCorneringAssistant(
       if (headingDiff > 180) headingDiff = 360 - headingDiff;
     }
     
-    if (distToLast > 30 || headingDiff > 30) {
+    if (upcomingNodes.length === 0 || distToLast > 30 || headingDiff > 30) {
       const updateGeometry = async () => {
         if (upcomingNodes.length === 0) setIsLoading(true);
         const { nodes, roadName, allWays, preCalculatedCurves } = await curveService.getRoadGeometry(lat, lng, heading, speedRef.current);
@@ -311,12 +311,11 @@ export function useCorneringAssistant(
           return foundCurves.map(newC => {
             const existing = prev.find(p => p.id === newC.id);
             if (existing) {
-              // Blend logic: if jump is small (<15m), use EMA to smooth it
+              // Blend logic: use larger threshold (100m) and 85% extrapolation weight
               const diff = Math.abs(newC.distance - existing.distance);
-              if (diff < 15) {
-                // 70% current (extrapolated), 30% new (GPS sync)
-                const blendedDist = Math.round(existing.distance * 0.7 + newC.distance * 0.3);
-                // Also update sync map to start extrapolation from the blended value
+              if (diff < 100) {
+                // 85% current (extrapolated), 15% new (GPS sync)
+                const blendedDist = Math.round(existing.distance * 0.85 + newC.distance * 0.15);
                 if (newC.id) lastSyncDistancesRef.current[newC.id] = blendedDist;
                 return { ...newC, distance: blendedDist };
               }

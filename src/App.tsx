@@ -20,6 +20,7 @@ import {
 } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
 import { App as CapacitorApp } from '@capacitor/app';
+import { Motion } from '@capacitor/motion';
 import { SocialLogin } from '@capgo/capacitor-social-login';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { 
@@ -4214,6 +4215,8 @@ interface TimerProps {
   handleAcceptChallenge: (c: Challenge) => void;
   isSettling: boolean;
   settlingCountdown: number;
+  telemetryConfig: TelemetryConfig;
+  setTelemetryConfig: React.Dispatch<React.SetStateAction<TelemetryConfig>>;
 }
 
 function TimerClassic(props: TimerProps) {
@@ -4223,7 +4226,8 @@ function TimerClassic(props: TimerProps) {
     gForce, gpsStatus, accuracy, vehicles, runVehicleId, isQuickSwitchOpen,
     useRollout, error, setIsQuickSwitchOpen, setRunVehicleId, setUseRollout,
     reset, handleBack, handleStart, manualStart, manualStop, handleDuel,
-    requestPermission, setScreen, handleAcceptChallenge, isSettling, settlingCountdown
+    requestPermission, setScreen, handleAcceptChallenge, isSettling, settlingCountdown,
+    telemetryConfig, setTelemetryConfig
   } = props;
 
   return (
@@ -4715,8 +4719,100 @@ function TimerElite(props: TimerProps) {
     gForce, gpsStatus, accuracy, vehicles, runVehicleId, isQuickSwitchOpen,
     useRollout, error, setIsQuickSwitchOpen, setRunVehicleId, setUseRollout,
     reset, handleBack, handleStart, manualStart, manualStop, handleDuel,
-    requestPermission, setScreen, handleAcceptChallenge, isSettling, settlingCountdown
+    requestPermission, setScreen, handleAcceptChallenge, isSettling, settlingCountdown,
+    telemetryConfig, setTelemetryConfig
   } = props;
+
+  // --- NOVAS CONFIGURAÇÕES DO TESTE ---
+  const [pocketMode, setPocketMode] = useState(() => localStorage.getItem('df_pocket_mode') === 'true');
+  const [stabilizer15s, setStabilizer15s] = useState(() => localStorage.getItem('df_stabilizer_15s') === 'true');
+  const [vibrateOnStart, setVibrateOnStart] = useState(() => localStorage.getItem('df_vibrate_on_start') === 'true');
+  
+  const [stabilizerCountdown, setStabilizerCountdown] = useState(0);
+  const [isStabilizing, setIsStabilizing] = useState(false);
+  const [showPerfSettings, setShowPerfSettings] = useState(false);
+  
+  const [liveVibration, setLiveVibration] = useState(1.0);
+  const [isCalibrating, setIsCalibrating] = useState(false);
+  const [calibrationMax, setCalibrationMax] = useState(0);
+
+  useEffect(() => {
+    localStorage.setItem('df_pocket_mode', String(pocketMode));
+    localStorage.setItem('df_stabilizer_15s', String(stabilizer15s));
+    localStorage.setItem('df_vibrate_on_start', String(vibrateOnStart));
+  }, [pocketMode, stabilizer15s, vibrateOnStart]);
+
+  useEffect(() => {
+    if (isRunning && vibrateOnStart) {
+      if (navigator.vibrate) {
+        navigator.vibrate([300]);
+      }
+    }
+  }, [isRunning, vibrateOnStart]);
+
+  useEffect(() => {
+    if (!showPerfSettings && !isCalibrating) return;
+    
+    let listener: any;
+    const startMotion = async () => {
+      try {
+        listener = await Motion.addListener('accel', (event) => {
+          const { x, y, z } = event.accelerationIncludingGravity;
+          const totalG = Math.sqrt((x || 0)**2 + (y || 0)**2 + (z || 0)**2) / 9.81;
+          setLiveVibration(totalG);
+          
+          if (isCalibrating) {
+            setCalibrationMax(prev => Math.max(prev, totalG));
+          }
+        });
+      } catch (e) {
+        console.error("Erro ao iniciar sensor para calibração:", e);
+      }
+    };
+    
+    startMotion();
+    return () => {
+      if (listener && listener.remove) {
+        listener.remove();
+      }
+    };
+  }, [showPerfSettings, isCalibrating]);
+
+  const startAutoCalibration = () => {
+    setIsCalibrating(true);
+    setCalibrationMax(0);
+    setTimeout(() => {
+      setIsCalibrating(false);
+      setCalibrationMax(currentMax => {
+        const newSensitivity = Math.min(3.0, Math.max(1.0, Number((currentMax + 0.2).toFixed(2))));
+        setTelemetryConfig(prev => ({ ...prev, motionSensitivity: newSensitivity }));
+        alert(`Calibração Concluída!\nNova sensibilidade: ${newSensitivity}G`);
+        return currentMax;
+      });
+    }, 5000);
+  };
+
+  const onStartWithStabilizer = () => {
+    if (currentSpeed > 1.5) return;
+    
+    if (pocketMode && stabilizer15s) {
+      setIsStabilizing(true);
+      setStabilizerCountdown(15);
+      const interval = window.setInterval(() => {
+        setStabilizerCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            setIsStabilizing(false);
+            handleStart();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      handleStart();
+    }
+  };
 
   const activeVehicle = vehicles.find(v => v.id === runVehicleId);
   const [resultTab, setResultTab] = useState<'summary' | 'telemetry' | 'map'>('summary');
@@ -4825,6 +4921,12 @@ function TimerElite(props: TimerProps) {
              
              {/* Main Dashboard Core */}
              <div className="relative w-full flex-1 flex flex-col items-center justify-center -mt-6 min-h-0">
+                <button 
+                  onClick={() => setShowPerfSettings(true)}
+                  className="absolute top-0 right-4 z-20 p-3 bg-zinc-900/60 backdrop-blur-2xl rounded-xl border border-white/10 text-white active:scale-95 transition-all shadow-xl"
+                >
+                  <SettingsIcon className="w-5 h-5" />
+                </button>
                 {/* Refined Arch Gauge */}
                 <div className="relative w-64 h-64 flex items-center justify-center">
                   <svg className="absolute w-[140%] h-[140%] opacity-20 pointer-events-none" viewBox="0 0 100 80">
@@ -4933,10 +5035,11 @@ function TimerElite(props: TimerProps) {
                             )}
 
                             <button 
-                              onClick={handleStart}
-                              className="w-full min-w-[200px] py-4 bg-brand-primary text-white font-display font-black text-xl italic tracking-[0.1em] uppercase rounded-[28px] shadow-[0_15px_40px_rgba(239,68,68,0.3)] border-t border-white/20 active:scale-95 transition-all"
+                                                             onClick={onStartWithStabilizer}
+                                                            disabled={currentSpeed > 1.5}
+                              className={`w-full min-w-[200px] py-4 bg-brand-primary text-white font-display font-black text-xl italic tracking-[0.1em] uppercase rounded-[28px] shadow-[0_15px_40px_rgba(239,68,68,0.3)] border-t border-white/20 active:scale-95 transition-all ${currentSpeed > 1.5 ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
-                              INICIAR
+                                                            {currentSpeed > 1.5 ? 'PARE O VEÍCULO' : 'INICIAR'}
                             </button>
                           </motion.div>
                         )}
@@ -5158,6 +5261,180 @@ function TimerElite(props: TimerProps) {
                     </div>
                   </button>
                 ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* Pocket Mode Overlay */}
+      {pocketMode && !lastResult && (isStabilizing || isWaiting || isRunning) && (
+        <div className="fixed inset-0 z-[200] bg-zinc-950 flex flex-col items-center justify-center p-6 text-center select-none">
+          <div className="absolute inset-0 opacity-5 pointer-events-none" style={{ backgroundImage: 'radial-gradient(#ffffff 0.5px, transparent 0)', backgroundSize: '15px 15px' }} />
+          
+          <div className="w-24 h-24 rounded-full bg-brand-primary/10 flex items-center justify-center mb-8 animate-pulse border border-brand-primary/30">
+            <Lock className="w-10 h-10 text-brand-primary" />
+          </div>
+          
+          <h3 className="text-3xl font-display font-black italic text-white uppercase tracking-tighter mb-2">
+            MODO BOLSO ATIVO
+          </h3>
+          
+          <p className="text-xs text-zinc-400 uppercase tracking-widest max-w-xs mb-12 leading-relaxed">
+            {isStabilizing 
+              ? `Estabilizando... Guarde no bolso em ${stabilizerCountdown}s` 
+              : isWaiting 
+              ? 'Aguardando arrancada no bolso...' 
+              : 'Puxada em andamento!'}
+          </p>
+
+          <div className="w-full max-w-xs bg-zinc-900/50 backdrop-blur-xl border border-white/5 p-4 rounded-2xl mb-8">
+            <div className="flex justify-between items-center text-left mb-2">
+              <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Velocidade Atual</span>
+              <span className="text-xl font-display font-black text-white italic">{Math.round(currentSpeed)} <span className="text-[10px] text-zinc-500">KM/H</span></span>
+            </div>
+            <div className="flex justify-between items-center text-left">
+              <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest">Tempo</span>
+              <span className="text-xl font-display font-black text-brand-accent italic">{elapsedTime.toFixed(1)}s</span>
+            </div>
+          </div>
+
+          <div className="w-full max-w-xs h-14 bg-zinc-900 rounded-full p-1 relative flex items-center overflow-hidden border border-white/5">
+            <motion.div
+              drag="x"
+              dragConstraints={{ left: 0, right: 250 }}
+              dragElastic={0.1}
+              dragMomentum={false}
+              onDragEnd={(event, info) => {
+                if (info.offset.x >= 200) {
+                  setPocketMode(false);
+                }
+              }}
+              className="w-12 h-12 rounded-full bg-brand-primary flex items-center justify-center cursor-grab active:cursor-grabbing shadow-lg z-10"
+            >
+              <ChevronRight className="w-6 h-6 text-black font-bold" />
+            </motion.div>
+            <span className="absolute inset-0 flex items-center justify-center text-[9px] font-black text-zinc-500 uppercase tracking-[0.2em] pointer-events-none select-none">
+              Deslize para Desbloquear
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Performance Settings Modal */}
+      <AnimatePresence>
+        {showPerfSettings && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[150] bg-black/95 backdrop-blur-3xl flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-md bg-[#0a0a0a] border border-white/10 rounded-[32px] p-6 space-y-6 shadow-2xl relative"
+            >
+              <header className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <SettingsIcon className="w-5 h-5 text-brand-primary" />
+                  <h3 className="text-lg font-display font-black italic text-white uppercase">Ajustes do Teste</h3>
+                </div>
+                <button onClick={() => setShowPerfSettings(false)} className="p-2 bg-white/5 rounded-xl text-zinc-500">
+                  <X className="w-5 h-5" />
+                </button>
+              </header>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-zinc-950 rounded-2xl border border-white/5">
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Modo Bolso (Motoboy)</h4>
+                    <p className="text-[8px] text-zinc-500 uppercase tracking-widest mt-0.5">Evita toques acidentais</p>
+                  </div>
+                  <button 
+                    onClick={() => setPocketMode(!pocketMode)}
+                    className={`w-10 h-6 rounded-full relative transition-colors ${pocketMode ? 'bg-brand-primary' : 'bg-zinc-800'}`}
+                  >
+                    <motion.div animate={{ x: pocketMode ? 16 : 0 }} className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full" />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-zinc-950 rounded-2xl border border-white/5">
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Estabilizador (15s)</h4>
+                    <p className="text-[8px] text-zinc-500 uppercase tracking-widest mt-0.5">Apenas no Modo Bolso</p>
+                  </div>
+                  <button 
+                    onClick={() => setStabilizer15s(!stabilizer15s)}
+                    disabled={!pocketMode}
+                    className={`w-10 h-6 rounded-full relative transition-colors ${stabilizer15s && pocketMode ? 'bg-brand-primary' : 'bg-zinc-800'} ${!pocketMode ? 'opacity-30 cursor-not-allowed' : ''}`}
+                  >
+                    <motion.div animate={{ x: stabilizer15s && pocketMode ? 16 : 0 }} className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full" />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-zinc-950 rounded-2xl border border-white/5">
+                  <div>
+                    <h4 className="text-xs font-bold text-white">Vibrar ao Iniciar</h4>
+                    <p className="text-[8px] text-zinc-500 uppercase tracking-widest mt-0.5">Feedback tátil na arrancada</p>
+                  </div>
+                  <button 
+                    onClick={() => setVibrateOnStart(!vibrateOnStart)}
+                    className={`w-10 h-6 rounded-full relative transition-colors ${vibrateOnStart ? 'bg-brand-primary' : 'bg-zinc-800'}`}
+                  >
+                    <motion.div animate={{ x: vibrateOnStart ? 16 : 0 }} className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full" />
+                  </button>
+                </div>
+
+                <div className="p-4 bg-zinc-950 rounded-2xl border border-white/5 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Sensibilidade do Sensor</h4>
+                      <p className="text-[8px] text-zinc-500 uppercase tracking-widest mt-0.5">Ajuste para evitar queima de largada</p>
+                    </div>
+                    <span className="text-xs font-display font-black text-brand-primary italic">
+                      {telemetryConfig.motionSensitivity}G
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[7px] font-bold text-zinc-500 uppercase tracking-widest">
+                      <span>Vibração Atual</span>
+                      <span>{liveVibration.toFixed(2)}G</span>
+                    </div>
+                    <div className="h-2 bg-zinc-900 rounded-full overflow-hidden border border-white/5 relative">
+                      <div 
+                        className="h-full bg-gradient-to-r from-green-500 via-yellow-500 to-red-500 transition-all duration-100" 
+                        style={{ width: `${Math.min(100, (liveVibration / 3.0) * 100)}%` }}
+                      />
+                      <div 
+                        className="absolute top-0 bottom-0 w-0.5 bg-white shadow-[0_0_5px_#fff]" 
+                        style={{ left: `${Math.min(100, (telemetryConfig.motionSensitivity / 3.0) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[7px] font-bold text-zinc-500 uppercase tracking-widest">
+                      <span>Ajuste Manual</span>
+                      <span>1.0G - 3.0G</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="1.0" 
+                      max="3.0" 
+                      step="0.05"
+                      value={telemetryConfig.motionSensitivity}
+                      onChange={(e) => setTelemetryConfig(prev => ({ ...prev, motionSensitivity: parseFloat(e.target.value) }))}
+                      className="w-full accent-brand-primary bg-zinc-900 h-1 rounded-lg appearance-none cursor-pointer"
+                    />
+                  </div>
+
+                  <button
+                    onClick={startAutoCalibration}
+                    disabled={isCalibrating}
+                    className={`w-full py-3 rounded-xl font-display font-black italic uppercase text-[10px] tracking-widest transition-all flex items-center justify-center gap-2 ${isCalibrating ? 'bg-yellow-600/20 text-yellow-500 border border-yellow-500/30 animate-pulse' : 'bg-zinc-900 text-white border border-white/5 hover:border-brand-primary/30'}`}
+                  >
+                    <RefreshCcw className={`w-3.5 h-3.5 ${isCalibrating ? 'animate-spin' : ''}`} />
+                    {isCalibrating ? 'CALIBRANDO (ACELERE O MOTOR)...' : 'CALIBRAÇÃO AUTOMÁTICA'}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
@@ -7236,6 +7513,8 @@ export default function App() {
                 handleAcceptChallenge={handleAcceptChallenge}
                 isSettling={isSettling}
                 settlingCountdown={settlingCountdown}
+                telemetryConfig={telemetryConfig}
+                setTelemetryConfig={setTelemetryConfig}
               />
             ) : (
               <TimerClassic 
@@ -7274,6 +7553,8 @@ export default function App() {
                 handleAcceptChallenge={handleAcceptChallenge}
                 isSettling={isSettling}
                 settlingCountdown={settlingCountdown}
+                telemetryConfig={telemetryConfig}
+                setTelemetryConfig={setTelemetryConfig}
               />
             )}
            </>

@@ -198,49 +198,7 @@ export function CorneringAssistantHUD({
         return Math.sqrt(dx * dx + dy * dy) * 111320;
       };
 
-      // Find curve context in upcomingNodes
-      if (upcomingNodes && upcomingNodes.length > 0) {
-        const firstPt = curve.points[0];
-        const lastPt = curve.points[curve.points.length - 1];
-        
-        let startIndex = -1;
-        for (let i = 0; i < upcomingNodes.length; i++) {
-          if (Math.abs(upcomingNodes[i].lat - firstPt.lat) < 0.0001 && Math.abs(upcomingNodes[i].lng - firstPt.lng) < 0.0001) {
-            startIndex = i;
-            break;
-          }
-        }
-        
-        let endIndex = -1;
-        if (startIndex !== -1) {
-          for (let i = startIndex; i < upcomingNodes.length; i++) {
-            if (Math.abs(upcomingNodes[i].lat - lastPt.lat) < 0.0001 && Math.abs(upcomingNodes[i].lng - lastPt.lng) < 0.0001) {
-              endIndex = i;
-              break;
-            }
-          }
-        }
-        
-        if (startIndex !== -1 && endIndex !== -1) {
-          // Include up to 120 meters of context before the curve
-          let expandedStart = startIndex;
-          let distStart = 0;
-          while (expandedStart > 0 && distStart < 120) {
-            expandedStart--;
-            distStart += getApproxDistance(upcomingNodes[expandedStart], upcomingNodes[expandedStart + 1]);
-          }
-          
-          // Include up to 80 meters of context after the curve
-          let expandedEnd = endIndex;
-          let distEnd = 0;
-          while (expandedEnd < upcomingNodes.length - 1 && distEnd < 80) {
-            expandedEnd++;
-            distEnd += getApproxDistance(upcomingNodes[expandedEnd - 1], upcomingNodes[expandedEnd]);
-          }
-          
-          pts = upcomingNodes.slice(expandedStart, expandedEnd + 1);
-        }
-      }
+
 
       const p0 = pts[0];
       const p1 = pts[1];

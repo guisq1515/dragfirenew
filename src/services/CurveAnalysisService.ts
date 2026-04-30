@@ -270,14 +270,26 @@ class CurveAnalysisService {
 
   findUpcomingCurves(currentLat: number, currentLng: number, currentHeading: number | null, nodes: RoadNode[], lookAheadMeters: number, speedKmh: number = 0): CurveData[] {
     if (nodes.length < 5) return [];
-    const found: CurveData[] = [];
+    const found: (CurveData & { originalJ: number })[] = [];
+    
     let closest = 0, minDist = Infinity;
-    nodes.forEach((n, idx) => { const d = this.haversineDistance(currentLat, currentLng, n.lat, n.lng); if (d < minDist) { minDist = d; closest = idx; } });
+    nodes.forEach((n, idx) => { 
+      const d = this.haversineDistance(currentLat, currentLng, n.lat, n.lng); 
+      if (d < minDist) { minDist = d; closest = idx; } 
+    });
 
-    let i = closest, scan = 0;
+    let i = 0;
     while (i < nodes.length - 3 && found.length < 10) {
-      scan += this.haversineDistance(nodes[i].lat, nodes[i].lng, nodes[i+1].lat, nodes[i+1].lng);
-      if (scan > lookAheadMeters) break;
+      let distanceToCurve = 0;
+      if (i >= closest) {
+        for (let k = closest; k < i; k++) {
+          distanceToCurve += this.haversineDistance(nodes[k].lat, nodes[k].lng, nodes[k+1].lat, nodes[k+1].lng);
+        }
+      } else {
+        for (let k = i; k < closest; k++) {
+          distanceToCurve -= this.haversineDistance(nodes[k].lat, nodes[k].lng, nodes[k+1].lat, nodes[k+1].lng);
+        }
+      }
 
       let cumAngle = 0, win = 0, j = i;
       let signChanges = 0, lastAngle = 0;
@@ -337,21 +349,38 @@ class CurveAnalysisService {
         else if (absAngle > this.mediumThreshold) type = 'medium';
         else if (absAngle < 10) type = 'straight';
 
+        // Extend points for drawing (40m context)
+        let startIdx = i;
+        let backDist = 0;
+        while (startIdx > 0 && backDist < 40) {
+          backDist += this.haversineDistance(nodes[startIdx].lat, nodes[startIdx].lng, nodes[startIdx-1].lat, nodes[startIdx-1].lng);
+          startIdx--;
+        }
+
+        let endIdx = j;
+        let forwardDist = 0;
+        while (endIdx < nodes.length - 1 && forwardDist < 40) {
+          forwardDist += this.haversineDistance(nodes[endIdx].lat, nodes[endIdx].lng, nodes[endIdx+1].lat, nodes[endIdx+1].lng);
+          endIdx++;
+        }
+
         found.push({
           angle: Math.round(absAngle),
           severity: type,
-          distance: Math.round(scan),
+          distance: Math.max(0, Math.round(distanceToCurve)),
           direction: cumAngle > 0 ? 'right' : 'left',
-          points: nodes.slice(i, j + 1),
+          points: nodes.slice(startIdx, endIdx + 1),
           slope: Math.round(slope),
-          isUphill: slope > 1.5
+          isUphill: slope > 1.5,
+          originalJ: j
         });
-        i = j; // Move exactly to where the curve ended
+        i = j; 
       } else {
         i++;
       }
     }
-    return found;
+    
+    return found.filter(c => c.originalJ >= closest && c.distance <= lookAheadMeters);
   }
 
   public clearCache() {
