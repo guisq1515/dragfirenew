@@ -200,6 +200,12 @@ class CurveAnalysisService {
       const last = orderedNodes[orderedNodes.length - 1];
       for (const w of ways) {
         if (joinedWays.has(w.id)) continue;
+        
+        // Evitar costurar ruas diferentes em um grid urbano (causa o efeito zigue-zague)
+        const wName = w.tags?.name || w.tags?.ref;
+        const bestWayName = (bestWay as WayData).tags?.name || (bestWay as WayData).tags?.ref;
+        if (wName && bestWayName && wName !== bestWayName) continue;
+
         const wF = w.nodes[0], wL = w.nodes[w.nodes.length - 1];
         if (wF === last) { orderedNodes.push(...w.nodes.slice(1)); joinedWays.add(w.id); added = true; break; }
         else if (wL === first) { orderedNodes.unshift(...w.nodes.slice(0, -1)); joinedWays.add(w.id); added = true; break; }
@@ -309,8 +315,8 @@ class CurveAnalysisService {
            const currentSign = (v1.x * v2.y - v1.y * v2.x) < 0 ? 1 : -1;
            signedAngle = currentSign * angle;
            
-           if (lastAngle !== 0 && Math.sign(signedAngle) !== Math.sign(lastAngle) && Math.abs(signedAngle) > 5) {
-              if (Math.abs(cumAngle) > 15) {
+           if (lastAngle !== 0 && Math.sign(signedAngle) !== Math.sign(lastAngle) && Math.abs(signedAngle) > 10) {
+              if (Math.abs(cumAngle) > 45) { // Só quebra prematuramente se já for uma curva significante
                   break;
               }
               signChanges++;
@@ -326,7 +332,7 @@ class CurveAnalysisService {
             straightDist = 0;
         }
 
-        if (straightDist > 35 && Math.abs(cumAngle) > 10) {
+        if (straightDist > 50 && Math.abs(cumAngle) > 10) {
             break;
         }
 
@@ -365,6 +371,7 @@ class CurveAnalysisService {
         }
 
         found.push({
+          id: `curve_${nodes[j].lat.toFixed(5)}_${nodes[j].lng.toFixed(5)}`,
           angle: Math.round(absAngle),
           severity: type,
           distance: Math.max(0, Math.round(distanceToCurve)),

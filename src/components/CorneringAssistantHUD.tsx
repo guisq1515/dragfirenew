@@ -186,77 +186,98 @@ export function CorneringAssistantHUD({
     
     // Dynamic Path Generation based on actual points
     const generateRealisticPath = () => {
-      const fallback = { path: "M 50 85 L 50 15", arrowHead: "M 35 35 L 50 15 L 65 35" };
-      if (!curve.points || curve.points.length < 2) return fallback;
-      
-      let pts = curve.points;
-      
-      // Local lightweight distance approximation
-      const getApproxDistance = (p1: RoadNode, p2: RoadNode) => {
-        const dx = (p2.lng - p1.lng) * Math.cos(p1.lat * Math.PI / 180);
-        const dy = p2.lat - p1.lat;
-        return Math.sqrt(dx * dx + dy * dy) * 111320;
-      };
+      const isNormal = size === 'normal';
+      const headLen = isNormal ? 24 : 14;
 
-
-
-      const p0 = pts[0];
-      const p1 = pts[1];
-      
-      const entryAngle = Math.atan2(p1.lat - p0.lat, p1.lng - p0.lng);
-      const rotation = -entryAngle + Math.PI / 2;
-      
-      const projected = pts.map(p => {
-        const dx = p.lng - p0.lng;
-        const dy = p.lat - p0.lat;
-        const rx = dx * Math.cos(rotation) - dy * Math.sin(rotation);
-        const ry = dx * Math.sin(rotation) + dy * Math.cos(rotation);
-        return { x: rx, y: -ry };
-      });
-
-      let maxL1 = 0.000001;
-      projected.forEach(p => {
-        const l1 = Math.abs(p.x) + Math.abs(p.y);
-        if (l1 > maxL1) maxL1 = l1;
-      });
-
-      const scale = 75 / maxL1;
-
-      const finalPts = projected.map(p => ({
-        x: 50 + p.x * scale,
-        y: 85 + p.y * scale
-      }));
-
-      let minX = 50, maxX = 50, minY = 85, maxY = 85;
-      finalPts.forEach(p => {
-        minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
-        minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
-      });
-
-      const offsetX = 50 - (minX + maxX) / 2;
-      const offsetY = 50 - (minY + maxY) / 2;
-      
-      const centeredPts = finalPts.map(p => ({
-        x: p.x + offsetX,
-        y: p.y + offsetY
-      }));
-
-      let pathStr = `M ${centeredPts[0].x} ${centeredPts[0].y}`;
-      for (let i = 1; i < centeredPts.length; i++) {
-        pathStr += ` L ${centeredPts[i].x} ${centeredPts[i].y}`;
+      // Chicanes e Curvas em S
+      if (curve.severity === 's-curve' || curve.severity === 'chicane') {
+         const dir = curve.direction === 'left' ? -1 : 1;
+         const p1x = 50, p1y = 70;
+         const p2x = 50 + dir * 25, p2y = 45;
+         const p3x = 50 + dir * 10, p3y = 20;
+         
+         const pathStr = `M 50 85 L ${p1x} ${p1y} C ${p1x} 55, ${p2x} 60, ${p2x} ${p2y} C ${p2x} 30, ${p3x} 35, ${p3x} ${p3y}`;
+         const hAngle1 = 0 + Math.PI - 0.6; 
+         const hAngle2 = 0 + Math.PI + 0.6;
+         const h1X = p3x + headLen * Math.sin(hAngle1);
+         const h1Y = p3y - headLen * Math.cos(hAngle1);
+         const h2X = p3x + headLen * Math.sin(hAngle2);
+         const h2Y = p3y - headLen * Math.cos(hAngle2);
+         
+         return { path: pathStr, arrowHead: `M ${h1X} ${h1Y} L ${p3x} ${p3y} L ${h2X} ${h2Y}` };
       }
 
-      const last = centeredPts[centeredPts.length - 1];
-      const prev = centeredPts[Math.max(0, centeredPts.length - 2)];
-      const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
-      const headLen = isNormal ? 24 : 14;
-      const h1x = last.x - headLen * Math.cos(angle - 0.7);
-      const h1y = last.y - headLen * Math.sin(angle - 0.7);
-      const h2x = last.x - headLen * Math.cos(angle + 0.7);
-      const h2y = last.y - headLen * Math.sin(angle + 0.7);
-      const arrowHeadStr = `M ${h1x} ${h1y} L ${last.x} ${last.y} L ${h2x} ${h2y}`;
+      // Geometria Didática: Reta de Entrada -> Arco da Curva -> Reta de Saída -> Flecha
+      const angleDeg = Math.min(180, curve.angle || 0); 
+      const angleRad = angleDeg * (Math.PI / 180);
+      const isLeft = curve.direction === 'left';
+      const dirMult = isLeft ? -1 : 1;
 
-      return { path: pathStr, arrowHead: arrowHeadStr };
+      const startX = 50;
+      const startY = 85;
+      const entryLen = 30; // 30% reta de entrada
+      const p1X = startX;
+      const p1Y = startY - entryLen;
+
+      const arcRadius = 20; // Arco suave da curva
+      const cx = p1X + dirMult * arcRadius;
+      const cy = p1Y;
+
+      const startAngle = isLeft ? 0 : Math.PI;
+      const endAngle = startAngle + dirMult * angleRad;
+      
+      const p2X = cx + arcRadius * Math.cos(endAngle);
+      const p2Y = cy - arcRadius * Math.sin(endAngle);
+
+      const rx = arcRadius;
+      const ry = arcRadius;
+      const sweepFlag = isLeft ? 0 : 1;
+      const largeArcFlag = angleDeg > 180 ? 1 : 0;
+
+      const exitLen = 15; // Reta final de saída
+      const finalHeading = angleRad * dirMult; 
+      const vx = Math.sin(finalHeading);
+      const vy = -Math.cos(finalHeading);
+
+      const p3X = (angleDeg > 2 ? p2X : p1X) + exitLen * vx;
+      const p3Y = (angleDeg > 2 ? p2Y : p1Y) + exitLen * vy;
+
+      const hAngle1 = finalHeading + Math.PI - 0.6;
+      const hAngle2 = finalHeading + Math.PI + 0.6;
+      
+      const h1X = p3X + headLen * Math.sin(hAngle1);
+      const h1Y = p3Y - headLen * Math.cos(hAngle1);
+      
+      const h2X = p3X + headLen * Math.sin(hAngle2);
+      const h2Y = p3Y - headLen * Math.cos(hAngle2);
+
+      // Centralizar visualmente o desenho gerado dentro da viewBox
+      const allX = [startX, p1X, p2X, p3X, h1X, h2X];
+      const allY = [startY, p1Y, p2Y, p3Y, h1Y, h2Y];
+      const minX = Math.min(...allX);
+      const maxX = Math.max(...allX);
+      const minY = Math.min(...allY);
+      const maxY = Math.max(...allY);
+
+      const offsetX = 50 - (minX + maxX) / 2;
+      const offsetY = 50 - (minY + Math.min(maxY, 85)) / 2;
+
+      const oStart = { x: startX + offsetX, y: startY + offsetY };
+      const op1 = { x: p1X + offsetX, y: p1Y + offsetY };
+      const op2 = { x: p2X + offsetX, y: p2Y + offsetY };
+      const op3 = { x: p3X + offsetX, y: p3Y + offsetY };
+      const oh1 = { x: h1X + offsetX, y: h1Y + offsetY };
+      const oh2 = { x: h2X + offsetX, y: h2Y + offsetY };
+
+      let finalPathStr = `M ${oStart.x} ${oStart.y} L ${op1.x} ${op1.y}`;
+      if (angleDeg > 2) {
+        finalPathStr += ` A ${rx} ${ry} 0 ${largeArcFlag} ${sweepFlag} ${op2.x} ${op2.y}`;
+      }
+      finalPathStr += ` L ${op3.x} ${op3.y}`;
+
+      const finalArrowHead = `M ${oh1.x} ${oh1.y} L ${op3.x} ${op3.y} L ${oh2.x} ${oh2.y}`;
+      
+      return { path: finalPathStr, arrowHead: finalArrowHead };
     };
 
     const { path, arrowHead } = generateRealisticPath();
@@ -521,9 +542,15 @@ export function CorneringAssistantHUD({
                     );
                   })()}
                 </g>
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"><div className="w-4 h-4 bg-white rounded-full shadow-[0_0_15px_white] flex items-center justify-center"><div className="w-1.5 h-1.5 bg-black rounded-full" /></div></div>
               </svg>
             )}
+            
+            {/* Ícone fixo do veículo (Seta) sobreposto ao mapa */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="drop-shadow-[0_0_12px_rgba(59,130,246,0.8)] -translate-y-1">
+                <path d="M12 2L22 20L12 17L2 20L12 2Z" fill="#3b82f6" stroke="white" strokeWidth="2" strokeLinejoin="round"/>
+              </svg>
+            </div>
           </div>
         </div>
 

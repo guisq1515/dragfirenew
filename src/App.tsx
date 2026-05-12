@@ -4726,7 +4726,6 @@ function TimerElite(props: TimerProps) {
   // --- NOVAS CONFIGURAÇÕES DO TESTE ---
   const [pocketMode, setPocketMode] = useState(() => localStorage.getItem('df_pocket_mode') === 'true');
   const [stabilizer15s, setStabilizer15s] = useState(() => localStorage.getItem('df_stabilizer_15s') === 'true');
-  const [vibrateOnStart, setVibrateOnStart] = useState(() => localStorage.getItem('df_vibrate_on_start') === 'true');
   
   const [stabilizerCountdown, setStabilizerCountdown] = useState(0);
   const [isStabilizing, setIsStabilizing] = useState(false);
@@ -4739,16 +4738,16 @@ function TimerElite(props: TimerProps) {
   useEffect(() => {
     localStorage.setItem('df_pocket_mode', String(pocketMode));
     localStorage.setItem('df_stabilizer_15s', String(stabilizer15s));
-    localStorage.setItem('df_vibrate_on_start', String(vibrateOnStart));
-  }, [pocketMode, stabilizer15s, vibrateOnStart]);
+  }, [pocketMode, stabilizer15s]);
 
+  // Alerta tátil (Vibração) de que a estabilização/aferição acabou e está pronto para arrancar
   useEffect(() => {
-    if (isRunning && vibrateOnStart) {
+    if (isReady && pocketMode) {
       if (navigator.vibrate) {
-        navigator.vibrate([300]);
+        navigator.vibrate([500, 200, 500]); // Alerta distintivo: vibrar, pausa, vibrar
       }
     }
-  }, [isRunning, vibrateOnStart]);
+  }, [isReady, pocketMode]);
 
   useEffect(() => {
     if (!showPerfSettings && !isCalibrating) return;
@@ -5098,13 +5097,31 @@ function TimerElite(props: TimerProps) {
                    {resultTab === 'summary' && (
                       <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-8">
                          <div className="flex justify-between items-start">
-                            <div className="flex flex-col">
-                               <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-1">Registro da Puxada</span>
-                               <span className="text-xs font-mono text-brand-primary font-bold">{lastResult.runSerial || 'DF-PREVIEW'}</span>
+                            {/* Lado Esquerdo: Veículo */}
+                            <div className="flex items-center gap-3">
+                               <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-white/5 overflow-hidden flex items-center justify-center shrink-0">
+                                  {activeVehicle?.photoURL ? (
+                                     <img src={activeVehicle.photoURL} alt="Car" className="w-full h-full object-cover" />
+                                  ) : (
+                                     <Car className="w-5 h-5 text-zinc-600" />
+                                  )}
+                               </div>
+                               <div className="flex flex-col">
+                                  <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-0.5">Veículo Testado</span>
+                                  <span className="text-sm font-display font-black text-white italic uppercase tracking-tighter leading-none">{activeVehicle?.nickname || 'Piloto Anônimo'}</span>
+                                  <span className="text-[7px] text-zinc-500 font-bold uppercase tracking-widest mt-0.5">{activeVehicle?.brand} {activeVehicle?.model}</span>
+                               </div>
                             </div>
-                            <div className="text-right">
+
+                            {/* Lado Direito: Pontuação e Registro */}
+                            <div className="text-right flex flex-col items-end">
                                <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest mb-1">Pontuação</span>
-                               <span className="text-xl font-display font-black text-white italic">{lastResult.performanceScore || 0} <span className="text-[10px] text-zinc-500">PTS</span></span>
+                               <span className="text-xl font-display font-black text-white italic leading-none">{lastResult.performanceScore || 0} <span className="text-[10px] text-zinc-500">PTS</span></span>
+                               
+                               <div className="mt-2 text-right">
+                                  <span className="text-[7px] font-black text-zinc-600 uppercase tracking-widest block mb-0.5">Registro da Puxada</span>
+                                  <span className="text-[10px] font-mono text-brand-primary font-bold bg-brand-primary/10 px-1.5 py-0.5 rounded-sm">{lastResult.runSerial || 'DF-PREVIEW'}</span>
+                               </div>
                             </div>
                          </div>
 
@@ -5344,8 +5361,8 @@ function TimerElite(props: TimerProps) {
               <div className="space-y-4">
                 <div className="flex items-center justify-between p-4 bg-zinc-950 rounded-2xl border border-white/5">
                   <div>
-                    <h4 className="text-xs font-bold text-white">Modo Bolso (Motoboy)</h4>
-                    <p className="text-[8px] text-zinc-500 uppercase tracking-widest mt-0.5">Evita toques acidentais</p>
+                    <h4 className="text-xs font-bold text-white">Modo Bolso</h4>
+                    <p className="text-[8px] text-zinc-500 uppercase tracking-widest mt-0.5">Previne toques acidentais</p>
                   </div>
                   <button 
                     onClick={() => setPocketMode(!pocketMode)}
@@ -5369,18 +5386,7 @@ function TimerElite(props: TimerProps) {
                   </button>
                 </div>
 
-                <div className="flex items-center justify-between p-4 bg-zinc-950 rounded-2xl border border-white/5">
-                  <div>
-                    <h4 className="text-xs font-bold text-white">Vibrar ao Iniciar</h4>
-                    <p className="text-[8px] text-zinc-500 uppercase tracking-widest mt-0.5">Feedback tátil na arrancada</p>
-                  </div>
-                  <button 
-                    onClick={() => setVibrateOnStart(!vibrateOnStart)}
-                    className={`w-10 h-6 rounded-full relative transition-colors ${vibrateOnStart ? 'bg-brand-primary' : 'bg-zinc-800'}`}
-                  >
-                    <motion.div animate={{ x: vibrateOnStart ? 16 : 0 }} className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full" />
-                  </button>
-                </div>
+
 
                 <div className="p-4 bg-zinc-950 rounded-2xl border border-white/5 space-y-4">
                   <div className="flex justify-between items-center">
@@ -6313,7 +6319,7 @@ export default function App() {
             }
 
             // Generate a short user-friendly serial for this run (e.g. DF-A1B2)
-            const runSerial = `DF-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+            const runSerial = lastResult.runSerial || `DF-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
             const selectedVehicle = activeVehicle;
 

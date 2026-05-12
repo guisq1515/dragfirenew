@@ -179,8 +179,11 @@ export function usePerformanceTimer(
       fetchDA(pointsRef.current[0].latitude, pointsRef.current[0].longitude);
     }
 
+    const generatedSerial = `DF-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+
     const result: RunResult = {
       id: crypto.randomUUID(),
+      runSerial: generatedSerial,
       timestamp: Date.now(),
       config: { ...configRef.current },
       time: finalTime,

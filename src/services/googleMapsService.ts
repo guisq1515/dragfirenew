@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { CapacitorHttp, Capacitor } from '@capacitor/core';
 import { db } from '../firebase';
 import { doc, setDoc, increment, getDoc } from 'firebase/firestore';
@@ -15,7 +16,7 @@ const DEFAULT_LIMITS = {
   safety_margin: 0.70, // 70% margin
   user_daily_limit: 20,
   guest_daily_limit: 5,
-  spam_throttle_ms: 30000 // 30 seconds
+  spam_throttle_ms: 2000 // Reduzido de 30s para 2s para permitir troca rápida de abas
 };
 
 let lastCallTimestamp = 0;
@@ -305,14 +306,27 @@ export const fetchNearbyStationsTextSearch = async (
       data: {
         textQuery: queryText,
         locationBias: {
-          circle: { center: { latitude: lat, longitude: lng }, radius: radius }
+          rectangle: {
+            low: { 
+              latitude: lat - (radius / 111320), 
+              longitude: lng - (radius / (111320 * Math.cos(lat * Math.PI / 180))) 
+            },
+            high: { 
+              latitude: lat + (radius / 111320), 
+              longitude: lng + (radius / (111320 * Math.cos(lat * Math.PI / 180))) 
+            }
+          }
         },
         languageCode: 'pt-BR'
       }
     });
 
     const data = response.data;
-    if (!data.places) return { results: [], status: 'ZERO_RESULTS' };
+    if (data.error) {
+       console.error('Google API Error:', data.error);
+       return { results: [], status: data.error.status, error_message: data.error.message };
+    }
+    if (!data.places || data.places.length === 0) return { results: [], status: 'ZERO_RESULTS' };
 
     const results = data.places.map((res: any) => ({
       place_id: res.id,
@@ -355,13 +369,6 @@ export const getCityFromCoordinates = async (lat: number, lng: number): Promise<
   try {
     const url = `${API_BASE}/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_API_KEY}`;
     
-    // NUCLEAR OPTION: Jardinópolis Bounding Box
-    // Urban/Rural Jardinópolis roughly: Lat [-21.08 to -20.95], Lng [-47.95 to -47.75]
-    if (lat <= -20.95 && lat >= -21.08 && lng <= -47.75 && lng >= -47.95) {
-      console.log('[CITY] Bounding Box detectou Jardinópolis por coordenadas geográficas.');
-      return 'Jardinópolis';
-    }
-
     const response = await CapacitorHttp.get({ url });
 
     const data = response.data;

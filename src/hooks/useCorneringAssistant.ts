@@ -262,7 +262,7 @@ export function useCorneringAssistant(
               
               return {
                 ...c,
-                id: (c as any).id || `pre_${c.severity}_${c.direction}_${c.points[0]?.lat.toFixed(4)}_${c.points[0]?.lng.toFixed(4)}_${index}`,
+                id: (c as any).id || `pre_${c.points[0]?.lat.toFixed(5)}_${c.points[0]?.lng.toFixed(5)}`,
                 distance,
                 isPathAccurate: foundStart || foundEnd,
                 isInside: !foundStart && foundEnd
@@ -293,7 +293,7 @@ export function useCorneringAssistant(
           foundCurves = curveService.findUpcomingCurves(lat, lng, heading, upcomingNodes, lookAheadDistance, speedRef.current)
             .map((c, index) => ({
               ...c,
-              id: (c as any).id || `dyn_${c.severity}_${c.direction}_${c.points[0]?.lat.toFixed(4)}_${c.points[0]?.lng.toFixed(4)}_${index}`
+              id: (c as any).id || `dyn_${c.points[0]?.lat.toFixed(5)}_${c.points[0]?.lng.toFixed(5)}`
             }))
             .sort((a, b) => a.distance - b.distance);
         }
