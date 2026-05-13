@@ -114,6 +114,22 @@ export function CorneringAssistantHUD({
     };
   }, []);
 
+  // --- Dynamic Braking Logic ---
+  const brakingSens = telemetryConfig?.brakingSensitivity ?? 1.0;
+  let severityMultiplier = 1.0;
+  if (nextCurve?.severity === 'hairpin') severityMultiplier = 1.5;
+  if (nextCurve?.severity === 'hard') severityMultiplier = 1.2;
+  if (nextCurve?.severity === 'medium') severityMultiplier = 0.8;
+  if (nextCurve?.severity === 'soft') severityMultiplier = 0.5;
+
+  const brakingDistance = speedKmh * 0.6 * severityMultiplier * brakingSens;
+  const isBrakingZone = telemetryConfig?.enableDynamicBraking && nextCurve && nextCurve.distance <= brakingDistance;
+
+  // --- Downhill Danger ---
+  const isDownhillDanger = nextCurve && 
+    (nextCurve.severity === 'hard' || nextCurve.severity === 'hairpin' || nextCurve.severity === 's-curve' || nextCurve.severity === 'chicane') && 
+    (nextCurve.slope !== undefined && nextCurve.slope < -3);
+
   const handleDownloadOfflineMap = async () => {
     if (!currentLat || !currentLng || isDownloading) return;
     
@@ -184,100 +200,117 @@ export function CorneringAssistantHUD({
     const color = getSeverityBaseColor(curve.severity);
     const isNormal = size === 'normal';
     
-    // Dynamic Path Generation based on actual points
     const generateRealisticPath = () => {
       const isNormal = size === 'normal';
-      const headLen = isNormal ? 24 : 14;
+      const headLen = isNormal ? 28 : 16;
+      const entryLen = isNormal ? 40 : 20;
+      const exitLen = isNormal ? 25 : 12;
+      const targetSize = isNormal ? 60 : 30;
 
-      // Chicanes e Curvas em S
-      if (curve.severity === 's-curve' || curve.severity === 'chicane') {
-         const dir = curve.direction === 'left' ? -1 : 1;
-         const p1x = 50, p1y = 70;
-         const p2x = 50 + dir * 25, p2y = 45;
-         const p3x = 50 + dir * 10, p3y = 20;
-         
-         const pathStr = `M 50 85 L ${p1x} ${p1y} C ${p1x} 55, ${p2x} 60, ${p2x} ${p2y} C ${p2x} 30, ${p3x} 35, ${p3x} ${p3y}`;
-         const hAngle1 = 0 + Math.PI - 0.6; 
-         const hAngle2 = 0 + Math.PI + 0.6;
-         const h1X = p3x + headLen * Math.sin(hAngle1);
-         const h1Y = p3y - headLen * Math.cos(hAngle1);
-         const h2X = p3x + headLen * Math.sin(hAngle2);
-         const h2Y = p3y - headLen * Math.cos(hAngle2);
-         
-         return { path: pathStr, arrowHead: `M ${h1X} ${h1Y} L ${p3x} ${p3y} L ${h2X} ${h2Y}` };
+      const nodes = curve.points || [];
+      
+      // Fallback para linha reta se não houver pontos suficientes
+      if (nodes.length < 2) {
+         const sx = 50, sy = 85;
+         const ey = 20;
+         return {
+            path: `M ${sx} ${sy} L 50 ${ey}`,
+            arrowHead: `M ${50 - headLen*0.5} ${ey + headLen*0.8} L 50 ${ey} L ${50 + headLen*0.5} ${ey + headLen*0.8}`
+         };
       }
 
-      // Geometria Didática: Reta de Entrada -> Arco da Curva -> Reta de Saída -> Flecha
-      const angleDeg = Math.min(180, curve.angle || 0); 
-      const angleRad = angleDeg * (Math.PI / 180);
-      const isLeft = curve.direction === 'left';
-      const dirMult = isLeft ? -1 : 1;
+      // 1. Calcular rotação para vetor de entrada apontar para CIMA (0, -1)
+      const entryIdx = Math.min(3, nodes.length - 1);
+      const baseDx = nodes[entryIdx].lng - nodes[0].lng;
+      const baseDy = -(nodes[entryIdx].lat - nodes[0].lat);
+      const baseAngle = Math.atan2(baseDy, baseDx);
+      const rotationAngle = (-Math.PI / 2) - baseAngle;
+      const cosR = Math.cos(rotationAngle);
+      const sinR = Math.sin(rotationAngle);
 
-      const startX = 50;
-      const startY = 85;
-      const entryLen = 30; // 30% reta de entrada
-      const p1X = startX;
-      const p1Y = startY - entryLen;
+      // 2. Projetar coordenadas lat/lng reais para SVG local e aplicar rotação
+      const projected = nodes.map(n => {
+         const dx = n.lng - nodes[0].lng;
+         const dy = -(n.lat - nodes[0].lat);
+         return { 
+           x: dx * cosR - dy * sinR, 
+           y: dx * sinR + dy * cosR 
+         };
+      });
 
-      const arcRadius = 20; // Arco suave da curva
-      const cx = p1X + dirMult * arcRadius;
-      const cy = p1Y;
+      // 3. Escalar curva real para caber dentro de proporções consistentes (targetSize)
+      const minPx = Math.min(...projected.map(p => p.x));
+      const maxPx = Math.max(...projected.map(p => p.x));
+      const minPy = Math.min(...projected.map(p => p.y));
+      const maxPy = Math.max(...projected.map(p => p.y));
 
-      const startAngle = isLeft ? 0 : Math.PI;
-      const endAngle = startAngle + dirMult * angleRad;
+      const width = Math.max(1e-6, maxPx - minPx);
+      const height = Math.max(1e-6, maxPy - minPy);
       
-      const p2X = cx + arcRadius * Math.cos(endAngle);
-      const p2Y = cy - arcRadius * Math.sin(endAngle);
+      const scale = targetSize / Math.max(width, height);
+      const scaled = projected.map(p => ({ x: p.x * scale, y: p.y * scale }));
 
-      const rx = arcRadius;
-      const ry = arcRadius;
-      const sweepFlag = isLeft ? 0 : 1;
-      const largeArcFlag = angleDeg > 180 ? 1 : 0;
+      const n = scaled.length;
+      const pFirst = scaled[0];
+      const pLast = scaled[n - 1];
 
-      const exitLen = 15; // Reta final de saída
-      const finalHeading = angleRad * dirMult; 
-      const vx = Math.sin(finalHeading);
-      const vy = -Math.cos(finalHeading);
+      // 4. Inserir Reta Proporcional de Entrada (Artificial p/ imersão)
+      const pStart = { x: pFirst.x, y: pFirst.y + entryLen };
 
-      const p3X = (angleDeg > 2 ? p2X : p1X) + exitLen * vx;
-      const p3Y = (angleDeg > 2 ? p2Y : p1Y) + exitLen * vy;
+      // 5. Inserir Reta Proporcional de Saída (Artificial p/ imersão)
+      const exitIdx = Math.max(0, n - 4);
+      const exitDx = pLast.x - scaled[exitIdx].x;
+      const exitDy = pLast.y - scaled[exitIdx].y;
+      const exitLenNorm = Math.sqrt(exitDx * exitDx + exitDy * exitDy) || 1;
+      const vx = exitDx / exitLenNorm;
+      const vy = exitDy / exitLenNorm;
 
-      const hAngle1 = finalHeading + Math.PI - 0.6;
-      const hAngle2 = finalHeading + Math.PI + 0.6;
+      const pExit = { x: pLast.x + vx * exitLen, y: pLast.y + vy * exitLen };
+
+      // 6. Criar cabeça da flecha direcional
+      const exitHeading = Math.atan2(vy, vx);
+      const hAngle1 = exitHeading + Math.PI - 0.6;
+      const hAngle2 = exitHeading + Math.PI + 0.6;
+      const h1 = { x: pExit.x + headLen * Math.cos(hAngle1), y: pExit.y + headLen * Math.sin(hAngle1) };
+      const h2 = { x: pExit.x + headLen * Math.cos(hAngle2), y: pExit.y + headLen * Math.sin(hAngle2) };
+
+      // 7. Centralizar no ViewBox usando o centro natural da curva minimapa
+      const cx = (minPx * scale + maxPx * scale) / 2;
+      const cy = (minPy * scale + maxPy * scale) / 2;
+
+      const offsetX = 50 - cx;
+      const offsetY = 50 - cy;
+
+      const offsetP = (p: {x: number, y: number}) => ({ x: p.x + offsetX, y: p.y + offsetY });
+
+      const fStart = offsetP(pStart);
+      const fScaled = scaled.map(offsetP);
+      const fExit = offsetP(pExit);
+      const fh1 = offsetP(h1);
+      const fh2 = offsetP(h2);
+
+      // 8. Desenhar Spline Suavizado (Bezier Quadraticos) para garantir beleza e fluidez
+      let pathStr = `M ${fStart.x} ${fStart.y} L ${fScaled[0].x} ${fScaled[0].y}`;
       
-      const h1X = p3X + headLen * Math.sin(hAngle1);
-      const h1Y = p3Y - headLen * Math.cos(hAngle1);
-      
-      const h2X = p3X + headLen * Math.sin(hAngle2);
-      const h2Y = p3Y - headLen * Math.cos(hAngle2);
-
-      // Centralizar visualmente o desenho gerado dentro da viewBox
-      const allX = [startX, p1X, p2X, p3X, h1X, h2X];
-      const allY = [startY, p1Y, p2Y, p3Y, h1Y, h2Y];
-      const minX = Math.min(...allX);
-      const maxX = Math.max(...allX);
-      const minY = Math.min(...allY);
-      const maxY = Math.max(...allY);
-
-      const offsetX = 50 - (minX + maxX) / 2;
-      const offsetY = 50 - (minY + Math.min(maxY, 85)) / 2;
-
-      const oStart = { x: startX + offsetX, y: startY + offsetY };
-      const op1 = { x: p1X + offsetX, y: p1Y + offsetY };
-      const op2 = { x: p2X + offsetX, y: p2Y + offsetY };
-      const op3 = { x: p3X + offsetX, y: p3Y + offsetY };
-      const oh1 = { x: h1X + offsetX, y: h1Y + offsetY };
-      const oh2 = { x: h2X + offsetX, y: h2Y + offsetY };
-
-      let finalPathStr = `M ${oStart.x} ${oStart.y} L ${op1.x} ${op1.y}`;
-      if (angleDeg > 2) {
-        finalPathStr += ` A ${rx} ${ry} 0 ${largeArcFlag} ${sweepFlag} ${op2.x} ${op2.y}`;
+      if (fScaled.length > 2) {
+         pathStr += ` L ${ (fScaled[0].x + fScaled[1].x)/2 } ${ (fScaled[0].y + fScaled[1].y)/2 }`;
+         for (let i = 1; i < fScaled.length - 1; i++) {
+            const current = fScaled[i];
+            const next = fScaled[i+1];
+            const midX = (current.x + next.x) / 2;
+            const midY = (current.y + next.y) / 2;
+            pathStr += ` Q ${current.x} ${current.y} ${midX} ${midY}`;
+         }
+         pathStr += ` L ${fScaled[fScaled.length-1].x} ${fScaled[fScaled.length-1].y}`;
+      } else if (fScaled.length === 2) {
+         pathStr += ` L ${fScaled[1].x} ${fScaled[1].y}`;
       }
-      finalPathStr += ` L ${op3.x} ${op3.y}`;
-
-      const finalArrowHead = `M ${oh1.x} ${oh1.y} L ${op3.x} ${op3.y} L ${oh2.x} ${oh2.y}`;
       
-      return { path: finalPathStr, arrowHead: finalArrowHead };
+      pathStr += ` L ${fExit.x} ${fExit.y}`;
+
+      const arrowHeadStr = `M ${fh1.x} ${fh1.y} L ${fExit.x} ${fExit.y} L ${fh2.x} ${fh2.y}`;
+
+      return { path: pathStr, arrowHead: arrowHeadStr };
     };
 
     const { path, arrowHead } = generateRealisticPath();
@@ -285,7 +318,7 @@ export function CorneringAssistantHUD({
     return (
       <div className={`relative ${isNormal ? 'w-64 h-64' : 'w-24 h-24'} flex items-center justify-center`}>
          <motion.div animate={{ backgroundColor: color }} className={`absolute ${isNormal ? 'w-56 h-56 border-[6px]' : 'w-20 h-20 border-2'} border-white/20 rounded-[3rem] shadow-[0_0_50px_rgba(0,0,0,0.5)] rotate-45`} />
-         <svg viewBox="0 0 100 100" className={`${isNormal ? 'w-44 h-44' : 'w-16 h-16'} relative z-10`}>
+         <svg viewBox="-30 -30 160 160" className={`${isNormal ? 'w-44 h-44' : 'w-16 h-16'} relative z-10`}>
             <path d={path} fill="none" stroke="#fff" strokeWidth={isNormal ? "12" : "8"} strokeLinecap="round" strokeLinejoin="round" />
             <path d={arrowHead} fill="none" stroke="#fff" strokeWidth={isNormal ? "12" : "8"} strokeLinecap="round" strokeLinejoin="round" />
          </svg>
@@ -478,7 +511,7 @@ export function CorneringAssistantHUD({
       {/* Progress Bar */}
       <div className="px-6 mt-4">
         <div className="h-2 bg-white/5 rounded-full overflow-hidden relative border border-white/5 backdrop-blur-md">
-          {nextCurve && <motion.div animate={{ width: `${Math.max(0, Math.min(100, (1 - nextCurve.distance / lookAheadDistance) * 100))}%`, backgroundColor: getSeverityBaseColor(nextCurve.severity) }} className="h-full rounded-full" />}
+          {nextCurve && <motion.div animate={{ width: `${Math.max(0, Math.min(100, (1 - nextCurve.distance / lookAheadDistance) * 100))}%`, backgroundColor: isBrakingZone ? '#ef4444' : getSeverityBaseColor(nextCurve.severity) }} className="h-full rounded-full" />}
           <div className="absolute left-[80%] top-0 bottom-0 w-0.5 bg-white/20" />
         </div>
       </div>
@@ -495,10 +528,22 @@ export function CorneringAssistantHUD({
                 <div className={`text-2xl font-black uppercase italic ${nextCurve.severity === 'soft' || nextCurve.severity === 'straight' ? 'text-emerald-500' : 'text-red-500'}`}>
                   {getSeverityLabel(nextCurve.severity)}
                 </div>
-                <div className="text-6xl font-black text-white italic tracking-tighter leading-none">
+                <div className="text-6xl font-black text-white italic tracking-tighter leading-none flex items-center justify-center gap-2">
                   {nextCurve.distance}
-                  <span className="text-xl text-zinc-600 ml-1.5 font-black NOT-italic tracking-widest uppercase">m</span>
+                  <div className="flex flex-col items-center">
+                    <span className="text-xl text-zinc-600 font-black NOT-italic tracking-widest uppercase">m</span>
+                    {isBrakingZone && (
+                      <div className="mt-1 flex items-center justify-center w-8 h-8 rounded-full border-2 border-red-500 bg-red-500/10 text-red-500 animate-pulse">
+                        <span className="text-xs font-black">(P)</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
+                {isDownhillDanger && (
+                  <motion.div initial={{opacity: 0, y: -10}} animate={{opacity: 1, y: 0}} className="mt-2 inline-block text-[10px] font-black uppercase text-red-500 bg-red-500/10 border border-red-500/30 px-4 py-2 rounded-xl animate-pulse">
+                     PERIGO: CURVA EM DECLIVE
+                  </motion.div>
+                )}
               </div>
             </motion.div>
           ) : (
@@ -536,7 +581,49 @@ export function CorneringAssistantHUD({
                            <polyline points={trailNodes.map(n => `${50 + (n.lng - cLng) * mapScale},${50 - (n.lat - cLat) * mapScale}`).join(' ')} fill="none" stroke="#ef4444" strokeWidth="8" strokeOpacity="1.0" strokeLinecap="round" strokeLinejoin="round" />
                         )}
                         {upcomingNodes.length > 0 && (
-                          <motion.polyline points={upcomingNodes.map(n => `${50 + (n.lng - cLng) * mapScale},${50 - (n.lat - cLat) * mapScale}`).join(' ')} fill="none" stroke={isRouteMode ? "#22c55e" : "#ef4444"} strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
+                          telemetryConfig?.enableHeatmapTrajectory ? (
+                            <>
+                              {upcomingNodes.slice(0, -1).map((n1, idx) => {
+                                const n2 = upcomingNodes[idx + 1];
+                                
+                                // Flat-earth fast distance estimate
+                                const dx = (n1.lng - cLng) * 111320 * Math.cos(cLat * Math.PI / 180);
+                                const dy = (n1.lat - cLat) * 111320;
+                                const distFromCar = Math.sqrt(dx*dx + dy*dy);
+                                
+                                let segColor = isRouteMode ? "#22c55e" : "#ef4444";
+                                
+                                if (nextCurve) {
+                                   const curveStart = Math.max(0, nextCurve.distance - brakingDistance);
+                                   const heatSens = telemetryConfig?.heatmapSensitivity ?? 1.0;
+                                   const curveEnd = nextCurve.distance + (40 * heatSens);
+                                   
+                                   if (distFromCar >= curveStart && distFromCar <= nextCurve.distance) {
+                                      segColor = "#ef4444"; // Braking / Red
+                                   } else if (distFromCar > nextCurve.distance && distFromCar <= curveEnd) {
+                                      segColor = "#eab308"; // Apex / Yellow
+                                   } else if (distFromCar > curveEnd) {
+                                      segColor = "#22c55e"; // Exit / Green
+                                   }
+                                }
+
+                                return (
+                                  <line 
+                                    key={`heat-${idx}`}
+                                    x1={50 + (n1.lng - cLng) * mapScale}
+                                    y1={50 - (n1.lat - cLat) * mapScale}
+                                    x2={50 + (n2.lng - cLng) * mapScale}
+                                    y2={50 - (n2.lat - cLat) * mapScale}
+                                    stroke={segColor} 
+                                    strokeWidth="8" 
+                                    strokeLinecap="round"
+                                  />
+                                );
+                              })}
+                            </>
+                          ) : (
+                            <motion.polyline points={upcomingNodes.map(n => `${50 + (n.lng - cLng) * mapScale},${50 - (n.lat - cLat) * mapScale}`).join(' ')} fill="none" stroke={isRouteMode ? "#22c55e" : "#ef4444"} strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
+                          )
                         )}
                       </>
                     );

@@ -15,6 +15,7 @@ class CurveAnalysisService {
   private mediumThreshold = 45;
   private hardThreshold = 90;
   private cacheRadius = 7500;
+  private curveContextMeters = 10;
 
   constructor() {}
 
@@ -22,12 +23,14 @@ class CurveAnalysisService {
     detectionThreshold?: number, 
     mediumThreshold?: number, 
     hardThreshold?: number,
-    cacheRadius?: number 
+    cacheRadius?: number,
+    curveContextMeters?: number
   }) {
     if (config.detectionThreshold !== undefined) this.detectionThreshold = config.detectionThreshold;
     if (config.mediumThreshold !== undefined) this.mediumThreshold = config.mediumThreshold;
     if (config.hardThreshold !== undefined) this.hardThreshold = config.hardThreshold;
     if (config.cacheRadius !== undefined) this.cacheRadius = config.cacheRadius;
+    if (config.curveContextMeters !== undefined) this.curveContextMeters = config.curveContextMeters;
   }
 
   async getRoadGeometry(lat: number, lng: number, heading: number | null = null, speedKmh: number = 0): Promise<{ 
@@ -279,30 +282,27 @@ class CurveAnalysisService {
     const found: (CurveData & { originalJ: number })[] = [];
     
     let closest = 0, minDist = Infinity;
+    const cumDist = [0];
+    for (let k = 0; k < nodes.length - 1; k++) {
+      const d = this.haversineDistance(nodes[k].lat, nodes[k].lng, nodes[k+1].lat, nodes[k+1].lng);
+      cumDist.push(cumDist[k] + d);
+    }
+
     nodes.forEach((n, idx) => { 
       const d = this.haversineDistance(currentLat, currentLng, n.lat, n.lng); 
       if (d < minDist) { minDist = d; closest = idx; } 
     });
 
     let i = 0;
-    while (i < nodes.length - 3 && found.length < 10) {
-      let distanceToCurve = 0;
-      if (i >= closest) {
-        for (let k = closest; k < i; k++) {
-          distanceToCurve += this.haversineDistance(nodes[k].lat, nodes[k].lng, nodes[k+1].lat, nodes[k+1].lng);
-        }
-      } else {
-        for (let k = i; k < closest; k++) {
-          distanceToCurve -= this.haversineDistance(nodes[k].lat, nodes[k].lng, nodes[k+1].lat, nodes[k+1].lng);
-        }
-      }
+    while (i < nodes.length - 3 && found.length < 500) {
+      let distanceToCurve = cumDist[i] - cumDist[closest];
 
       let cumAngle = 0, win = 0, j = i;
       let signChanges = 0, lastAngle = 0;
       let straightDist = 0;
       
       while (j < nodes.length - 2 && win < 250) {
-        const dist = this.haversineDistance(nodes[j].lat, nodes[j].lng, nodes[j+1].lat, nodes[j+1].lng);
+        const dist = cumDist[j+1] - cumDist[j];
         win += dist;
         const v1 = { x: nodes[j+1].lng - nodes[j].lng, y: nodes[j+1].lat - nodes[j].lat };
         const v2 = { x: nodes[j+2].lng - nodes[j+1].lng, y: nodes[j+2].lat - nodes[j+1].lat };
@@ -355,17 +355,17 @@ class CurveAnalysisService {
         else if (absAngle > this.mediumThreshold) type = 'medium';
         else if (absAngle < 10) type = 'straight';
 
-        // Extend points for drawing (40m context)
+        // Extend points for drawing (Configurable context to keep the curve prominent)
         let startIdx = i;
         let backDist = 0;
-        while (startIdx > 0 && backDist < 40) {
+        while (startIdx > 0 && backDist < this.curveContextMeters) {
           backDist += this.haversineDistance(nodes[startIdx].lat, nodes[startIdx].lng, nodes[startIdx-1].lat, nodes[startIdx-1].lng);
           startIdx--;
         }
 
         let endIdx = j;
         let forwardDist = 0;
-        while (endIdx < nodes.length - 1 && forwardDist < 40) {
+        while (endIdx < nodes.length - 1 && forwardDist < this.curveContextMeters) {
           forwardDist += this.haversineDistance(nodes[endIdx].lat, nodes[endIdx].lng, nodes[endIdx+1].lat, nodes[endIdx+1].lng);
           endIdx++;
         }

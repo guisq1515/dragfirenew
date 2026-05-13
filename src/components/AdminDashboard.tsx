@@ -62,6 +62,11 @@ export function AdminDashboard({
     curveDetectionThreshold: 15,
     curveMediumThreshold: 45,
     curveHardThreshold: 90,
+    curveContextMeters: 10,
+    enableDynamicBraking: true,
+    brakingSensitivity: 1.0,
+    enableHeatmapTrajectory: true,
+    heatmapSensitivity: 1.0,
     regionalCacheRadius: 7500,
     fusionAlgorithm: 'kalman',
     daCorrectionEnabled: false,
@@ -91,6 +96,11 @@ export function AdminDashboard({
       curveDetectionThreshold: 15,
       curveMediumThreshold: 45,
       curveHardThreshold: 90,
+      curveContextMeters: 10,
+      enableDynamicBraking: true,
+      brakingSensitivity: 1.0,
+      enableHeatmapTrajectory: true,
+      heatmapSensitivity: 1.0,
       regionalCacheRadius: 7500,
       fusionAlgorithm: 'kalman',
       daCorrectionEnabled: false,
@@ -843,6 +853,78 @@ export function AdminDashboard({
                             </div>
                          </div>
                        </div>
+                        <div className="space-y-6">
+                           <h4 className="text-[8px] font-black text-zinc-700 uppercase tracking-widest flex items-center gap-2">
+                             <ShieldAlert className="w-3 h-3 text-brand-primary" /> FÃ­sica & ImersÃ£o DinÃ¢mica
+                           </h4>
+                           
+                           <div className="space-y-3 bg-red-500/5 p-4 rounded-2xl border border-red-500/10">
+                             <div className="flex justify-between items-center mb-2">
+                                <label className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
+                                  Zona de Frenagem (DinÃ¢mica)
+                                </label>
+                                <button 
+                                  onClick={() => {
+                                    setTelemetrySettings({...telemetrySettings, enableDynamicBraking: !telemetrySettings.enableDynamicBraking});
+                                    setHasChanges(true);
+                                  }}
+                                  className={`relative w-8 h-5 rounded-full transition-colors ${telemetrySettings.enableDynamicBraking ? "bg-brand-primary" : "bg-zinc-700"}`}
+                                >
+                                  <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${telemetrySettings.enableDynamicBraking ? "right-1" : "left-1"}`} />
+                                </button>
+                             </div>
+                             
+                             <div className="space-y-2 opacity-80">
+                               <label className="text-[9px] font-black uppercase text-zinc-500 flex justify-between">
+                                 <span>Sensibilidade do Freio</span>
+                                 <span className="text-white">{(telemetrySettings.brakingSensitivity || 1.0).toFixed(1)}x</span>
+                               </label>
+                               <input 
+                                 type="range" min="0.5" max="3.0" step="0.1" 
+                                 value={telemetrySettings.brakingSensitivity || 1.0}
+                                 onChange={(e) => {
+                                   setTelemetrySettings({...telemetrySettings, brakingSensitivity: parseFloat(e.target.value)});
+                                   setHasChanges(true);
+                                 }}
+                                 className="w-full accent-brand-primary h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+                               />
+                             </div>
+                           </div>
+
+                           <div className="space-y-3 bg-emerald-500/5 p-4 rounded-2xl border border-emerald-500/10">
+                             <div className="flex justify-between items-center mb-2">
+                                <label className="text-[10px] font-black text-white uppercase tracking-widest flex items-center gap-2">
+                                  TraÃ§ado de Calor (Minimapa)
+                                </label>
+                                <button 
+                                  onClick={() => {
+                                    setTelemetrySettings({...telemetrySettings, enableHeatmapTrajectory: !telemetrySettings.enableHeatmapTrajectory});
+                                    setHasChanges(true);
+                                  }}
+                                  className={`relative w-8 h-5 rounded-full transition-colors ${telemetrySettings.enableHeatmapTrajectory ? "bg-emerald-500" : "bg-zinc-700"}`}
+                                >
+                                  <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${telemetrySettings.enableHeatmapTrajectory ? "right-1" : "left-1"}`} />
+                                </button>
+                             </div>
+                             
+                             <div className="space-y-2 opacity-80">
+                               <label className="text-[9px] font-black uppercase text-zinc-500 flex justify-between">
+                                 <span>Alcance de Cores</span>
+                                 <span className="text-white">{(telemetrySettings.heatmapSensitivity || 1.0).toFixed(1)}x</span>
+                               </label>
+                               <input 
+                                 type="range" min="0.5" max="3.0" step="0.1" 
+                                 value={telemetrySettings.heatmapSensitivity || 1.0}
+                                 onChange={(e) => {
+                                   setTelemetrySettings({...telemetrySettings, heatmapSensitivity: parseFloat(e.target.value)});
+                                   setHasChanges(true);
+                                 }}
+                                 className="w-full accent-emerald-500 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+                               />
+                             </div>
+                           </div>
+                        </div>
+
                     </div>
                     <div className="space-y-6">
                        <h4 className="text-[8px] font-black text-zinc-700 uppercase tracking-widest flex items-center gap-2">
@@ -863,6 +945,13 @@ export function AdminDashboard({
                            min: 5, max: 45, step: 1, icon: Compass,
                            desc: 'O que faz: Ã‚ngulo mÃ­nimo para considerar um trecho como curva.',
                            utility: 'Utilidade: Aumente se houver muitos alertas falsos em retas leves.'
+                         },
+                         { 
+                           id: 'curveContextMeters', 
+                           label: 'Contexto de Curva (Retas)', 
+                           min: 0, max: 100, step: 5, icon: Compass,
+                           desc: 'O que faz: Metros de reta incluÃ­dos antes e depois do desenho da curva.',
+                           utility: 'Utilidade: Controle o nÃ­vel de imersÃ£o e a proeminÃªncia da curva na placa.'
                          },
                          { 
                            id: 'minimapZoomMultiplier', 

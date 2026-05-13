@@ -78,7 +78,8 @@ export function useCorneringAssistant(
         detectionThreshold: telemetryConfig.curveDetectionThreshold,
         mediumThreshold: telemetryConfig.curveMediumThreshold,
         hardThreshold: telemetryConfig.curveHardThreshold,
-        cacheRadius: telemetryConfig.regionalCacheRadius
+        cacheRadius: telemetryConfig.regionalCacheRadius,
+        curveContextMeters: telemetryConfig.curveContextMeters
       });
       offlineMapService.updateConfig({
         calibrationRadius: telemetryConfig.calibrationRadius || 5000,
@@ -228,8 +229,8 @@ export function useCorneringAssistant(
               let foundStart = false;
               let foundEnd = false;
               
-              // Use a small tolerance for coordinate matching
-              const TOLERANCE = 0.0005; 
+              // Use a small tolerance for coordinate matching (1 meter)
+              const TOLERANCE = 0.00001; 
               
               for (let i = closest; i < Math.min(closest + 500, upcomingNodes.length - 1); i++) {
                 const n1 = upcomingNodes[i], n2 = upcomingNodes[i+1];
